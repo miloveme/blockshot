@@ -10,7 +10,7 @@ export type PromptMode = "json" | "script";
 const RULES = `Conventions:
 - Y-up, right-handed, meters, seconds, degrees. Floor is y=0. Euler rotation [x,y,z] applied YXZ.
 - Actors/props with rotation y=0 face +Z. Use rotation [0, yaw, 0] to turn them.
-- References are strings: "actorId" or "actorId.part" (parts: ${BODY_PARTS.join(", ")}).
+- References are strings: "actorId" or "actorId.part" (parts: ${BODY_PARTS.join(", ")}); "actorId.part@mirrorId" is that point as seen inside a mirror prop.
 - Room spaces are centered at the origin: x in [-width/2, width/2], z in [-depth/2, depth/2]. Walls: north(-Z) south(+Z) east(+X) west(-X).
 - Eye-level camera height is 1.5–1.7 m. Wide 18–28mm, normal 35–50mm, tele/close-up 85mm+.
 - Keep the 180-degree rule between cuts. Shots are usually 2–6 seconds.
@@ -68,8 +68,9 @@ ${catalogTable()}
 - Place actors on free floor, standing near what they interact with; seated actors (pose "sit") go on a sofa/chair footprint. Keep doors and windows unblocked.
 - Put the cameras where the audience would stand; keep every shot's subject inside the frame.
 - Mirrors: prop type "mirror" is a REAL reflective mirror (0.9 × 1.8 m at scale 1, "color" = frame, position y = bottom edge). It reflects what is in front of it (+Z at yaw 0; same wall/yaw rules as furniture) and only from its front side. NEVER fake a reflection with a second actor or flipped copy — put the real actor in front of the mirror and let the mirror show it.
-  To film a reflection, put the camera in front of the mirror, off to one side so it is not in the reflection, aimed at the spot on the mirror where the reflection appears. For a mirror on the north wall at z = Zm, the reflection of a point (x, y, z) appears at (x, y, 2·Zm − z): aim at that point's line of sight through the mirror.
-  "Reveal it was a mirror": start with a long lens (100–135mm) so the frame is filled only by the mirror surface, then "zoom" out to 24–35mm (and/or dolly back) so the mirror frame, the wall and the real actor appear. Keep the actor walking toward the mirror during the move.`;
+  Aim cameras at a REFLECTION with a mirror reference: "<actorId>.chest@<mirrorId>" (also ".head", or just "<actorId>@<mirrorId>") is the point where that actor appears inside the mirror and it follows the actor as they move — use it as the camera "lookAt" (or cameraLookAt target / orbit "around"). Script: scene.reflect(actor.chest, mirror). Do not compute reflected coordinates yourself.
+  The camera must be on the mirror's front side (the side it faces), off to one side so it does not appear in its own reflection, and the actor must be in front of the mirror too, so the line from camera to the reflection crosses the glass.
+  "Reveal it was a mirror": open with a long lens (100–135mm) and lookAt "<actor>.chest@<mirror>" so the glass fills the frame and the reflected actor is in it, then "zoom" out to 24–35mm (and/or dolly back) so the mirror frame, the wall and the REAL actor appear. Keep the actor walking toward the mirror during the move. Do not end the shot on an empty mirror.`;
 
 /** World position of a wall opening: where on the floor plan the door/window is. */
 function openingWorld(space: Extract<Space, { type: "room" }>, o: Extract<Space, { type: "room" }>["openings"][number]): [number, number] {

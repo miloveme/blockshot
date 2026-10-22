@@ -1,6 +1,7 @@
 import type { Action, BodyPart, Key, Pose, BlockshotSpec, Prop, Target, TrackProperty, Vec3 } from "./schema";
 import { applyEase, DEG, unwrapYaw, vec, yawTowards } from "./math";
 import { verticalFov } from "./camera";
+import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
 
 const WALK_SPEED = 1.3;
 const RUN_SPEED = 3.5;
@@ -279,7 +280,13 @@ function actorCore(scene: CompiledScene, id: string, t: number) {
 /** Resolve a Vec3 or "id[.part]" reference to a world point at time t. */
 export function resolveTarget(scene: CompiledScene, target: Target, t: number): Vec3 {
   if (typeof target !== "string") return target;
-  const [id, part] = target.split(".") as [string, string | undefined];
+  const { id, part, mirror } = parseRef(target);
+  if (mirror !== undefined) {
+    // "id@mirror": where the reflection of that point appears (the camera should aim at this to film the reflection)
+    const m = scene.spec.props.find((p) => p.id === mirror && p.type === "mirror");
+    const base = resolveTarget(scene, part ? `${id}.${part}` : id, t);
+    return m ? reflectPoint(base, mirrorPlane(m)) : base;
+  }
   if (scene.spec.actors.some((a) => a.id === id)) {
     const core = actorCore(scene, id, t);
     return partPosition({ ...core, height: core.actor.height }, (part as BodyPart) ?? "chest");

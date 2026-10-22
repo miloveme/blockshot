@@ -14,6 +14,7 @@ import {
 } from "./schema";
 import { createRand, DEG, vec, yawTowards } from "./math";
 import { partPosition } from "./evaluate";
+import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
 
 /**
  * Script builder — the `scene` object exposed to Blockshot Scripts (docs/SCRIPT_API.md).
@@ -76,7 +77,12 @@ export function createSceneBuilder() {
 
   const resolveRough = (target: Target): Vec3 => {
     if (typeof target !== "string") return target;
-    const [id, part] = target.split(".") as [string, string | undefined];
+    const { id, part, mirror } = parseRef(target);
+    if (mirror !== undefined) {
+      const m = spec.props.find((p) => p.id === mirror);
+      const base = resolveRough(part ? `${id}.${part}` : id);
+      return m ? reflectPoint(base, mirrorPlane({ position: m.position ?? [0, 0, 0], rotation: m.rotation ?? [0, 0, 0], scale: m.scale ?? [1, 1, 1] })) : base;
+    }
     const actor = spec.actors.find((a) => a.id === id);
     if (actor) {
       return partPosition(
@@ -184,6 +190,11 @@ export function createSceneBuilder() {
       ensureFreeId(id);
       spec.actors.push({ id, name: o.name, color: o.color, height: o.height, build: o.build, position: o.at, rotation: o.facing !== undefined ? [0, o.facing, 0] : undefined, pose: o.pose });
       return makeActor(id);
+    },
+    /** Reference to where `target` (e.g. `man.chest`) appears inside a mirror prop — aim a camera at this to film the reflection. */
+    reflect(target: string, mirror: { id: string } | string): string {
+      const id = typeof mirror === "string" ? mirror : mirror.id;
+      return `${target}@${id}`;
     },
     prop(type: PropType, o: PropOpts = {}) {
       const id = o.id ?? `${type}${++propCounter}`;
