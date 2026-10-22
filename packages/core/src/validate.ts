@@ -1,4 +1,5 @@
 import { BlockshotSpec, type Target } from "./schema";
+import { parseRef } from "./mirror";
 
 export interface Issue {
   path: string;
@@ -73,8 +74,11 @@ export function validateSpec(input: unknown): ValidationResult {
   };
   const checkTarget = (target: Target | number, path: string) => {
     if (typeof target !== "string") return;
-    const [id] = target.split(".");
-    if (!ids.has(id!)) errors.push({ path, message: `Unknown reference "${target}"` });
+    const { id, mirror } = parseRef(target);
+    if (!ids.has(id)) errors.push({ path, message: `Unknown reference "${target}"` });
+    if (mirror !== undefined && !spec.props.some((p) => p.id === mirror && p.type === "mirror")) {
+      errors.push({ path, message: `"${target}": "${mirror}" is not a mirror prop (props of type "mirror": ${spec.props.filter((p) => p.type === "mirror").map((p) => p.id).join(", ") || "none"})` });
+    }
   };
 
   spec.cameras.forEach((c, i) => c.lookAt !== undefined && checkTarget(c.lookAt, `cameras[${i}].lookAt`));

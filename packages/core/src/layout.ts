@@ -1,6 +1,8 @@
 import type { Action, BlockshotSpec, Prop, Space, Vec3 } from "./schema";
 import { PROP_CATALOG } from "./catalog";
 import { DEG } from "./math";
+import { compile, evaluate, partPosition, type CameraState } from "./evaluate";
+import { mirrorPlane, reflectPoint, sideOf, type MirrorPlane } from "./mirror";
 import type { Issue } from "./validate";
 
 /**
@@ -126,5 +128,122 @@ export function lintLayout(spec: BlockshotSpec): Issue[] {
     pos.set(a.actor, points.at(-1)!);
   }
 
+  issues.push(...lintMirrorShots(spec));
   return issues.slice(0, MAX_REPORTED);
+}
+
+// ---- mirror shots -----------------------------------------------------------------------------
+
+type V3 = Vec3;
+const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const norm = (a: V3): V3 => {
+  const l = Math.hypot(...a) || 1;
+  return [a[0] / l, a[1] / l, a[2] / l];
+};
+
+interface Frame {
+  pos: V3;
+  forward: V3;
+  right: V3;
+  up: V3;
+  tanH: number;
+  tanV: number;
+}
+
+function frameOf(c: CameraState): Frame | null {
+  const forward = norm(
+    c.target
+      ? sub(c.target, c.position)
+      : [-Math.cos(c.rotation[0] * DEG) * Math.sin(c.rotation[1] * DEG), Math.sin(c.rotation[0] * DEG), -Math.cos(c.rotation[0] * DEG) * Math.cos(c.rotation[1] * DEG)],
+  );
+  const right = cross(forward, [0, 1, 0]);
+  if (Math.hypot(...right) < 1e-6) return null; // looking straight up/down
+  const r = norm(right);
+  const tanV = Math.tan((c.vFov * DEG) / 2);
+  return { pos: c.position, forward, right: r, up: cross(r, forward), tanH: tanV * c.aspect, tanV };
+}
+
+/** Is the point inside the camera's view? (no occlusion test) */
+function inView(f: Frame, p: V3): boolean {
+  const v = sub(p, f.pos);
+  const depth = dot(v, f.forward);
+  if (depth <= 0.05) return false;
+  return Math.abs(dot(v, f.right) / depth) <= f.tanH && Math.abs(dot(v, f.up) / depth) <= f.tanV;
+}
+
+/** Does the camera's optical axis land on (or very near) the mirror's glass? */
+function aimsAtMirror(f: Frame, m: MirrorPlane): boolean {
+  const denom = dot(f.forward, m.normal);
+  if (Math.abs(denom) < 1e-6) return false;
+  const t = dot(sub(m.center, f.pos), m.normal) / denom;
+  if (t <= 0) return false;
+  const q: V3 = [f.pos[0] + f.forward[0] * t, f.pos[1] + f.forward[1] * t, f.pos[2] + f.forward[2] * t];
+  const d = sub(q, m.center);
+  return Math.abs(dot(d, m.right)) <= m.halfW + 0.15 && Math.abs(d[1]) <= m.halfH + 0.15;
+}
+
+/** Is the reflection of `point` visible through this mirror from the camera? */
+function reflectionVisible(f: Frame, m: MirrorPlane, point: V3): boolean {
+  const camSide = sideOf(f.pos, m);
+  const pointSide = sideOf(point, m);
+  if (camSide <= 0 || pointSide <= 0) return false;
+  const virtual = reflectPoint(point, m);
+  const t = camSide / (camSide + pointSide);
+  const q: V3 = [f.pos[0] + (virtual[0] - f.pos[0]) * t, f.pos[1] + (virtual[1] - f.pos[1]) * t, f.pos[2] + (virtual[2] - f.pos[2]) * t];
+  const d = sub(q, m.center);
+  if (Math.abs(dot(d, m.right)) > m.halfW || Math.abs(d[1]) > m.halfH) return false;
+  return inView(f, q);
+}
+
+const SAMPLES = [0, 0.25, 0.5, 0.75, 1];
+
+/**
+ * For every shot whose camera is aimed at a mirror: is the camera on the mirror's front side, and does the
+ * reflection of any actor actually show up in the glass? ("camera films the mirror but nothing is in it")
+ */
+function lintMirrorShots(spec: BlockshotSpec): Issue[] {
+  const mirrors = spec.props.filter((p) => p.type === "mirror");
+  if (mirrors.length === 0 || spec.actors.length === 0) return [];
+  const issues: Issue[] = [];
+  const scene = compile(spec);
+  const fps = spec.settings.fps;
+
+  for (const [si, shot] of spec.shots.entries()) {
+    for (const mirror of mirrors) {
+      const plane = mirrorPlane(mirror);
+      let framed = 0;
+      let startLacksReflection = false;
+      let anySubject = false;
+      let behind = false;
+      for (const [k, frac] of SAMPLES.entries()) {
+        const t = Math.min(shot.end - 1 / fps, shot.start + (shot.end - shot.start) * frac);
+        const state = evaluate(scene, Math.max(shot.start, t));
+        const cam = state.cameras[shot.camera];
+        const f = cam ? frameOf(cam) : null;
+        if (!cam || !f || !aimsAtMirror(f, plane)) continue;
+        framed++;
+        if (sideOf(f.pos, plane) <= 0) {
+          behind = true;
+          continue;
+        }
+        const points = Object.values(state.actors).flatMap((a) => [partPosition(a, "chest"), partPosition(a, "head")]);
+        const reflected = points.some((p) => reflectionVisible(f, plane, p));
+        const real = points.some((p) => inView(f, p));
+        if (reflected || real) anySubject = true;
+        if (k === 0 && !reflected) startLacksReflection = true;
+      }
+      if (framed === 0) continue;
+      const hint = `Aim the camera at the reflection: lookAt "${spec.actors[0]!.id}.chest@${mirror.id}" (script: scene.reflect(${spec.actors[0]!.id}.chest, ${mirror.id}))`;
+      if (behind) {
+        issues.push({ path: `shots[${si}]`, message: `Shot "${shot.id}": camera "${shot.camera}" is BEHIND mirror "${mirror.id}" and sees only its back. Move the camera to the mirror's front side (the side it faces: yaw 0 → +Z).` });
+      } else if (!anySubject) {
+        issues.push({ path: `shots[${si}]`, message: `Shot "${shot.id}" is aimed at mirror "${mirror.id}" but no actor (or reflection) is ever in frame — it shows an empty mirror. ${hint}` });
+      } else if (startLacksReflection) {
+        issues.push({ path: `shots[${si}]`, message: `Shot "${shot.id}" opens on mirror "${mirror.id}" but no actor's reflection is visible in it at the start. ${hint}` });
+      }
+    }
+  }
+  return issues;
 }

@@ -23,7 +23,7 @@
     { "id": "man", "name": "남자", "color": "#e4572e", "height": 1.78, "position": [0.3, 0, 1.2], "rotation": [0, 180, 0] }
   ],
   "cameras": [
-    { "id": "cam1", "name": "거울 리빌", "position": [-0.9, 1.5, 0.8], "lookAt": [-0.1, 1.2, -3.95], "focalLength": 135 }
+    { "id": "cam1", "name": "거울 리빌", "position": [-0.5, 1.5, 0.8], "lookAt": "man.chest@mirror", "focalLength": 135 }
   ],
   "actions": [
     { "type": "walkTo", "actor": "man", "to": [0.15, 0, -2.3], "start": 0.5, "duration": 6.5 },

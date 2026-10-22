@@ -1,5 +1,6 @@
 import type { Actor, BlockshotSpec, Camera, Key, Prop, PropType, Shot, TrackProperty, Vec3 } from "./schema";
 import { compile } from "./evaluate";
+import { parseRef } from "./mirror";
 
 /**
  * Pure editing operations for UI tools. Every function returns a NEW spec (inputs are never mutated),
@@ -86,7 +87,12 @@ export function addCamera(spec: BlockshotSpec): { spec: BlockshotSpec; id: strin
 }
 
 type Refish = string | readonly unknown[] | number;
-const refersTo = (target: Refish, id: string) => typeof target === "string" && (target === id || target.startsWith(`${id}.`));
+/** True when the reference points at `id` — directly ("id", "id.part") or as the mirror of a reflection ("x@id"). */
+const refersTo = (target: Refish, id: string) => {
+  if (typeof target !== "string") return false;
+  const ref = parseRef(target);
+  return ref.id === id || ref.mirror === id;
+};
 
 /** Removes an actor/prop/camera and everything that would dangle (actions, tracks, shots, look-at refs). */
 export function removeEntity(spec: BlockshotSpec, id: string): BlockshotSpec {

@@ -87,6 +87,8 @@ Blockshot Spec은 프로젝트의 **유일한 진실 원천** 이다. UI 편집,
 `type`: `box`, `cylinder`, `sphere`, `plane`, `chair`, `table`, `sofa`, `bed`, `door`, `window`, `car`, `lamp`, `cup`, `phone`, `mirror`
 
 `mirror`는 **실제 반사 거울**이다(평면 반사, 모든 카메라·녹화에 적용). 기본 0.9×1.8 m, `rotation.y = 0`이면 +Z 방향을 비춘다(가구와 같은 규칙). `color`는 프레임 색, `position.y`는 거울 아래 모서리 높이. 비춰진 모습은 직접 모델링하지 않는다 — 카메라를 거울 앞에서 거울 면을 향하게 둔다. 예: `examples/mirror-reveal.json`.
+
+**반사 참조**: 참조 문자열 뒤에 `@거울id`를 붙이면(`"man.chest@mirror"`, `"man@mirror"`) 그 점이 거울 속에서 보이는 위치(거울 면 반대편의 가상 위치)로 해석된다. 카메라 `lookAt`·`cameraLookAt`·`orbit.around`에 쓰면 반사를 정확히 겨냥하고, 인물이 움직이면 반사도 따라간다. `@`의 거울 id는 `type: "mirror"` 소품이어야 한다(검증 오류). 거울 회전은 yaw만 지원.
 프리미티브(`box` 등)는 `scale`이 실제 크기(m)다. 프리셋 소품은 현실 크기로 모델링되어 있고 `scale`은 배율이다.
 
 ## 7. cameras

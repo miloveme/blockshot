@@ -122,11 +122,12 @@ export function Properties() {
           </Row>
           <Row label="조준">
             <SelectField
-              value={typeof cam.lookAt === "string" ? cam.lookAt.split(".")[0]! : cam.lookAt ? "__point" : "__none"}
-              options={[{ value: "__none", label: "(없음 — 회전 사용)" }, ...(Array.isArray(cam.lookAt) ? [{ value: "__point", label: "고정 좌표" }] : []), ...refs]}
+              value={typeof cam.lookAt === "string" ? (cam.lookAt.includes("@") ? "__reflect" : cam.lookAt.split(".")[0]!) : cam.lookAt ? "__point" : "__none"}
+              options={[{ value: "__none", label: "(없음 — 회전 사용)" }, ...(Array.isArray(cam.lookAt) ? [{ value: "__point", label: "고정 좌표" }] : []),
+                ...(typeof cam.lookAt === "string" && cam.lookAt.includes("@") ? [{ value: "__reflect", label: `🪞 반사 (${cam.lookAt})` }] : []), ...refs]}
               onCommit={(v) => {
                 if (v === "__none") patch(id, { lookAt: undefined });
-                else if (v !== "__point") patch(id, { lookAt: v });
+                else if (v !== "__point" && v !== "__reflect") patch(id, { lookAt: v });
               }}
             />
           </Row>

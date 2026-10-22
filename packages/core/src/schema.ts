@@ -17,8 +17,10 @@ export const BODY_PARTS = ["head", "chest", "pelvis", "hand_l", "hand_r", "foot_
 export const BodyPart = z.enum(BODY_PARTS);
 export type BodyPart = z.infer<typeof BodyPart>;
 
-/** "actorId" or "actorId.part" */
-export const Ref = z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]*(\.[a-z_]+)?$/, 'ref must be "id" or "id.part"');
+/** "actorId", "actorId.part", or its reflection in a mirror prop: "actorId@mirrorId" / "actorId.part@mirrorId" */
+export const Ref = z
+  .string()
+  .regex(/^[a-zA-Z][a-zA-Z0-9_-]*(\.[a-z_]+)?(@[a-zA-Z][a-zA-Z0-9_-]*)?$/, 'ref must be "id", "id.part", "id@mirrorId" or "id.part@mirrorId"');
 export const Target = z.union([Vec3, Ref]);
 export type Target = z.infer<typeof Target>;
 

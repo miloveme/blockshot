@@ -12,3 +12,4 @@ export * from "./sequence";
 export * from "./templates";
 export * from "./catalog";
 export * from "./layout";
+export * from "./mirror";

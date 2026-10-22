@@ -462,7 +462,7 @@
               },
               {
                 "type": "string",
-                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*(\\.[a-z_]+)?$"
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*(\\.[a-z_]+)?(@[a-zA-Z][a-zA-Z0-9_-]*)?$"
               }
             ]
           },
@@ -713,7 +713,7 @@
                       },
                       {
                         "type": "string",
-                        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*(\\.[a-z_]+)?$"
+                        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*(\\.[a-z_]+)?(@[a-zA-Z][a-zA-Z0-9_-]*)?$"
                       }
                     ]
                   },
@@ -806,7 +806,7 @@
                   },
                   {
                     "type": "string",
-                    "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*(\\.[a-z_]+)?$"
+                    "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*(\\.[a-z_]+)?(@[a-zA-Z][a-zA-Z0-9_-]*)?$"
                   }
                 ]
               },
@@ -913,7 +913,7 @@
                   },
                   {
                     "type": "string",
-                    "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*(\\.[a-z_]+)?$"
+                    "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*(\\.[a-z_]+)?(@[a-zA-Z][a-zA-Z0-9_-]*)?$"
                   }
                 ]
               },
@@ -1005,7 +1005,7 @@
                   },
                   {
                     "type": "string",
-                    "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*(\\.[a-z_]+)?$"
+                    "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*(\\.[a-z_]+)?(@[a-zA-Z][a-zA-Z0-9_-]*)?$"
                   }
                 ]
               },

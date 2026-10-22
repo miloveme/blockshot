@@ -53,6 +53,7 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 | `scene.street({ length?, roadWidth?, sidewalkWidth? })` | 거리 |
 | `scene.actor(id, opts) → Actor` | `opts: { name?, color?, height?, build?, at?, facing?, pose? }` |
 | `scene.prop(type, opts) → Prop` | `opts: { id?, at?, facing?, rotation?, scale?, color? }` |
+| `scene.reflect(ref, mirror) → ref` | `scene.reflect(man.chest, mirror)` → `"man.chest@mirror"`: 거울 속 반사 위치. 카메라 `lookAt`/`orbit`의 대상으로 쓴다 |
 | `scene.camera(id, opts) → Camera` | `opts: { name?, lens?, sensor?, at?, lookAt?, rotation? }` |
 | `scene.shot(id, { camera, start, end, description?, prompt? })` | 샷 추가 |
 | `scene.key(targetId, property, t, value, ease?)` | 저수준 키프레임 |
