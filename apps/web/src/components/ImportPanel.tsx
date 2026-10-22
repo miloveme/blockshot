@@ -56,13 +56,8 @@ export function ImportPanel({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto p-4 text-sm text-zinc-200">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold">AI / 스크립트로 장면 만들기</h2>
-        <button className="text-zinc-400 hover:text-white" onClick={onClose}>
-          ✕
-        </button>
-      </div>
+    <div className="flex flex-col gap-4 text-sm text-zinc-200">
+      <p className="text-xs text-zinc-500">외부 LLM(ChatGPT·Claude·Gemini)에 장면을 맡기는 곳입니다. 결과는 현재 장면을 교체하며 Ctrl+Z로 되돌릴 수 있습니다.</p>
 
       <section className="flex flex-col gap-2">
         <h3 className="font-medium text-amber-300">① 프롬프트 만들기</h3>
@@ -72,8 +67,8 @@ export function ImportPanel({ onClose }: { onClose: () => void }) {
           value={request}
           onChange={(e) => setRequest(e.target.value)}
         />
-        <div className="flex items-center gap-2">
-          <select className="rounded bg-white/10 px-2 py-1" value={mode} onChange={(e) => setMode(e.target.value as PromptMode)}>
+        <div className="flex flex-wrap items-center gap-2">
+          <select className="w-full rounded bg-white/10 px-2 py-1" value={mode} onChange={(e) => setMode(e.target.value as PromptMode)}>
             <option value="json">출력: Blockshot JSON</option>
             <option value="script">출력: Blockshot Script</option>
           </select>

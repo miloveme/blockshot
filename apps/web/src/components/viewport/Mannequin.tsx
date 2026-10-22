@@ -6,6 +6,7 @@ import { Text } from "@react-three/drei";
 import * as THREE from "three";
 import { DEG, type ActorState } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
+import { EditorOnly } from "./EditorOnly";
 
 /**
  * Primitive mannequin modeled at 1.72 m and scaled by actor height.
@@ -110,11 +111,13 @@ export function Mannequin({ id }: { id: string }) {
         ))}
       </group>
       {initial?.name ? (
-        <Suspense fallback={null}>
-          <Text name="label" position={[0, 1.95, 0]} fontSize={0.14} color="#fff" outlineWidth={0.01} outlineColor="#000" anchorY="bottom">
-            {initial.name}
-          </Text>
-        </Suspense>
+        <EditorOnly>
+          <Suspense fallback={null}>
+            <Text name="label" position={[0, 1.95, 0]} fontSize={0.14} color="#fff" outlineWidth={0.01} outlineColor="#000" anchorY="bottom">
+              {initial.name}
+            </Text>
+          </Suspense>
+        </EditorOnly>
       ) : null}
     </group>
   );

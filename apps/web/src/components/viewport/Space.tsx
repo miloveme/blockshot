@@ -2,6 +2,7 @@
 
 import { Grid } from "@react-three/drei";
 import type { Space } from "@blockshot/core";
+import { EditorOnly } from "./EditorOnly";
 
 type Rect = { x0: number; x1: number; y0: number; y1: number };
 type Opening = Extract<Space, { type: "room" }>["openings"][number];
@@ -42,7 +43,9 @@ function Room({ space }: { space: Extract<Space, { type: "room" }> }) {
         <planeGeometry args={[w, d]} />
         <meshStandardMaterial color="#8a8172" roughness={1} />
       </mesh>
-      <Grid args={[w, d]} position={[0, 0.002, 0]} cellSize={0.5} sectionSize={1} cellColor="#6f675a" sectionColor="#5a5347" fadeDistance={60} />
+      <EditorOnly>
+        <Grid args={[w, d]} position={[0, 0.002, 0]} cellSize={0.5} sectionSize={1} cellColor="#6f675a" sectionColor="#5a5347" fadeDistance={60} />
+      </EditorOnly>
       {walls.map((wl) => (
         <group key={wl.wall} position={wl.position as unknown as [number, number, number]} rotation={[0, wl.rotY, 0]}>
           {wallRects(wl.length, h, space.openings.filter((o) => o.wall === wl.wall)).map((r, i) => (
@@ -92,7 +95,9 @@ export function SpaceObject({ space }: { space: Space }) {
         <planeGeometry args={[space.type === "ground" ? space.size : 200, space.type === "ground" ? space.size : 200]} />
         <meshStandardMaterial color="#4a4e55" roughness={1} />
       </mesh>
-      <Grid infiniteGrid position={[0, -0.001, 0]} cellSize={1} sectionSize={5} cellColor="#5b6068" sectionColor="#6c727c" fadeDistance={50} />
+      <EditorOnly>
+        <Grid infiniteGrid position={[0, -0.001, 0]} cellSize={1} sectionSize={5} cellColor="#5b6068" sectionColor="#6c727c" fadeDistance={50} />
+      </EditorOnly>
     </>
   );
 }

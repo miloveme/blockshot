@@ -7,3 +7,4 @@ export * from "./builder";
 export * from "./paste";
 export * from "./prompt-kit";
 export * from "./edit";
+export * from "./record";

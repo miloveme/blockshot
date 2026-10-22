@@ -1,33 +1,24 @@
 "use client";
 
-import { Suspense, useEffect, useRef } from "react";
+import { Suspense, useEffect, useRef, type ComponentRef } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, PerspectiveCamera, Text } from "@react-three/drei";
 import * as THREE from "three";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
-import { DEG, type CameraState, type Vec3 } from "@blockshot/core";
+import { DEG, type Vec3 } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
-import { commitTransform, snapSteps } from "@/lib/actions";
+import { commitCamera, commitTransform, snapSteps } from "@/lib/actions";
+import { registerBridge } from "@/lib/render";
+import { stopRecording } from "@/lib/recorder";
 import { Mannequin } from "./Mannequin";
 import { PropObject } from "./Props";
 import { SpaceObject } from "./Space";
+import { Recorder } from "./Recorder";
+import { EDITOR_LAYER, PIP_MARGIN, PIP_SCALE, aimCamera, markEditor, pipCameraId, viewedCameraId } from "./util";
 
 const RAD = 1 / DEG;
 
-function viewedCameraId(): string | null {
-  const { view, sceneState } = useStudio.getState();
-  if (view.kind === "camera") return view.id;
-  if (view.kind === "shot") return sceneState.activeCameraId;
-  return null;
-}
-
-function aimCamera(obj: THREE.Object3D, c: CameraState) {
-  obj.position.set(...c.position);
-  if (c.target) obj.lookAt(...c.target);
-  else obj.rotation.set(c.rotation[0] * DEG, c.rotation[1] * DEG, c.rotation[2] * DEG, "YXZ");
-}
-
-/** Drives the render camera from the evaluated shot camera. */
+/** Drives the render camera from the evaluated shot camera (unless the user is piloting it). */
 function ShotCamera({ active }: { active: boolean }) {
   const ref = useRef<THREE.PerspectiveCamera>(null);
   useFrame(() => {
@@ -35,7 +26,7 @@ function ShotCamera({ active }: { active: boolean }) {
     const id = viewedCameraId();
     const c = id ? useStudio.getState().sceneState.cameras[id] : undefined;
     if (!cam || !c) return;
-    aimCamera(cam, c);
+    if (useStudio.getState().dragging !== id) aimCamera(cam, c);
     if (cam.fov !== c.vFov) {
       cam.fov = c.vFov;
       cam.updateProjectionMatrix();
@@ -44,7 +35,59 @@ function ShotCamera({ active }: { active: boolean }) {
   return <PerspectiveCamera ref={ref} makeDefault={active} near={0.05} far={500} />;
 }
 
-/** Camera body + frustum gizmo, visible in free view. */
+/**
+ * Camera view + pilot on: orbit / zoom / pan the viewed camera itself. Orbiting happens around the camera's aim
+ * point, so an aimed camera keeps its aim. The new pose is committed on release (one undo step).
+ */
+function CameraPilot() {
+  const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
+  const camera = useThree((s) => s.camera);
+  const viewId = useStudio((s) => (s.view.kind === "camera" ? s.view.id : null));
+  const aimRef = useStudio((s) => typeof s.spec.cameras.find((c) => c.id === viewId)?.lookAt === "string");
+
+  useFrame(() => {
+    const ctl = controls.current;
+    if (!ctl || !viewId) return;
+    const s = useStudio.getState();
+    if (s.dragging === viewId) return;
+    const c = s.sceneState.cameras[viewId];
+    if (!c) return;
+    if (c.target) ctl.target.set(...c.target);
+    else {
+      const fwd = new THREE.Vector3();
+      camera.getWorldDirection(fwd);
+      ctl.target.copy(camera.position).addScaledVector(fwd, 3);
+    }
+  });
+
+  if (!viewId) return null;
+  return (
+    <OrbitControls
+      ref={controls}
+      makeDefault
+      enableDamping={false}
+      enablePan={!aimRef}
+      rotateSpeed={0.3}
+      zoomSpeed={0.5}
+      panSpeed={0.5}
+      // keep the camera above the floor: never orbit below the aim point's horizon by more than ~60°
+      maxPolarAngle={Math.PI * 0.85}
+      onStart={() => useStudio.getState().setDragging(viewId)}
+      onEnd={() => {
+        const ctl = controls.current;
+        if (ctl) {
+          const e = new THREE.Euler().setFromQuaternion(camera.quaternion, "YXZ");
+          const rot: Vec3 = [e.x * RAD, e.y * RAD, e.z * RAD];
+          const floorY = Math.max(0.1, camera.position.y);
+          commitCamera(viewId, [camera.position.x, floorY, camera.position.z], rot, [ctl.target.x, ctl.target.y, ctl.target.z]);
+        }
+        useStudio.getState().setDragging(null);
+      }}
+    />
+  );
+}
+
+/** Camera body + frustum gizmo (editor layer: visible in free view only). */
 function CameraGizmo({ id }: { id: string }) {
   const ref = useRef<THREE.Group>(null);
   const frustum = useRef<THREE.Group>(null);
@@ -53,11 +96,11 @@ function CameraGizmo({ id }: { id: string }) {
     const c = useStudio.getState().sceneState.cameras[id];
     if (!c || !ref.current || !frustum.current) return;
     if (useStudio.getState().dragging !== id) aimCamera(ref.current, c);
-    // gizmos are editor aids: never visible through a shot camera (they would leak into renders)
     ref.current.visible = useStudio.getState().view.kind === "free";
     const len = 1.2;
     const halfH = Math.tan((c.vFov * DEG) / 2) * len;
     frustum.current.scale.set(halfH * c.aspect * 2, halfH * 2, len);
+    markEditor(ref.current);
   });
   return (
     <group
@@ -90,7 +133,7 @@ function CameraGizmo({ id }: { id: string }) {
   );
 }
 
-/** Yellow ring on the ground under the selected object (editor aid, free view only). */
+/** Yellow ring on the ground under the selected object. */
 function SelectionRing() {
   const ref = useRef<THREE.Mesh>(null);
   useFrame(() => {
@@ -100,6 +143,7 @@ function SelectionRing() {
     const p = selection ? (sceneState.actors[selection]?.position ?? sceneState.cameras[selection]?.position ?? spec.props.find((x) => x.id === selection)?.position) : undefined;
     m.visible = !!p && view.kind === "free";
     if (p) m.position.set(p[0], 0.02, p[2]);
+    m.layers.set(EDITOR_LAYER);
   });
   return (
     <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
@@ -121,7 +165,9 @@ function SelectionGizmo() {
   useEffect(() => {
     const tc = new TransformControls(camera, gl.domElement);
     tcRef.current = tc;
+    tc.getRaycaster().layers.enableAll();
     const helper = tc.getHelper();
+    markEditor(helper);
     scene.add(helper);
     const onDrag = (e: { value: unknown }) => {
       const obj = tc.object;
@@ -160,8 +206,8 @@ function SelectionGizmo() {
   useFrame(() => {
     const tc = tcRef.current;
     if (!tc) return;
-    const { selection, sceneState } = useStudio.getState();
-    const want = view.kind === "free" ? selection : null;
+    const { selection, sceneState, recording, rendering } = useStudio.getState();
+    const want = view.kind === "free" && !recording && !rendering ? selection : null;
     const cur = tc.object && tc.object.parent ? tc.object.name : null;
     if (want === null) {
       if (tc.object) tc.detach();
@@ -182,20 +228,92 @@ function SelectionGizmo() {
 function Playback() {
   useFrame((_, dt) => {
     const s = useStudio.getState();
-    if (!s.playing) return;
+    if (!s.playing || s.rendering) return;
     const next = s.time + dt;
-    s.setTime(next >= s.spec.settings.duration ? 0 : next);
+    const end = s.spec.settings.duration;
+    if (next < end) s.setTime(next);
+    else if (s.recording) {
+      s.setTime(end);
+      stopRecording();
+    } else s.setTime(0);
   });
   return null;
+}
+
+/**
+ * Takes over rendering (priority 1): the main view, then — in free view — a picture-in-picture of the selected
+ * (or active shot) camera in the top-right corner, drawn without editor aids.
+ */
+function SceneRenderer() {
+  const pipRef = useRef<THREE.PerspectiveCamera | null>(null);
+  useFrame(({ gl, scene, camera, size }) => {
+    gl.setScissorTest(false);
+    gl.setViewport(0, 0, size.width, size.height);
+    gl.render(scene, camera);
+    const s = useStudio.getState();
+    const id = s.view.kind === "free" ? pipCameraId() : null;
+    const c = id ? s.sceneState.cameras[id] : undefined;
+    if (!c) return;
+    const pipCam = (pipRef.current ??= new THREE.PerspectiveCamera(35, 1, 0.05, 500));
+    aimCamera(pipCam, c);
+    pipCam.fov = c.vFov;
+    pipCam.aspect = c.aspect;
+    pipCam.updateProjectionMatrix();
+    const w = Math.round(size.width * PIP_SCALE);
+    const h = Math.round(w / c.aspect);
+    const x = size.width - w - PIP_MARGIN;
+    const y = size.height - h - PIP_MARGIN;
+    gl.setScissorTest(true);
+    gl.setScissor(x, y, w, h);
+    gl.setViewport(x, y, w, h);
+    gl.render(scene, pipCam);
+    gl.setScissorTest(false);
+    gl.setViewport(0, 0, size.width, size.height);
+  }, 1);
+  return null;
+}
+
+/** Exposes the scene to the offline renderer and the free-view pose to editor commands. */
+function Bridge() {
+  const { scene, gl, advance, get } = useThree();
+  useEffect(() => {
+    registerBridge({
+      scene,
+      gl,
+      advance: (ts) => advance(ts),
+      freeView: () => {
+        if (useStudio.getState().view.kind !== "free") return null;
+        const { camera, controls } = get();
+        const target = (controls as { target?: THREE.Vector3 } | null)?.target;
+        if (!target) return null;
+        return { position: [camera.position.x, camera.position.y, camera.position.z], target: [target.x, target.y, target.z] };
+      },
+    });
+    return () => registerBridge(null);
+  }, [scene, gl, advance, get]);
+  return null;
+}
+
+/** Free-view camera: sees the editor layer too. */
+function FreeCamera({ active }: { active: boolean }) {
+  const ref = useRef<THREE.PerspectiveCamera>(null);
+  useEffect(() => {
+    ref.current?.layers.enable(EDITOR_LAYER);
+  }, []);
+  return <PerspectiveCamera ref={ref} makeDefault={active} position={[9, 8, 11]} fov={40} near={0.05} far={500} />;
 }
 
 function Scene() {
   const spec = useStudio((s) => s.spec);
   const view = useStudio((s) => s.view);
+  const pilot = useStudio((s) => s.pilot);
   const free = view.kind === "free";
   return (
     <>
       <Playback />
+      <Recorder />
+      <SceneRenderer />
+      <Bridge />
       <color attach="background" args={["#1d2026"]} />
       <hemisphereLight args={["#dfe6f0", "#3a3530", 0.9]} />
       <directionalLight position={[6, 10, 4]} intensity={1.6} castShadow shadow-mapSize={[2048, 2048]} shadow-camera-left={-12} shadow-camera-right={12} shadow-camera-top={12} shadow-camera-bottom={-12} />
@@ -209,9 +327,10 @@ function Scene() {
       {spec.cameras.map((c) => (
         <CameraGizmo key={`${c.id}|${c.name ?? ""}`} id={c.id} />
       ))}
-      <PerspectiveCamera makeDefault={free} position={[9, 8, 11]} fov={40} near={0.05} far={500} />
+      <FreeCamera active={free} />
       {free ? <OrbitControls makeDefault target={[0, 1, -1]} /> : null}
       <ShotCamera active={!free} />
+      {view.kind === "camera" && pilot ? <CameraPilot /> : null}
       <SelectionRing />
       <SelectionGizmo />
     </>
@@ -222,7 +341,13 @@ export default function Viewport() {
   // Remount the scene graph when a new spec is loaded so per-object refs reset cleanly.
   const revision = useStudio((s) => s.revision);
   return (
-    <Canvas shadows dpr={[1, 2]} gl={{ preserveDrawingBuffer: true, antialias: true }} onPointerMissed={() => useStudio.getState().select(null)}>
+    <Canvas
+      shadows
+      dpr={[1, 2]}
+      gl={{ preserveDrawingBuffer: true, antialias: true }}
+      onCreated={({ raycaster }) => raycaster.layers.enableAll()}
+      onPointerMissed={() => useStudio.getState().select(null)}
+    >
       <Scene key={revision} />
     </Canvas>
   );

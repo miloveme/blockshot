@@ -106,3 +106,43 @@ export function removeKeysAtCurrentTime() {
   state().edit((s) => (["position", "rotation", "pose", "focalLength"] as const).reduce((acc, p) => removeKey(acc, id, p, t), s));
   state().notify(state().spec === before ? "이 시간에 삭제할 키가 없습니다" : `키 삭제 · ${t.toFixed(2)}s`);
 }
+
+/**
+ * Camera moved by piloting it (camera view drag) or matched to the free view.
+ * A camera aimed at a reference keeps its aim, so only the position changes; a camera aimed at a point gets the
+ * new point; an unaimed camera stores its rotation. Animated properties become keys at the current time.
+ */
+export function commitCamera(id: string, position: Vec3, rotation: Vec3, target: Vec3 | null) {
+  const t = state().time;
+  const pos = roundVec(position);
+  state().edit((s) => {
+    const cam = s.cameras.find((c) => c.id === id);
+    if (!cam) return null;
+    let next = isAnimated(s, id, "position") ? upsertKey(s, id, "position", t, pos) : patchEntity(s, id, { position: pos });
+    if (typeof cam.lookAt === "string") return next;
+    if (Array.isArray(cam.lookAt) && target) return patchEntity(next, id, { lookAt: roundVec(target) });
+    const rot = roundVec(rotation);
+    next = isAnimated(next, id, "rotation") ? upsertKey(next, id, "rotation", t, rot) : patchEntity(next, id, { rotation: rot });
+    return next;
+  });
+}
+
+/** Puts the selected camera exactly where the free-view camera is, aiming at the orbit target. */
+export function matchCameraToFreeView(id: string, view: { position: Vec3; target: Vec3 }) {
+  const t = state().time;
+  state().edit((s) => {
+    if (!s.cameras.some((c) => c.id === id)) return null;
+    const pos = roundVec(view.position);
+    const next = isAnimated(s, id, "position") ? upsertKey(s, id, "position", t, pos) : patchEntity(s, id, { position: pos });
+    return patchEntity(next, id, { lookAt: roundVec(view.target) });
+  });
+  state().notify("현재 자유 시점을 카메라에 적용했습니다");
+}
+
+/** New camera at the current free-view pose. */
+export function addCameraFromFreeView(view: { position: Vec3; target: Vec3 }) {
+  add((s) => {
+    const r = addCamera(s);
+    return { spec: patchEntity(r.spec, r.id, { position: roundVec(view.position), lookAt: roundVec(view.target) }), id: r.id };
+  });
+}

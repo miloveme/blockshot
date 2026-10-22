@@ -6,6 +6,13 @@ import example from "@blockshot/core/examples/living-room.json";
 
 export type ViewMode = { kind: "free" } | { kind: "shot" } | { kind: "camera"; id: string };
 export type GizmoMode = "translate" | "rotate";
+export type Panel = "scene" | "shots" | "ai" | "render";
+/** Live take in progress: the recorder drives `id` from keyboard input while time plays. */
+export interface Recording {
+  id: string;
+  kind: "actor" | "camera";
+  t0: number;
+}
 
 const HISTORY_LIMIT = 100;
 
@@ -30,6 +37,13 @@ interface StudioState {
   past: BlockshotSpec[];
   future: BlockshotSpec[];
   notice: { text: string; kind: "info" | "error" } | null;
+  /** right-hand panel tab */
+  panel: Panel;
+  recording: Recording | null;
+  /** camera view: drag the viewed camera itself (orbit / zoom / pan) instead of just looking through it */
+  pilot: boolean;
+  /** true while an offline render owns the timeline */
+  rendering: boolean;
 
   /** Replace the whole document (load / import). Clears history and selection. */
   setSpec(spec: BlockshotSpec): void;
@@ -45,6 +59,8 @@ interface StudioState {
   setSnap(on: boolean): void;
   setDragging(id: string | null): void;
   notify(text: string, kind?: "info" | "error"): void;
+  setPanel(p: Panel): void;
+  setPilot(on: boolean): void;
 }
 
 const initial = validateSpec(example);
@@ -81,6 +97,10 @@ export const useStudio = create<StudioState>((set, get) => {
     past: [],
     future: [],
     notice: null,
+    panel: "scene",
+    recording: null,
+    pilot: false,
+    rendering: false,
 
     setSpec(spec) {
       const c = compile(spec);
@@ -130,6 +150,12 @@ export const useStudio = create<StudioState>((set, get) => {
     },
     setDragging(dragging) {
       set({ dragging });
+    },
+    setPanel(panel) {
+      set({ panel });
+    },
+    setPilot(pilot) {
+      set({ pilot });
     },
     notify(text, kind = "info") {
       clearTimeout(noticeTimer);

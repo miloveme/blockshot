@@ -1,6 +1,7 @@
 "use client";
 
 import { useStudio } from "@/lib/store";
+import { startRecording, stopRecording } from "@/lib/recorder";
 
 const SHOT_COLORS = ["#3b82f6", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#ec4899"];
 
@@ -47,6 +48,7 @@ function KeyLane() {
 export function Timeline() {
   const time = useStudio((s) => s.time);
   const playing = useStudio((s) => s.playing);
+  const recording = useStudio((s) => s.recording);
   const spec = useStudio((s) => s.spec);
   const { setTime, setPlaying } = useStudio.getState();
   const { duration, fps } = spec.settings;
@@ -54,11 +56,19 @@ export function Timeline() {
   return (
     <div className="flex items-center gap-3 border-t border-white/10 bg-[#15171c] px-4 py-3 text-xs text-zinc-300">
       <button
-        className="w-16 rounded bg-white/10 px-3 py-1.5 font-medium hover:bg-white/20"
+        className="w-16 rounded bg-white/10 px-3 py-1.5 font-medium hover:bg-white/20 disabled:opacity-40"
         onClick={() => setPlaying(!playing)}
+        disabled={!!recording}
         title="Space"
       >
         {playing ? "❚❚ 정지" : "▶ 재생"}
+      </button>
+      <button
+        className={`rounded px-2.5 py-1.5 font-medium ${recording ? "animate-pulse bg-red-600 text-white" : "bg-white/10 text-red-300 hover:bg-white/20"}`}
+        onClick={() => (recording ? stopRecording() : startRecording())}
+        title="선택한 인물/카메라를 재생하면서 키보드로 움직여 동선을 기록합니다 (R)"
+      >
+        {recording ? "■ 녹화 정지" : "● REC"}
       </button>
       <span className="w-24 font-mono tabular-nums">{timecode(time, fps)}</span>
       <div className="relative flex-1">

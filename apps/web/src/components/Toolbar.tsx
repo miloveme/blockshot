@@ -3,7 +3,8 @@
 import { useRef, useState } from "react";
 import { PROP_TYPES } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
-import { addActorCmd, addCameraCmd, addPropCmd } from "@/lib/actions";
+import { addActorCmd, addCameraCmd, addCameraFromFreeView, addPropCmd } from "@/lib/actions";
+import { getBridge } from "@/lib/render";
 import { downloadSpec, openSpecFile } from "@/lib/persist";
 
 const btn = "rounded bg-white/10 px-2.5 py-1 text-xs hover:bg-white/20 disabled:opacity-40";
@@ -32,6 +33,16 @@ export function Toolbar({ onImport }: { onImport: () => void }) {
           <div className="absolute left-0 top-full z-20 mt-1 w-44 rounded border border-white/10 bg-[#1b1e25] p-1 text-xs shadow-xl" onMouseLeave={() => setMenu(false)}>
             <MenuItem onClick={() => { addActorCmd(); setMenu(false); }}>🧍 인물 (마네킹)</MenuItem>
             <MenuItem onClick={() => { addCameraCmd(); setMenu(false); }}>📷 카메라</MenuItem>
+            <MenuItem
+              onClick={() => {
+                const view = getBridge()?.freeView();
+                if (view) addCameraFromFreeView(view);
+                else useStudio.getState().notify("🧭 자유 시점에서 구도를 잡은 뒤 사용하세요");
+                setMenu(false);
+              }}
+            >
+              📷 카메라 (현재 자유 시점)
+            </MenuItem>
             <div className="my-1 border-t border-white/10 px-2 pt-1 text-[10px] uppercase text-zinc-500">소품</div>
             <div className="grid grid-cols-2">
               {PROP_TYPES.map((t) => (

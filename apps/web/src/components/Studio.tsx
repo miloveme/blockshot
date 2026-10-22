@@ -1,15 +1,17 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
-import { useStudio, type ViewMode } from "@/lib/store";
+import { useEffect } from "react";
+import { useStudio, type Panel, type ViewMode } from "@/lib/store";
 import { Timeline } from "./Timeline";
 import { ImportPanel } from "./ImportPanel";
 import { Toolbar } from "./Toolbar";
 import { LensBar } from "./LensBar";
 import { Outliner, Properties } from "./Properties";
 import { ShotEditor } from "./ShotEditor";
+import { RenderPanel } from "./RenderPanel";
 import { deleteSelected, insertKeyAtCurrentTime, removeKeysAtCurrentTime } from "@/lib/actions";
+import { startRecording, stopRecording } from "@/lib/recorder";
 import { loadSpecText, startAutosave } from "@/lib/persist";
 
 const Viewport = dynamic(() => import("./viewport/Viewport"), { ssr: false });
@@ -18,7 +20,7 @@ function ShotHud() {
   const sceneState = useStudio((s) => s.sceneState);
   const view = useStudio((s) => s.view);
   const spec = useStudio((s) => s.spec);
-  if (view.kind === "free") return null;
+  if (view.kind === "free") return <PipFrame />;
   const camId = view.kind === "camera" ? view.id : sceneState.activeCameraId;
   const cam = camId ? sceneState.cameras[camId] : undefined;
   const shot = spec.shots.find((s) => s.id === sceneState.activeShotId);
@@ -34,12 +36,54 @@ function ShotHud() {
         {cam ? `${spec.cameras.find((c) => c.id === cam.id)?.name ?? cam.id} · ${cam.focalLength.toFixed(0)}mm` : "no camera"}
         {view.kind === "shot" && shot ? ` · ${shot.id}` : ""}
       </div>
+      <div className="absolute right-3 top-3 flex gap-1.5">
+        {view.kind === "camera" ? <PilotToggle /> : null}
+        {view.kind === "shot" ? (
+          <span className="pointer-events-none rounded bg-black/50 px-2 py-1 text-[11px] text-white/70">컷 재생 중 · 편집은 🧭 자유 시점(V)</span>
+        ) : null}
+      </div>
       {shot?.description && view.kind === "shot" ? (
         <div className="pointer-events-none absolute bottom-3 left-1/2 max-w-[80%] -translate-x-1/2 rounded bg-black/60 px-3 py-1 text-center text-xs text-white/90">
           {shot.description}
         </div>
       ) : null}
     </>
+  );
+}
+
+function PilotToggle() {
+  const pilot = useStudio((s) => s.pilot);
+  return (
+    <button
+      onClick={() => useStudio.getState().setPilot(!pilot)}
+      title="켜면 이 카메라 화면을 드래그해서 카메라 자체를 움직입니다 (좌클릭 회전 · 휠 줌 · 우클릭 팬)"
+      className={`rounded px-2 py-1 text-[11px] ${pilot ? "bg-amber-400 text-black" : "bg-black/60 text-white/90 hover:bg-black/80"}`}
+    >
+      🎮 카메라 조작 {pilot ? "ON" : "OFF"}
+    </button>
+  );
+}
+
+/** Frame + label over the picture-in-picture the viewport draws in free view (see SceneRenderer). */
+function PipFrame() {
+  const selection = useStudio((s) => s.selection);
+  const sceneState = useStudio((s) => s.sceneState);
+  const cameras = useStudio((s) => s.spec.cameras);
+  const id = selection && sceneState.cameras[selection] ? selection : sceneState.activeCameraId;
+  const cam = id ? sceneState.cameras[id] : undefined;
+  if (!cam || !id) return null;
+  const name = cameras.find((c) => c.id === id)?.name ?? id;
+  return (
+    <div className="absolute right-[10px] top-[10px] w-[30%] border border-amber-400/80" style={{ aspectRatio: `${cam.aspect}` }}>
+      <div className="absolute -top-5 right-0 flex items-center gap-1 text-[10px] text-amber-300">
+        <span>
+          📷 {name} · {cam.focalLength.toFixed(0)}mm
+        </span>
+        <button className="pointer-events-auto rounded bg-black/60 px-1 hover:bg-black" title="이 카메라 시점으로 보기" onClick={() => useStudio.getState().setView({ kind: "camera", id })}>
+          ↗
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -53,6 +97,7 @@ function ViewButtons() {
       <button
         key={key}
         onClick={() => setView(v)}
+        title={v.kind === "shot" ? "샷 리스트 순서대로 카메라를 바꿔 가며 보기 (0)" : v.kind === "free" ? "편집 시점 — 선택·이동·추가 (V)" : "이 카메라로 보기 — 🎮 카메라 조작으로 직접 움직일 수 있음"}
         className={`rounded px-2.5 py-1 text-xs ${active ? "bg-amber-400 text-black" : "bg-white/10 text-zinc-200 hover:bg-white/20"}`}
       >
         {label}
@@ -61,7 +106,7 @@ function ViewButtons() {
   };
   return (
     <div className="flex flex-wrap gap-1.5">
-      {btn({ kind: "shot" }, "🎬 컷 편집", "shot")}
+      {btn({ kind: "shot" }, "🎬 컷 재생", "shot")}
       {btn({ kind: "free" }, "🧭 자유 시점", "free")}
       {cameras.map((c) => btn({ kind: "camera", id: c.id }, `📷 ${c.name ?? c.id}`, c.id))}
     </div>
@@ -77,24 +122,31 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+const TABS: Array<[Panel, string]> = [
+  ["scene", "장면"],
+  ["shots", "샷"],
+  ["ai", "AI/스크립트"],
+  ["render", "렌더"],
+];
+
 function SidePanel() {
-  const [tab, setTab] = useState<"scene" | "shots">("scene");
+  const panel = useStudio((s) => s.panel);
+  const setPanel = useStudio((s) => s.setPanel);
   const settings = useStudio((s) => s.spec.settings);
-  const tabBtn = (id: typeof tab, label: string) => (
-    <button
-      onClick={() => setTab(id)}
-      className={`flex-1 rounded px-2 py-1 text-xs ${tab === id ? "bg-white/15 text-white" : "text-zinc-400 hover:bg-white/5"}`}
-    >
-      {label}
-    </button>
-  );
   return (
-    <aside className="flex w-80 flex-col gap-4 overflow-y-auto border-l border-white/10 bg-[#15171c] p-4 text-sm text-zinc-300">
+    <aside className="flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l border-white/10 bg-[#15171c] p-4 text-sm text-zinc-300">
       <div className="flex gap-1">
-        {tabBtn("scene", "장면")}
-        {tabBtn("shots", "샷 리스트")}
+        {TABS.map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setPanel(id)}
+            className={`flex-1 rounded px-1.5 py-1 text-xs ${panel === id ? "bg-white/15 text-white" : "text-zinc-400 hover:bg-white/5"}`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
-      {tab === "scene" ? (
+      {panel === "scene" ? (
         <>
           <Section title="아웃라이너">
             <Outliner />
@@ -103,9 +155,10 @@ function SidePanel() {
             <Properties />
           </Section>
         </>
-      ) : (
-        <ShotEditor />
-      )}
+      ) : null}
+      {panel === "shots" ? <ShotEditor /> : null}
+      {panel === "ai" ? <ImportPanel onClose={() => setPanel("scene")} /> : null}
+      {panel === "render" ? <RenderPanel /> : null}
       <section className="mt-auto text-xs text-zinc-500">
         {settings.resolution.join("×")} · {settings.fps}fps · {settings.duration}s
       </section>
@@ -126,7 +179,6 @@ function Toast() {
 }
 
 export default function Studio() {
-  const [importOpen, setImportOpen] = useState(false);
   const title = useStudio((s) => s.spec.meta.title);
   const [w, h] = useStudio((s) => s.spec.settings.resolution);
 
@@ -147,6 +199,15 @@ export default function Studio() {
       if (el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) return;
       if (el instanceof HTMLInputElement && !["range", "color", "checkbox"].includes(el.type)) return;
       const s = useStudio.getState();
+      if (s.rendering) return;
+      if (s.recording) {
+        // while recording the keyboard drives the take (see Recorder); only stop keys are handled here
+        if (e.code === "Space" || e.code === "Escape") {
+          e.preventDefault();
+          stopRecording();
+        } else if (e.code.startsWith("Arrow")) e.preventDefault();
+        return;
+      }
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.code === "KeyZ") {
         e.preventDefault();
@@ -166,7 +227,8 @@ export default function Studio() {
       } else if (e.code === "Delete" || e.code === "Backspace") {
         e.preventDefault();
         deleteSelected();
-      } else if (e.code === "KeyW") s.setGizmoMode("translate");
+      } else if (e.code === "KeyR") startRecording();
+      else if (e.code === "KeyW") s.setGizmoMode("translate");
       else if (e.code === "KeyE") s.setGizmoMode("rotate");
       else if (e.code === "KeyS") s.setSnap(!s.snapEnabled);
       else if (e.code === "KeyV") s.setView({ kind: "free" });
@@ -195,7 +257,7 @@ export default function Studio() {
         <span className="truncate text-sm text-zinc-400">{title}</span>
         <div className="ml-auto flex items-center gap-3">
           <ViewButtons />
-          <Toolbar onImport={() => setImportOpen(true)} />
+          <Toolbar onImport={() => useStudio.getState().setPanel("ai")} />
         </div>
       </header>
       <div className="flex min-h-0 flex-1">
@@ -206,13 +268,7 @@ export default function Studio() {
             <ShotHud />
           </div>
         </main>
-        {importOpen ? (
-          <aside className="w-[420px] border-l border-white/10 bg-[#15171c]">
-            <ImportPanel onClose={() => setImportOpen(false)} />
-          </aside>
-        ) : (
-          <SidePanel />
-        )}
+        <SidePanel />
       </div>
       <LensBar />
       <Timeline />

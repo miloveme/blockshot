@@ -19,6 +19,7 @@ pnpm test
 
 | 문서 | 내용 |
 | --- | --- |
+| [사용 가이드](docs/USER_GUIDE.md) | 배치 · 키프레임/레코딩 · 카메라 · 렌더링 사용법 |
 | [PRD](docs/PRD.md) | 목표, 사용자, 기능 요구사항, 마일스톤 |
 | [Architecture](docs/ARCHITECTURE.md) | 모노레포 구조, 데이터 흐름, 렌더/샌드박스 설계 |
 | [Scene Spec](docs/SCENE_SPEC.md) | JSON 포맷 v0.1 |
