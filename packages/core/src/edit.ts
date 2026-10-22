@@ -111,6 +111,7 @@ export function removeEntity(spec: BlockshotSpec, id: string): BlockshotSpec {
     }),
     tracks: spec.tracks.filter((t) => t.target !== id),
     shots: removedCamera ? spec.shots.filter((s) => s.camera !== id) : spec.shots,
+    bin: removedCamera ? spec.bin.filter((c) => c.camera !== id) : spec.bin,
   };
 }
 

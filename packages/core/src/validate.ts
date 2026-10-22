@@ -88,6 +88,10 @@ export function validateSpec(input: unknown): ValidationResult {
   spec.tracks.forEach((t, i) => {
     if (!ids.has(t.target)) errors.push({ path: `tracks[${i}].target`, message: `Unknown target id "${t.target}"` });
   });
+  spec.bin.forEach((c, i) => {
+    checkCamera(c.camera, `bin[${i}].camera`);
+    if (c.end <= c.start) errors.push({ path: `bin[${i}]`, message: `Clip end (${c.end}) must be after start (${c.start})` });
+  });
   spec.shots.forEach((s, i) => {
     checkCamera(s.camera, `shots[${i}].camera`);
     if (s.end <= s.start) errors.push({ path: `shots[${i}]`, message: `Shot end (${s.end}) must be after start (${s.start})` });

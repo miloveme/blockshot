@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { compile, editDuration, editTimeOf, evaluate, locateEdit, validateSpec, type BlockshotSpec, type CompiledScene, type SceneState, type Shot } from "@blockshot/core";
+import { compile, editDuration, editTimeOf, evaluate, locateEdit, validateSpec, type BlockshotSpec, type CompiledScene, type ClipData, type SceneState } from "@blockshot/core";
 import example from "@blockshot/core/examples/living-room.json";
 
 export type ViewMode = { kind: "free" } | { kind: "shot" } | { kind: "camera"; id: string };
@@ -49,8 +49,19 @@ interface StudioState {
   /** cut playback (🎬 view): position on the edit timeline, and the shot under it */
   editTime: number;
   cutShotId: string | null;
-  /** shot cut/copied in the edit, pasted after the current shot */
-  clipboard: Omit<Shot, "id"> | null;
+  /** clips cut/copied in the edit (in edit order), pasted at the cut playhead */
+  clipboard: ClipData[];
+  /** selected clips on the edit track (shot ids) */
+  clipSelection: string[];
+  /** edit-timeline In / Out marks (seconds) */
+  inPoint: number | null;
+  outPoint: number | null;
+  /** razor tool: clicking a clip splits it there */
+  razor: boolean;
+  /** clips being dragged from the bin / sources onto the edit track */
+  dragClips: ClipData[] | null;
+  /** edit track zoom (1 = whole edit fits) */
+  editZoom: number;
   /** spec before a continuous gesture (e.g. trimming a clip by dragging) — one undo step for the whole drag */
   gestureBase: BlockshotSpec | null;
 
@@ -72,7 +83,12 @@ interface StudioState {
   setPanel(p: Panel): void;
   /** Moves the cut playhead; scene time and the viewed camera follow the shot under it. */
   setEditTime(t: number): void;
-  setClipboard(shot: Omit<Shot, "id"> | null): void;
+  setClipboard(clips: ClipData[]): void;
+  selectClips(ids: string[]): void;
+  setRange(inPoint: number | null, outPoint: number | null): void;
+  setRazor(on: boolean): void;
+  setDragClips(clips: ClipData[] | null): void;
+  setEditZoom(z: number): void;
   beginGesture(): void;
   /** Replace the spec during a gesture without adding history. */
   editLive(fn: (spec: BlockshotSpec) => BlockshotSpec | null): void;
@@ -104,6 +120,7 @@ export const useStudio = create<StudioState>((set, get) => {
       spec, compiled: c, time, sceneState: evaluate(c, time), selection: exists ? sel : null,
       view: viewOk ? view : ({ kind: "shot" } as ViewMode),
       editTime: hit ? editTime : 0, cutShotId: hit?.clip.shot.id ?? null,
+      clipSelection: get().clipSelection.filter((id) => spec.shots.some((x) => x.id === id)),
     };
   };
 
@@ -129,7 +146,13 @@ export const useStudio = create<StudioState>((set, get) => {
     rendering: false,
     editTime: 0,
     cutShotId: initial.spec.shots[0]?.id ?? null,
-    clipboard: null,
+    clipboard: [],
+    clipSelection: [],
+    inPoint: null,
+    outPoint: null,
+    razor: false,
+    dragClips: null,
+    editZoom: 1,
     gestureBase: null,
 
     setSpec(spec) {
@@ -192,6 +215,21 @@ export const useStudio = create<StudioState>((set, get) => {
     },
     setClipboard(clipboard) {
       set({ clipboard });
+    },
+    selectClips(clipSelection) {
+      set({ clipSelection });
+    },
+    setRange(inPoint, outPoint) {
+      set({ inPoint, outPoint });
+    },
+    setRazor(razor) {
+      set({ razor });
+    },
+    setDragClips(dragClips) {
+      set({ dragClips });
+    },
+    setEditZoom(editZoom) {
+      set({ editZoom: Math.max(1, Math.min(20, editZoom)) });
     },
     beginGesture() {
       set({ gestureBase: get().spec });

@@ -134,3 +134,90 @@ export function planFrames(spec: BlockshotSpec, opts: { shotId?: string; camera?
   for (const s of clips) range(s.start, s.end, s.camera, s.id);
   return frames;
 }
+
+/** Shot fields without the id — what the clipboard, the bin and sources carry. */
+export type ClipData = Omit<Shot, "id">;
+
+const EDGE = 0.05;
+
+/** Edit points: 0 and every clip boundary. */
+export function editPoints(spec: BlockshotSpec): number[] {
+  return [0, ...buildSequence(spec).map((c) => c.editEnd)];
+}
+
+/** Splits the clip under an edit-timeline position. Null when the position is on (or within 0.1 s of) a boundary. */
+export function splitAtEdit(spec: BlockshotSpec, editTime: number): { spec: BlockshotSpec; id: string } | null {
+  const clip = buildSequence(spec).find((c) => editTime > c.editStart && editTime < c.editEnd);
+  if (!clip) return null;
+  const sceneTime = clip.shot.start + (editTime - clip.editStart);
+  if (sceneTime <= clip.shot.start + 0.1 || sceneTime >= clip.shot.end - 0.1) return null;
+  const id = nextShotId(spec);
+  const shots = spec.shots.flatMap((s) => (s.id === clip.shot.id ? [{ ...s, end: roundT(sceneTime) }, { ...s, id, start: roundT(sceneTime) }] : [s]));
+  return { spec: { ...spec, shots }, id };
+}
+
+/**
+ * Inserts clips at an edit-timeline position (NLE "insert" edit): in the middle of a clip that clip is split and
+ * the new clips go between the halves; on a boundary they go there. Later clips ripple right.
+ */
+export function insertAtEdit(spec: BlockshotSpec, clips: ClipData[], editTime: number): { spec: BlockshotSpec; ids: string[] } {
+  let next = spec;
+  const inside = buildSequence(next).find((c) => editTime > c.editStart + EDGE && editTime < c.editEnd - EDGE);
+  if (inside) next = splitAtEdit(next, editTime)?.spec ?? next;
+  const seq = buildSequence(next);
+  let index = seq.findIndex((c) => c.editStart >= editTime - EDGE);
+  if (index === -1) index = seq.length;
+  const ids: string[] = [];
+  const shots = [...next.shots];
+  for (const clip of clips) {
+    const id = nextShotId({ ...next, shots });
+    shots.splice(index + ids.length, 0, { ...clip, id });
+    ids.push(id);
+  }
+  return { spec: { ...next, shots }, ids };
+}
+
+/** Removes several shots (ripple: the rest closes up). */
+export function removeShots(spec: BlockshotSpec, ids: string[]): BlockshotSpec {
+  const drop = new Set(ids);
+  return { ...spec, shots: spec.shots.filter((s) => !drop.has(s.id)) };
+}
+
+/** Clips that lie inside an edit range, after splitting at its ends (so they cover exactly the range). */
+export function cutRange(spec: BlockshotSpec, from: number, to: number): { spec: BlockshotSpec; ids: string[] } {
+  const a = Math.min(from, to);
+  const b = Math.max(from, to);
+  let next = splitAtEdit(spec, a)?.spec ?? spec;
+  next = splitAtEdit(next, b)?.spec ?? next;
+  const ids = buildSequence(next)
+    .filter((c) => c.editStart >= a - EDGE && c.editEnd <= b + EDGE)
+    .map((c) => c.shot.id);
+  return { spec: next, ids };
+}
+
+/** Ripple-deletes an edit range (Premiere "extract"): the part between In and Out disappears and the rest closes up. */
+export function extractRange(spec: BlockshotSpec, from: number, to: number): BlockshotSpec {
+  if (Math.abs(to - from) < 1e-3) return spec;
+  const { spec: split, ids } = cutRange(spec, from, to);
+  return ids.length ? removeShots(split, ids) : spec;
+}
+
+/** Full take of every camera over the whole scene — the "source footage" an edit is cut from. */
+export function sourceTakes(spec: BlockshotSpec): Array<ClipData & { key: string }> {
+  return spec.cameras.map((c) => ({ key: c.id, camera: c.id, start: 0, end: spec.settings.duration, name: `${c.name ?? c.id} 전체 테이크` }));
+}
+
+function nextBinId(spec: BlockshotSpec): string {
+  const used = new Set(spec.bin.map((c) => c.id));
+  for (let n = spec.bin.length + 1; ; n++) if (!used.has(`C${n}`)) return `C${n}`;
+}
+
+export function addToBin(spec: BlockshotSpec, clips: ClipData[]): BlockshotSpec {
+  let next = spec;
+  for (const c of clips) next = { ...next, bin: [...next.bin, { ...c, id: nextBinId(next) }] };
+  return next;
+}
+
+export function removeFromBin(spec: BlockshotSpec, id: string): BlockshotSpec {
+  return { ...spec, bin: spec.bin.filter((c) => c.id !== id) };
+}

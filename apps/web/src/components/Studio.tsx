@@ -12,7 +12,9 @@ import { ShotEditor } from "./ShotEditor";
 import { RenderPanel } from "./RenderPanel";
 import { deleteSelected, insertKeyAtCurrentTime, removeKeysAtCurrentTime } from "@/lib/actions";
 import { startRecording, stopRecording } from "@/lib/recorder";
-import { copyCurrent, cutCurrent, deleteCurrent, moveCurrent, pasteAfterCurrent } from "@/lib/shotActions";
+import {
+  clearRange, copySelection, cutSelection, deleteSelection, duplicateSelection, jumpEditPoint, moveCurrent, paste, setInPoint, setOutPoint, splitAtPlayhead, stepFrames,
+} from "@/lib/shotActions";
 import { loadSpecText, startAutosave } from "@/lib/persist";
 
 const Viewport = dynamic(() => import("./viewport/Viewport"), { ssr: false });
@@ -126,7 +128,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 const TABS: Array<[Panel, string]> = [
   ["scene", "장면"],
-  ["shots", "샷"],
+  ["shots", "편집"],
   ["ai", "AI/스크립트"],
   ["render", "렌더"],
 ];
@@ -196,6 +198,8 @@ export default function Studio() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // physical key (works in Korean IME mode); fall back to `key` when a synthetic event leaves `code` empty
+      const code = e.code || (e.key.length === 1 ? (/\d/.test(e.key) ? `Digit${e.key}` : `Key${e.key.toUpperCase()}`) : e.key);
       // typing fields keep their keys; the timeline slider / color picker must not swallow shortcuts
       const el = e.target;
       if (el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) return;
@@ -204,57 +208,70 @@ export default function Studio() {
       if (s.rendering) return;
       if (s.recording) {
         // while recording the keyboard drives the take (see Recorder); only stop keys are handled here
-        if (e.code === "Space" || e.code === "Escape") {
+        if (code === "Space" || code === "Escape") {
           e.preventDefault();
           stopRecording();
-        } else if (e.code.startsWith("Arrow")) e.preventDefault();
+        } else if (code.startsWith("Arrow")) e.preventDefault();
         return;
       }
       const mod = e.ctrlKey || e.metaKey;
       if (s.view.kind === "shot") {
-        // cut view: clipboard / delete / reorder act on the shot under the cut playhead
-        const handled = mod && e.code === "KeyX" ? (cutCurrent(), true)
-          : mod && e.code === "KeyC" ? (copyCurrent(), true)
-          : mod && e.code === "KeyV" ? (pasteAfterCurrent(), true)
-          : !mod && (e.code === "Delete" || e.code === "Backspace") ? (deleteCurrent(), true)
-          : e.altKey && e.code === "ArrowLeft" ? (moveCurrent(-1), true)
-          : e.altKey && e.code === "ArrowRight" ? (moveCurrent(1), true)
-          : false;
-        if (handled) {
+        // cut view (CapCut / Premiere-style): act on selected clips, the In/Out range or the clip under the playhead
+        const k = code;
+        const run = (fn: () => void) => {
           e.preventDefault();
-          return;
-        }
+          fn();
+        };
+        if (mod && k === "KeyX") return run(cutSelection);
+        if (mod && k === "KeyC") return run(copySelection);
+        if (mod && k === "KeyV") return run(paste);
+        if (mod && k === "KeyD") return run(duplicateSelection);
+        if (mod && (k === "KeyB" || k === "KeyK")) return run(splitAtPlayhead);
+        if (!mod && (k === "Delete" || k === "Backspace")) return run(deleteSelection);
+        if (!mod && !e.altKey && k === "KeyI") return run(setInPoint);
+        if (!mod && !e.altKey && k === "KeyO") return run(setOutPoint);
+        if (e.altKey && k === "KeyX") return run(clearRange);
+        if (!mod && k === "KeyB") return run(() => s.setRazor(true));
+        if (!mod && k === "KeyA") return run(() => s.setRazor(false));
+        if (k === "Escape") return run(() => (s.selectClips([]), s.setRange(null, null), s.setRazor(false)));
+        if (e.altKey && k === "ArrowLeft") return run(() => moveCurrent(-1));
+        if (e.altKey && k === "ArrowRight") return run(() => moveCurrent(1));
+        if (k === "ArrowLeft") return run(() => stepFrames(e.shiftKey ? -10 : -1));
+        if (k === "ArrowRight") return run(() => stepFrames(e.shiftKey ? 10 : 1));
+        if (k === "ArrowUp") return run(() => jumpEditPoint(-1));
+        if (k === "ArrowDown") return run(() => jumpEditPoint(1));
+        if (k === "Home") return run(() => s.setEditTime(0));
       }
-      if (mod && e.code === "KeyZ") {
+      if (mod && code === "KeyZ") {
         e.preventDefault();
         if (e.shiftKey) s.redo();
         else s.undo();
-      } else if (mod && e.code === "KeyY") {
+      } else if (mod && code === "KeyY") {
         e.preventDefault();
         s.redo();
       } else if (mod) {
         return;
-      } else if (e.code === "Space") {
+      } else if (code === "Space") {
         e.preventDefault();
         s.setPlaying(!s.playing);
-      } else if (e.code === "KeyK" && e.shiftKey) {
+      } else if (code === "KeyK" && e.shiftKey) {
         s.setAutoKey(!s.autoKey);
         s.notify(s.autoKey ? "자동 키 끔" : "자동 키 켬 — 움직이면 현재 시간에 키가 찍힙니다");
-      } else if (e.code === "KeyK") {
+      } else if (code === "KeyK") {
         if (e.altKey) removeKeysAtCurrentTime();
         else insertKeyAtCurrentTime();
-      } else if (e.code === "Delete" || e.code === "Backspace") {
+      } else if (code === "Delete" || code === "Backspace") {
         e.preventDefault();
         deleteSelected();
-      } else if (e.code === "KeyR" && e.shiftKey) startRecording();
-      else if (e.code === "KeyR") s.setGizmoMode("scale");
-      else if (e.code === "KeyW") s.setGizmoMode("translate");
-      else if (e.code === "KeyE") s.setGizmoMode("rotate");
-      else if (e.code === "KeyS") s.setSnap(!s.snapEnabled);
-      else if (e.code === "KeyV") s.setView({ kind: "free" });
-      else if (e.code === "Digit0") s.setView({ kind: "shot" });
-      else if (/^Digit[1-9]$/.test(e.code)) {
-        const cam = s.spec.cameras[Number(e.code.slice(5)) - 1];
+      } else if (code === "KeyR" && e.shiftKey) startRecording();
+      else if (code === "KeyR") s.setGizmoMode("scale");
+      else if (code === "KeyW") s.setGizmoMode("translate");
+      else if (code === "KeyE") s.setGizmoMode("rotate");
+      else if (code === "KeyS") s.setSnap(!s.snapEnabled);
+      else if (code === "KeyV") s.setView({ kind: "free" });
+      else if (code === "Digit0") s.setView({ kind: "shot" });
+      else if (/^Digit[1-9]$/.test(code)) {
+        const cam = s.spec.cameras[Number(code.slice(5)) - 1];
         if (cam) s.setView({ kind: "camera", id: cam.id });
       }
     };

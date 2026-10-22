@@ -157,6 +157,18 @@ export const Shot = z.object({
 });
 export type Shot = z.infer<typeof Shot>;
 
+/** A saved cut in the project bin — same fields as a shot, not part of the edit until inserted. */
+export const BinClip = z.object({
+  id: Id,
+  name: z.string().optional(),
+  camera: Id,
+  start: z.number().min(0),
+  end: z.number().positive(),
+  description: z.string().optional(),
+  prompt: z.string().optional(),
+});
+export type BinClip = z.infer<typeof BinClip>;
+
 export const BlockshotSpec = z.object({
   specVersion: z.literal(SPEC_VERSION),
   meta: z.object({ title: z.string().default("Untitled"), description: z.string().optional() }).default({ title: "Untitled" }),
@@ -168,6 +180,7 @@ export const BlockshotSpec = z.object({
   actions: z.array(Action).default([]),
   tracks: z.array(Track).default([]),
   shots: z.array(Shot).default([]),
+  bin: z.array(BinClip).default([]),
 });
 /** Fully-defaulted spec (output of parsing). */
 export type BlockshotSpec = z.infer<typeof BlockshotSpec>;
