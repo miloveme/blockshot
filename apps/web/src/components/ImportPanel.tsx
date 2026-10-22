@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { buildFixPrompt, buildPrompt, detectPasted, validateSpec, type Issue, type PromptMode } from "@blockshot/core";
+import { buildFixPrompt, buildLayoutFixPrompt, buildPrompt, detectPasted, lintLayout, validateSpec, type Issue, type PromptMode } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
 import { runScriptInWorker } from "@/lib/run-script";
 
@@ -11,6 +11,7 @@ export function ImportPanel({ onClose }: { onClose: () => void }) {
   const [mode, setMode] = useState<PromptMode>("json");
   const [pasted, setPasted] = useState("");
   const [errors, setErrors] = useState<Issue[]>([]);
+  const [layoutIssues, setLayoutIssues] = useState<Issue[]>([]);
   const [status, setStatus] = useState<string>("");
   const [lastFormat, setLastFormat] = useState<"json" | "script">("json");
 
@@ -21,6 +22,7 @@ export function ImportPanel({ onClose }: { onClose: () => void }) {
 
   const apply = async () => {
     setErrors([]);
+    setLayoutIssues([]);
     setStatus("");
     const detected = detectPasted(pasted);
     let input: unknown;
@@ -51,6 +53,13 @@ export function ImportPanel({ onClose }: { onClose: () => void }) {
       return;
     }
     useStudio.getState().setSpec(v.spec);
+    const layout = lintLayout(v.spec);
+    if (layout.length > 0) {
+      // keep the panel open: the scene is applied, but the user can ask the LLM to fix the placement
+      setLayoutIssues(layout);
+      setStatus("적용됨 — 배치 경고가 있습니다");
+      return;
+    }
     setStatus(`적용됨${v.warnings.length ? ` (경고 ${v.warnings.length}건)` : ""}`);
     onClose();
   };
@@ -75,7 +84,7 @@ export function ImportPanel({ onClose }: { onClose: () => void }) {
           <button
             className="rounded bg-amber-400 px-3 py-1 font-medium text-black hover:bg-amber-300 disabled:opacity-40"
             disabled={!request.trim()}
-            onClick={() => copy(buildPrompt({ request, mode }), "프롬프트")}
+            onClick={() => copy(buildPrompt({ request, mode, project: useStudio.getState().spec }), "프롬프트")}
           >
             프롬프트 복사
           </button>
@@ -121,6 +130,24 @@ export function ImportPanel({ onClose }: { onClose: () => void }) {
           >
             LLM에 보낼 수정 요청 복사
           </button>
+        </section>
+      )}
+      {layoutIssues.length > 0 && (
+        <section className="flex flex-col gap-2 rounded border border-amber-400/40 bg-amber-400/10 p-3">
+          <h3 className="font-medium text-amber-300">배치 경고 {layoutIssues.length}건</h3>
+          <ul className="list-disc pl-5 text-xs text-amber-100">
+            {layoutIssues.map((e, i) => (
+              <li key={i}>{e.message}</li>
+            ))}
+          </ul>
+          <div className="flex gap-2">
+            <button className="rounded bg-amber-400 px-3 py-1 text-xs font-medium text-black hover:bg-amber-300" onClick={() => copy(buildLayoutFixPrompt(layoutIssues, lastFormat), "배치 수정 요청 프롬프트")}>
+              LLM에 보낼 배치 수정 요청 복사
+            </button>
+            <button className="rounded bg-white/10 px-3 py-1 text-xs hover:bg-white/20" onClick={onClose}>
+              이대로 사용
+            </button>
+          </div>
         </section>
       )}
       {status && <p className="text-xs text-emerald-300">{status}</p>}
