@@ -6,6 +6,9 @@
 - 사람은 UI로, AI는 **JSON 또는 스크립트**(`scene.actor(...)`, `cam.dolly(...)`)로 같은 문서를 만든다
 - MCP 없이 Suno처럼: 앱이 만든 프롬프트 → 아무 LLM → 결과 붙여넣기 → 검증 → 실행
 
+**배포:** https://blockshot-eta.vercel.app (Vercel, `main` 푸시마다 운영 배포 · PR마다 미리보기 · Root Directory `apps/web`)
+LLM용 진입점: https://blockshot-eta.vercel.app/llms.txt
+
 ```bash
 pnpm install
 pnpm dev     # http://localhost:3000
