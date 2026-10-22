@@ -86,22 +86,37 @@ blockshot/
 - 뷰포트 컨테이너는 렌더 해상도 화면비로 고정 → 미리보기 프레이밍 = 출력 프레이밍
 - 방 벽은 안쪽을 향한 단면 평면 → 밖에서 보면 투시(돌하우스), 안의 카메라에는 벽
 
-### 3.3 오프라인 렌더러 (M2 설계)
+### 3.3 오프라인 렌더러 (`apps/web/src/lib/render.ts`)
 
 ```ts
-for (let f = 0; f < totalFrames; f++) {
-  const state = evaluate(compiled, f / fps);
-  applyStateToScene(state);          // viewport와 같은 적용 함수 재사용
-  renderer.render(scene, shotCamera); // 별도 WebGLRenderTarget, 출력 해상도
-  const frame = new VideoFrame(canvas, { timestamp: f * 1e6 / fps });
-  encoder.encode(frame, { keyFrame: f % (fps * 2) === 0 });
-  frame.close();
+for (let f = first; f < last; f++) {
+  store.setTime(f / fps);            // evaluate → sceneState
+  bridge.advance(now);               // R3F가 모든 useFrame 실행 → 뷰포트와 같은 코드로 장면 포즈 적용
+  aimCamera(renderCam, shotCamera);  // 샷 순서 또는 고정 카메라
+  offscreen.render(scene, renderCam); // 출력 해상도의 별도 WebGLRenderer, 같은 scene 그래프 공유
+  await canvasSource.add(t, 1 / fps); // mediabunny → WebCodecs (H.264 MP4, 미지원 시 VP9/AV1 WebM)
 }
 ```
 
-- 실시간 루프를 멈추고 프레임 단위로 진행 (드롭 프레임 없음)
-- 패스별 머티리얼 오버라이드: beauty(클레이) / depth(MeshDepthMaterial 정규화) / normal / segmentation(객체 ID 단색) / pose(스켈레톤 라인 오버레이 씬)
-- 이를 위해 M2에서 `useFrame` 안의 적용 로직을 `applyStateToScene()` 순수 함수로 추출할 것
+- 실시간 루프와 무관하게 프레임 단위로 진행 (드롭 프레임 없음). 렌더 중 `rendering` 플래그로 재생·편집 입력을 막음
+- `advance` 덕분에 별도의 `applyStateToScene()`가 필요 없다 — 뷰포트 컴포넌트의 `useFrame`이 곧 적용 함수
+- 패스: beauty(뷰포트와 같은 톤매핑) / depth(선형 view-space 깊이 ShaderMaterial을 `scene.overrideMaterial`로, 가까울수록 흰색). 이후 normal / segmentation / pose 추가
+- 프레임마다 카메라 위치·회전(YXZ°)·초점거리를 `camera.json`으로 기록
+
+### 3.4 레이어 — 편집 보조 요소 격리
+
+`viewport/util.ts`의 `EDITOR_LAYER(1)`에 카메라 기즈모·그리드·이름표·선택 링·TransformControls 헬퍼를 둔다. 자유 시점 카메라와 레이캐스터만 이 레이어를 보고, 샷 카메라·PiP·오프라인 렌더는 레이어 0만 본다 → 보조 요소가 레퍼런스 영상에 섞일 수 없다. 비동기로 늦게 붙는 자식(drei `Text`)은 `<EditorOnly>`가 매 프레임 레이어를 다시 지정한다.
+
+### 3.5 PiP와 카메라 조작
+
+- `SceneRenderer`가 `useFrame(…, 1)`로 렌더링을 직접 맡아 메인 뷰를 그린 뒤, 자유 시점이면 scissor로 우상단에 선택(또는 활성 샷) 카메라 화면을 한 번 더 그린다
+- 카메라 시점 + 파일럿 ON이면 `OrbitControls`가 그 샷 카메라를 직접 움직이고(조준점 중심 오빗), 놓을 때 `commitCamera`로 위치(애니메이션 중이면 키)를 저장한다. 드래그 중에는 `dragging` 플래그로 sceneState 구동을 멈춘다
+
+### 3.6 레코딩 (`lib/recorder.ts`, `viewport/Recorder.tsx`, `core/record.ts`)
+
+1. `startRecording` — 선택 대상과 시작 시간을 store에 기록하고 재생 시작
+2. `<Recorder>`(Playback 바로 뒤에 마운트) — 매 프레임 키 입력으로 라이브 값을 갱신해 **sceneState에 덮어씀** → 마네킹 걷기 사이클·PiP·샷 카메라가 모두 라이브 값을 따른다. 1/12초마다 샘플링
+3. `stopRecording` — `applyRecording(spec, id, take, t0, t1)`(순수): 구간 안 키를 교체, RDP(위치 1cm·회전 0.5°·초점 0.2mm)로 키 축약, 포즈는 변화 지점만 step 키. undo 한 단계
 
 ## 4. 스크립트 샌드박스
 

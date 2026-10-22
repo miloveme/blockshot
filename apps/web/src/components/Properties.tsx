@@ -2,7 +2,8 @@
 
 import { LENS_PRESETS, POSES, kindOf, type Pose } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
-import { commitTransform, deleteSelected, patch, setLens, setPoseCmd } from "@/lib/actions";
+import { commitTransform, deleteSelected, matchCameraToFreeView, patch, setLens, setPoseCmd } from "@/lib/actions";
+import { getBridge } from "@/lib/render";
 import { ColorField, NumField, Row, SelectField, TextField, Vec3Field } from "./fields";
 
 const POSE_LABEL: Record<Pose, string> = { stand: "서기", idle: "대기", walk: "걷기", run: "달리기", sit: "앉기", point: "가리키기", talk: "말하기" };
@@ -129,6 +130,22 @@ export function Properties() {
               }}
             />
           </Row>
+          <div className="flex flex-wrap gap-1 pl-16">
+            <button
+              className="rounded bg-white/10 px-2 py-0.5 text-[11px] hover:bg-white/20"
+              title="자유 시점에서 보고 있는 위치·방향을 이 카메라에 그대로 적용"
+              onClick={() => {
+                const view = getBridge()?.freeView();
+                if (view) matchCameraToFreeView(id, view);
+                else useStudio.getState().notify("🧭 자유 시점에서 원하는 구도로 맞춘 뒤 누르세요");
+              }}
+            >
+              📐 현재 자유 시점으로 맞추기
+            </button>
+            <button className="rounded bg-white/10 px-2 py-0.5 text-[11px] hover:bg-white/20" onClick={() => useStudio.getState().setView({ kind: "camera", id })}>
+              👁 이 카메라로 보기
+            </button>
+          </div>
         </>
       ) : null}
 
