@@ -135,3 +135,27 @@ describe("removeKey", () => {
     expect(removeKey(s0, s0.actors[0]!.id, "position", 123)).toBe(s0);
   });
 });
+
+describe("removeKeysAt", () => {
+  it("deletes action-generated (grey) keys by baking the property", async () => {
+    const { removeKeysAt, keyTimes } = await import("../src");
+    const ex = (await import("../examples/living-room.json")).default;
+    const r = validateSpec(ex);
+    if (!r.ok) throw new Error("invalid");
+    const before = keyTimes(r.spec, "minsu");
+    // walkTo for minsu: waypoint key around t = 0.5 + 3.2 * (seg1 / total)
+    const grey = before.find((k) => !k.manual && k.t > 0.6 && k.t < 3.6)!;
+    expect(grey).toBeTruthy();
+    const next = removeKeysAt(r.spec, "minsu", grey.t);
+    expect(next).not.toBe(r.spec);
+    expect(keyTimes(next, "minsu").some((k) => Math.abs(k.t - grey.t) < 0.02)).toBe(false);
+    // the property that had the key now has a manual (baked) track
+    expect(next.tracks.some((tr) => tr.target === "minsu")).toBe(true);
+    // other generated motion is untouched: minsu still walks to the destination
+    const end = evaluate(compile(next), 4).actors.minsu!;
+    expect(end.position[0]).toBeCloseTo(0.7);
+    expect(validateSpec(next).ok).toBe(true);
+    // nothing near this time → same object
+    expect(removeKeysAt(r.spec, "minsu", 7.77)).toBe(r.spec);
+  });
+});

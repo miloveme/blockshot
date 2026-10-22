@@ -1,8 +1,8 @@
 "use client";
 
-import { LENS_PRESETS, POSES, kindOf, type Pose } from "@blockshot/core";
+import { LENS_PRESETS, POSES, keyTimes, kindOf, type Pose } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
-import { commitTransform, deleteSelected, matchCameraToFreeView, patch, setLens, setPoseCmd } from "@/lib/actions";
+import { commitTransform, deleteSelected, insertKeyAtCurrentTime, matchCameraToFreeView, patch, removeKeysAtTime, setLens, setPoseCmd } from "@/lib/actions";
 import { getBridge } from "@/lib/render";
 import { ColorField, NumField, Row, SelectField, TextField, Vec3Field } from "./fields";
 
@@ -155,7 +155,34 @@ export function Properties() {
       <Row label="회전°">
         <Vec3Field value={rot} step={5} digits={1} onCommit={(v) => commitTransform(id, pos, v)} />
       </Row>
-      {actor || cam ? <p className="pl-16 text-[10px] text-zinc-600">애니메이션 중인 값은 현재 시간에 키가 추가됩니다</p> : null}
+      {actor || cam ? <KeyButtons id={id} /> : null}
+    </div>
+  );
+}
+
+/** Key the selected actor / camera at the current time, or delete its keys there (grey action keys included). */
+function KeyButtons({ id }: { id: string }) {
+  const spec = useStudio((s) => s.spec);
+  const time = useStudio((s) => s.time);
+  const here = keyTimes(spec, id).find((k) => Math.abs(k.t - time) <= 0.02);
+  return (
+    <div className="flex flex-col gap-1 pl-16">
+      <div className="flex gap-1">
+        <button className="rounded bg-amber-400/90 px-2 py-0.5 text-[11px] font-medium text-black hover:bg-amber-300" onClick={insertKeyAtCurrentTime} title="K">
+          ◆ 이 시간에 키 추가
+        </button>
+        <button
+          className="rounded bg-white/10 px-2 py-0.5 text-[11px] text-red-300 hover:bg-white/20 disabled:opacity-30"
+          disabled={!here}
+          onClick={() => removeKeysAtTime(id, time)}
+          title={here ? `${time.toFixed(2)}s의 키 삭제 (Alt+K)` : "현재 시간에 키가 없습니다 — 타임라인의 ◆를 클릭해 이동하세요"}
+        >
+          ◇ 이 시간 키 삭제
+        </button>
+      </div>
+      <p className="text-[10px] text-zinc-600">
+        {here ? `${time.toFixed(2)}s에 ${here.manual ? "수동" : "액션"} 키가 있습니다` : "키가 있는 값은 움직이면 현재 시간에 키가 추가됩니다"}
+      </p>
     </div>
   );
 }
