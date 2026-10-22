@@ -18,7 +18,7 @@ blockshot/
 │     │  ├─ schema/                생성된 JSON Schema (pnpm gen:schema)
 │     │  ├─ docs/ examples/        LLM이 읽는 정적 문서 사본
 │     └─ src/
-│        ├─ app/                   라우트 (현재 / 하나)
+│        ├─ app/                   라우트: / 랜딩, /studio 앱(+loading.tsx)
 │        ├─ components/
 │        │  ├─ Studio.tsx          레이아웃, 뷰 전환, 단축키
 │        │  ├─ Timeline.tsx        재생/스크럽/샷 블록/키 표시
