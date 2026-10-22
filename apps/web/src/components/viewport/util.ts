@@ -13,10 +13,17 @@ export function markEditor(obj: THREE.Object3D) {
   obj.traverse((o) => o.layers.set(EDITOR_LAYER));
 }
 
+/**
+ * Poses a camera — or a camera stand-in such as the gizmo — so that its local -Z looks where the camera looks.
+ * Object3D.lookAt points +Z at the target for non-camera objects (and -Z only for cameras), so stand-ins are
+ * turned around afterwards; otherwise an aimed camera's gizmo would face away from what it films.
+ */
 export function aimCamera(obj: THREE.Object3D, c: CameraState) {
   obj.position.set(...c.position);
-  if (c.target) obj.lookAt(...c.target);
-  else obj.rotation.set(c.rotation[0] * DEG, c.rotation[1] * DEG, c.rotation[2] * DEG, "YXZ");
+  if (c.target) {
+    obj.lookAt(...c.target);
+    if (!(obj as THREE.Camera).isCamera) obj.rotateY(Math.PI);
+  } else obj.rotation.set(c.rotation[0] * DEG, c.rotation[1] * DEG, c.rotation[2] * DEG, "YXZ");
 }
 
 /** Camera shown in the main view (shot / camera modes), or null in free view. */

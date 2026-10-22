@@ -146,3 +146,22 @@ export function addCameraFromFreeView(view: { position: Vec3; target: Vec3 }) {
     return { spec: patchEntity(r.spec, r.id, { position: roundVec(view.position), lookAt: roundVec(view.target) }), id: r.id };
   });
 }
+
+/**
+ * Gizmo rotation of a camera. An aimed camera ignores its own rotation, so rotating it by hand releases the aim
+ * (lookAt) and stores the rotation instead — otherwise the rotate tool would appear to do nothing.
+ */
+export function commitCameraRotation(id: string, position: Vec3, rotation: Vec3) {
+  const t = state().time;
+  const pos = roundVec(position);
+  const rot = roundVec(rotation);
+  const aimed = state().spec.cameras.find((c) => c.id === id)?.lookAt !== undefined;
+  state().edit((s) => {
+    if (!s.cameras.some((c) => c.id === id)) return null;
+    let next = patchEntity(s, id, { lookAt: undefined });
+    next = isAnimated(next, id, "position") ? upsertKey(next, id, "position", t, pos) : patchEntity(next, id, { position: pos });
+    next = isAnimated(next, id, "rotation") ? upsertKey(next, id, "rotation", t, rot) : patchEntity(next, id, { rotation: rot });
+    return next;
+  });
+  if (aimed) state().notify("카메라 조준을 해제하고 회전값으로 바꿨습니다 (속성 → 조준에서 다시 지정 가능)");
+}

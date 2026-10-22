@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { DEG, type Vec3 } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
-import { commitCamera, commitTransform, snapSteps } from "@/lib/actions";
+import { commitCamera, commitCameraRotation, commitTransform, snapSteps } from "@/lib/actions";
 import { registerBridge } from "@/lib/render";
 import { stopRecording } from "@/lib/recorder";
 import { Mannequin } from "./Mannequin";
@@ -180,8 +180,12 @@ function SelectionGizmo() {
       }
       if (obj) {
         const id = obj.name.replace(/^obj:/, "");
-        const rot: Vec3 = [obj.rotation.x * RAD, obj.rotation.y * RAD, obj.rotation.z * RAD];
-        commitTransform(id, [obj.position.x, obj.position.y, obj.position.z], rot);
+        // the spec stores rotations as YXZ Euler degrees; read them from the quaternion in that order
+        const e = new THREE.Euler().setFromQuaternion(obj.quaternion, "YXZ");
+        const rot: Vec3 = [e.x * RAD, e.y * RAD, e.z * RAD];
+        const pos: Vec3 = [obj.position.x, obj.position.y, obj.position.z];
+        if (store.sceneState.cameras[id] && tc.mode === "rotate") commitCameraRotation(id, pos, rot);
+        else commitTransform(id, pos, rot);
       }
       store.setDragging(null);
     };
@@ -206,7 +210,7 @@ function SelectionGizmo() {
   useFrame(() => {
     const tc = tcRef.current;
     if (!tc) return;
-    const { selection, sceneState, recording, rendering } = useStudio.getState();
+    const { selection, recording, rendering } = useStudio.getState();
     const want = view.kind === "free" && !recording && !rendering ? selection : null;
     const cur = tc.object && tc.object.parent ? tc.object.name : null;
     if (want === null) {
@@ -218,9 +222,7 @@ function SelectionGizmo() {
       if (obj) tc.attach(obj);
       else if (tc.object) tc.detach();
     }
-    // a camera that aims at a target ignores its own rotation, so only moving makes sense
-    const aimed = sceneState.cameras[want]?.target != null;
-    tc.setMode(aimed ? "translate" : mode);
+    tc.setMode(mode);
   });
   return null;
 }

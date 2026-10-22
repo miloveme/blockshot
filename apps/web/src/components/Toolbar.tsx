@@ -60,7 +60,7 @@ export function Toolbar({ onImport }: { onImport: () => void }) {
       <button className={`rounded px-2.5 py-1 text-xs ${toggle(mode === "rotate")}`} onClick={() => setGizmoMode("rotate")} title="E">회전</button>
       <button className={`rounded px-2.5 py-1 text-xs ${toggle(snap)}`} onClick={() => setSnap(!snap)} title="S — 0.1 m / 15°">스냅</button>
       <span className="mx-1 h-4 w-px bg-white/10" />
-      <button className={btn} onClick={() => fileRef.current?.click()}>열기</button>
+      <button className={btn} onClick={() => fileRef.current?.click()} title=".blockshot.json 프로젝트 열기">열기</button>
       <input
         ref={fileRef}
         type="file"
@@ -72,7 +72,16 @@ export function Toolbar({ onImport }: { onImport: () => void }) {
           e.target.value = "";
         }}
       />
-      <button className={btn} onClick={downloadSpec}>저장</button>
+      <button className={btn} onClick={downloadSpec} title="장면을 .blockshot.json 파일로 저장 (다시 열어서 편집 가능)">
+        프로젝트 저장
+      </button>
+      <button
+        className="rounded bg-emerald-500 px-2.5 py-1 text-xs font-medium text-black hover:bg-emerald-400"
+        onClick={() => useStudio.getState().setPanel("render")}
+        title="MP4 영상 / PNG 프레임으로 렌더링해서 다운로드"
+      >
+        🎞 영상 렌더
+      </button>
       <button className="rounded bg-amber-400 px-2.5 py-1 text-xs font-medium text-black hover:bg-amber-300" onClick={onImport}>
         ✨ AI / 스크립트
       </button>
