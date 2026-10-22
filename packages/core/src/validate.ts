@@ -108,3 +108,12 @@ export function buildFixPrompt(errors: Issue[], format: "json" | "script" = "jso
     ...lines,
   ].join("\n");
 }
+
+/** Like buildFixPrompt, for scenes that load fine but are badly placed (see lintLayout). */
+export function buildLayoutFixPrompt(issues: Issue[], format: "json" | "script" = "json"): string {
+  const lines = issues.map((e) => `- ${e.path || "(scene)"}: ${e.message}`);
+  return [
+    `The scene loads, but its layout has these problems. Fix them and output the whole scene again in the same format (${format}) inside one code block. Keep everything else. No explanation.`,
+    ...lines,
+  ].join("\n");
+}
