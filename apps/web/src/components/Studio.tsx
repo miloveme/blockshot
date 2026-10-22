@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect } from "react";
 import { useStudio, type Panel, type ViewMode } from "@/lib/store";
 import { Timeline } from "./Timeline";
+import { LoadingScreen } from "./LoadingScreen";
 import { ImportPanel } from "./ImportPanel";
 import { Toolbar } from "./Toolbar";
 import { LensBar } from "./LensBar";
@@ -17,7 +18,10 @@ import {
 } from "@/lib/shotActions";
 import { loadSpecText, startAutosave } from "@/lib/persist";
 
-const Viewport = dynamic(() => import("./viewport/Viewport"), { ssr: false });
+const Viewport = dynamic(() => import("./viewport/Viewport"), {
+  ssr: false,
+  loading: () => <LoadingScreen label="3D 뷰포트를 준비하는 중…" fill="h-full" />,
+});
 
 function ShotHud() {
   const sceneState = useStudio((s) => s.sceneState);

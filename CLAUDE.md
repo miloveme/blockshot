@@ -9,7 +9,7 @@
 
 ```bash
 pnpm install
-pnpm dev            # http://localhost:3000 (apps/web)
+pnpm dev            # http://localhost:3000 (랜딩) · /studio (앱) — apps/web
 pnpm test           # @blockshot/core Vitest
 pnpm typecheck      # 모든 패키지 tsc
 pnpm --filter web lint

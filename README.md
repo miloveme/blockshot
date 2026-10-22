@@ -11,7 +11,7 @@ LLM용 진입점: https://blockshot-eta.vercel.app/llms.txt
 
 ```bash
 pnpm install
-pnpm dev     # http://localhost:3000
+pnpm dev     # http://localhost:3000 (랜딩) · /studio (앱)
 pnpm test
 ```
 
