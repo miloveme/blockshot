@@ -28,9 +28,10 @@ export function aimCamera(obj: THREE.Object3D, c: CameraState) {
 
 /** Camera shown in the main view (shot / camera modes), or null in free view. */
 export function viewedCameraId(): string | null {
-  const { view, sceneState } = useStudio.getState();
+  const { view, sceneState, spec, cutShotId } = useStudio.getState();
   if (view.kind === "camera") return view.id;
-  if (view.kind === "shot") return sceneState.activeCameraId;
+  // cut playback follows the edit: the camera of the shot under the cut playhead
+  if (view.kind === "shot") return spec.shots.find((s) => s.id === cutShotId)?.camera ?? sceneState.activeCameraId;
   return null;
 }
 

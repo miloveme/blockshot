@@ -58,6 +58,7 @@ export function Toolbar({ onImport }: { onImport: () => void }) {
       <button className={btn} onClick={redo} disabled={!canRedo} title="Ctrl+Shift+Z">↷</button>
       <button className={`rounded px-2.5 py-1 text-xs ${toggle(mode === "translate")}`} onClick={() => setGizmoMode("translate")} title="W">이동</button>
       <button className={`rounded px-2.5 py-1 text-xs ${toggle(mode === "rotate")}`} onClick={() => setGizmoMode("rotate")} title="E">회전</button>
+      <button className={`rounded px-2.5 py-1 text-xs ${toggle(mode === "scale")}`} onClick={() => setGizmoMode("scale")} title="R — 소품: 축별 크기 · 인물: 키(균등)">크기</button>
       <button className={`rounded px-2.5 py-1 text-xs ${toggle(snap)}`} onClick={() => setSnap(!snap)} title="S — 0.1 m / 15°">스냅</button>
       <span className="mx-1 h-4 w-px bg-white/10" />
       <button className={btn} onClick={() => fileRef.current?.click()} title=".blockshot.json 프로젝트 열기">열기</button>

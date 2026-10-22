@@ -13,7 +13,8 @@ export function LensBar() {
   const resolution = spec.settings.resolution;
 
   const selectedCam = spec.cameras.some((c) => c.id === selection) ? selection : null;
-  const camId = view.kind === "camera" ? view.id : view.kind === "shot" ? ss.activeCameraId : selectedCam;
+  const cutCam = useStudio((s) => s.spec.shots.find((x) => x.id === s.cutShotId)?.camera ?? null);
+  const camId = view.kind === "camera" ? view.id : view.kind === "shot" ? (cutCam ?? ss.activeCameraId) : selectedCam;
   const cam = camId ? ss.cameras[camId] : undefined;
   const label = aspectLabel(resolution);
 

@@ -12,6 +12,7 @@ import { ShotEditor } from "./ShotEditor";
 import { RenderPanel } from "./RenderPanel";
 import { deleteSelected, insertKeyAtCurrentTime, removeKeysAtCurrentTime } from "@/lib/actions";
 import { startRecording, stopRecording } from "@/lib/recorder";
+import { copyCurrent, cutCurrent, deleteCurrent, moveCurrent, pasteAfterCurrent } from "@/lib/shotActions";
 import { loadSpecText, startAutosave } from "@/lib/persist";
 
 const Viewport = dynamic(() => import("./viewport/Viewport"), { ssr: false });
@@ -20,10 +21,11 @@ function ShotHud() {
   const sceneState = useStudio((s) => s.sceneState);
   const view = useStudio((s) => s.view);
   const spec = useStudio((s) => s.spec);
+  const cutShotId = useStudio((s) => s.cutShotId);
   if (view.kind === "free") return <PipFrame />;
-  const camId = view.kind === "camera" ? view.id : sceneState.activeCameraId;
+  const shot = spec.shots.find((s) => s.id === cutShotId);
+  const camId = view.kind === "camera" ? view.id : (shot?.camera ?? sceneState.activeCameraId);
   const cam = camId ? sceneState.cameras[camId] : undefined;
-  const shot = spec.shots.find((s) => s.id === sceneState.activeShotId);
   return (
     <>
       {/* rule-of-thirds guide */}
@@ -209,6 +211,20 @@ export default function Studio() {
         return;
       }
       const mod = e.ctrlKey || e.metaKey;
+      if (s.view.kind === "shot") {
+        // cut view: clipboard / delete / reorder act on the shot under the cut playhead
+        const handled = mod && e.code === "KeyX" ? (cutCurrent(), true)
+          : mod && e.code === "KeyC" ? (copyCurrent(), true)
+          : mod && e.code === "KeyV" ? (pasteAfterCurrent(), true)
+          : !mod && (e.code === "Delete" || e.code === "Backspace") ? (deleteCurrent(), true)
+          : e.altKey && e.code === "ArrowLeft" ? (moveCurrent(-1), true)
+          : e.altKey && e.code === "ArrowRight" ? (moveCurrent(1), true)
+          : false;
+        if (handled) {
+          e.preventDefault();
+          return;
+        }
+      }
       if (mod && e.code === "KeyZ") {
         e.preventDefault();
         if (e.shiftKey) s.redo();
@@ -227,7 +243,8 @@ export default function Studio() {
       } else if (e.code === "Delete" || e.code === "Backspace") {
         e.preventDefault();
         deleteSelected();
-      } else if (e.code === "KeyR") startRecording();
+      } else if (e.code === "KeyR" && e.shiftKey) startRecording();
+      else if (e.code === "KeyR") s.setGizmoMode("scale");
       else if (e.code === "KeyW") s.setGizmoMode("translate");
       else if (e.code === "KeyE") s.setGizmoMode("rotate");
       else if (e.code === "KeyS") s.setSnap(!s.snapEnabled);

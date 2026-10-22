@@ -1,6 +1,6 @@
 "use client";
 
-import { addShot, patchShot, removeShot, setShotRange, splitShot } from "@blockshot/core";
+import { addShot, editTimeOf, patchShot, removeShot, setShotRange, splitShot } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
 import { NumField, SelectField, TextField } from "./fields";
 
@@ -8,7 +8,8 @@ const btn = "rounded bg-white/10 px-2 py-1 text-[11px] hover:bg-white/20 disable
 
 export function ShotEditor() {
   const spec = useStudio((s) => s.spec);
-  const activeShotId = useStudio((s) => s.sceneState.activeShotId);
+  // in cut view the current shot is the one under the cut playhead; otherwise the one covering the scene time
+  const activeShotId = useStudio((s) => (s.view.kind === "shot" ? s.cutShotId : s.sceneState.activeShotId));
   const { edit, setTime, setView, notify } = useStudio.getState();
   const cameras = spec.cameras.map((c) => ({ value: c.id, label: c.name ?? c.id }));
 
@@ -58,11 +59,12 @@ export function ShotEditor() {
               <button
                 className="font-mono text-xs font-semibold text-white"
                 onClick={() => {
-                  setTime(s.start);
                   setView({ kind: "shot" });
+                  useStudio.getState().setEditTime(editTimeOf(useStudio.getState().spec, s.id, s.start) + 1e-4);
                 }}
+                title="컷 편집에서 이 샷으로 이동"
               >
-                {s.id}
+                {spec.shots.indexOf(s) + 1}. {s.id}
               </button>
               <div className="w-24">
                 <SelectField value={s.camera} options={cameras} onCommit={(v) => edit((sp) => patchShot(sp, s.id, { camera: v }))} />
@@ -72,12 +74,12 @@ export function ShotEditor() {
               </button>
             </div>
             <div className="mb-1.5 grid grid-cols-2 gap-1.5 text-[11px] text-zinc-500">
-              <label className="flex items-center gap-1 whitespace-nowrap">
-                시작
+              <label className="flex items-center gap-1 whitespace-nowrap" title="장면 시간 기준 시작(In)">
+                In
                 <NumField value={s.start} step={0.1} onCommit={(v) => edit((sp) => setShotRange(sp, s.id, { start: v }))} />
               </label>
-              <label className="flex items-center gap-1 whitespace-nowrap">
-                끝
+              <label className="flex items-center gap-1 whitespace-nowrap" title="장면 시간 기준 끝(Out)">
+                Out
                 <NumField value={s.end} step={0.1} onCommit={(v) => edit((sp) => setShotRange(sp, s.id, { end: v }))} />
               </label>
             </div>

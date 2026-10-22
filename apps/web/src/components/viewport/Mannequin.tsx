@@ -45,7 +45,8 @@ export function Mannequin({ id }: { id: string }) {
       g.position.set(...a.position);
       g.rotation.set(a.rotation[0] * DEG, a.rotation[1] * DEG, a.rotation[2] * DEG, "YXZ");
     }
-    g.scale.set(s * width, s, s * width);
+    // the gizmo owns the scale while this actor is being scaled
+    if (useStudio.getState().dragging !== id) g.scale.set(s * width, s, s * width);
     if (!joints.current) {
       const found: Partial<Record<JointName, THREE.Group>> = {};
       g.traverse((o) => {

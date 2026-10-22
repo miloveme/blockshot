@@ -1,7 +1,12 @@
 "use client";
 
+import { useRef, useState } from "react";
+import { buildSequence, editDuration, setShotRange } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
 import { startRecording, stopRecording } from "@/lib/recorder";
+import {
+  addShotAtEnd, copyCurrent, cutCurrent, deleteCurrent, duplicateCurrent, joinCurrentWithNext, moveCurrent, moveShotTo, pasteAfterCurrent, splitAtPlayhead,
+} from "@/lib/shotActions";
 
 const SHOT_COLORS = ["#3b82f6", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#ec4899"];
 
@@ -45,13 +50,190 @@ function KeyLane() {
   );
 }
 
+/** Scene time: shots drawn where they sit in the scene, keys of the selection, scene scrubber. */
+function SceneTrack() {
+  const time = useStudio((s) => s.time);
+  const spec = useStudio((s) => s.spec);
+  const { setTime, setView } = useStudio.getState();
+  const { duration, fps } = spec.settings;
+  return (
+    <div className="relative flex-1">
+      <div className="relative mb-1 h-5">
+        {spec.shots.map((s, i) => (
+          <button
+            key={s.id}
+            className="absolute top-0 h-5 truncate rounded px-1 text-left text-[10px] font-semibold text-white/90 opacity-80 hover:opacity-100"
+            style={{
+              left: `${(s.start / duration) * 100}%`,
+              width: `${((s.end - s.start) / duration) * 100}%`,
+              background: SHOT_COLORS[i % SHOT_COLORS.length],
+            }}
+            onClick={() => {
+              setTime(s.start);
+              setView({ kind: "shot" });
+            }}
+            title={`${s.description ?? ""} — 클릭하면 컷 편집으로`}
+          >
+            {s.id} · {s.camera}
+          </button>
+        ))}
+      </div>
+      <KeyLane />
+      <input type="range" min={0} max={duration} step={1 / fps} value={time} onChange={(e) => setTime(Number(e.target.value))} className="w-full accent-amber-400" />
+    </div>
+  );
+}
+
+const tool = "rounded bg-white/10 px-2 py-0.5 text-[11px] text-zinc-200 hover:bg-white/20 disabled:opacity-30";
+
+function EditTools() {
+  const cut = useStudio((s) => s.cutShotId);
+  const shots = useStudio((s) => s.spec.shots);
+  const clipboard = useStudio((s) => s.clipboard);
+  const i = shots.findIndex((s) => s.id === cut);
+  const has = i !== -1;
+  return (
+    <div className="mb-1 flex flex-wrap items-center gap-1">
+      <span className="mr-1 text-[11px] font-semibold text-amber-300">컷 편집</span>
+      <button className={tool} disabled={!has} onClick={splitAtPlayhead} title="재생 헤드 위치에서 현재 샷을 둘로 자르기">✂ 자르기</button>
+      <button className={tool} disabled={!has || i >= shots.length - 1} onClick={joinCurrentWithNext} title="다음 샷과 합치기 (같은 카메라 · 이어지는 장면 시간)">⊕ 합치기</button>
+      <button className={tool} disabled={!has} onClick={duplicateCurrent} title="바로 뒤에 복제 — 카메라를 바꿔 같은 연기를 다른 앵글로">⧉ 복제</button>
+      <span className="mx-0.5 h-3 w-px bg-white/10" />
+      <button className={tool} disabled={!has} onClick={cutCurrent} title="잘라내기 (Ctrl+X)">잘라내기</button>
+      <button className={tool} disabled={!has} onClick={copyCurrent} title="복사 (Ctrl+C)">복사</button>
+      <button className={tool} disabled={!clipboard} onClick={pasteAfterCurrent} title="현재 샷 뒤에 붙여넣기 (Ctrl+V)">붙여넣기</button>
+      <span className="mx-0.5 h-3 w-px bg-white/10" />
+      <button className={tool} disabled={!has || i === 0} onClick={() => moveCurrent(-1)} title="앞으로 이동 (Alt+←)">◀</button>
+      <button className={tool} disabled={!has || i >= shots.length - 1} onClick={() => moveCurrent(1)} title="뒤로 이동 (Alt+→)">▶</button>
+      <button className={tool} disabled={!has} onClick={deleteCurrent} title="삭제 (Delete) — 뒤 샷들이 당겨짐">🗑 삭제</button>
+      <button className={tool} onClick={addShotAtEnd}>＋ 샷</button>
+      <span className="ml-auto text-[10px] text-zinc-500">클립 드래그: 순서 이동 · 클립 양 끝 드래그: 트림</span>
+    </div>
+  );
+}
+
+/**
+ * The edit: clips end to end in shot order (width = duration). Click to jump, drag a clip onto another to
+ * reorder, drag its left/right edge to trim the scene in/out (one undo step per drag).
+ */
+function EditTrack() {
+  const spec = useStudio((s) => s.spec);
+  const editTime = useStudio((s) => s.editTime);
+  const cut = useStudio((s) => s.cutShotId);
+  const { setEditTime } = useStudio.getState();
+  const track = useRef<HTMLDivElement>(null);
+  const [dragOver, setDragOver] = useState<string | null>(null);
+  const seq = buildSequence(spec);
+  const total = Math.max(editDuration(spec), 1e-3);
+  const { fps } = spec.settings;
+  const cameraName = (id: string) => spec.cameras.find((c) => c.id === id)?.name ?? id;
+
+  const startTrim = (e: React.PointerEvent, shotId: string, edge: "start" | "end") => {
+    e.preventDefault();
+    e.stopPropagation();
+    const shot = spec.shots.find((s) => s.id === shotId);
+    const width = track.current?.getBoundingClientRect().width ?? 1;
+    if (!shot) return;
+    const secPerPx = total / width;
+    const x0 = e.clientX;
+    const store = useStudio.getState();
+    store.beginGesture();
+    const move = (ev: PointerEvent) => {
+      const d = Math.round(((ev.clientX - x0) * secPerPx) * fps) / fps;
+      store.editLive((s) => setShotRange(s, shotId, edge === "start" ? { start: shot.start + d } : { end: shot.end + d }));
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      useStudio.getState().endGesture();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
+  /** Click = jump to the clip; drag (> 4 px) = move it to the clip under the pointer on release. */
+  const startClipDrag = (e: React.PointerEvent, shotId: string, editStart: number) => {
+    if (e.button !== 0) return;
+    const x0 = e.clientX;
+    let dragging = false;
+    const targetAt = (x: number) => {
+      const el = document.elementsFromPoint(x, e.clientY).find((n) => n instanceof HTMLElement && n.dataset.clip) as HTMLElement | undefined;
+      return el?.dataset.clip ?? null;
+    };
+    const move = (ev: PointerEvent) => {
+      if (!dragging && Math.abs(ev.clientX - x0) > 4) dragging = true;
+      if (dragging) setDragOver(targetAt(ev.clientX));
+    };
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      setDragOver(null);
+      if (!dragging) {
+        setEditTime(editStart + 1e-4);
+        return;
+      }
+      const target = targetAt(ev.clientX);
+      const index = useStudio.getState().spec.shots.findIndex((s) => s.id === target);
+      if (target && target !== shotId && index !== -1) moveShotTo(shotId, index);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
+  if (!seq.length) {
+    return (
+      <div className="flex-1">
+        <EditTools />
+        <p className="py-2 text-[11px] text-zinc-500">샷이 없습니다 — ＋ 샷으로 추가하세요</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative flex-1">
+      <EditTools />
+      <div ref={track} className="relative mb-1 flex h-9 overflow-hidden rounded bg-black/30">
+        {seq.map((c) => {
+          const sel = c.shot.id === cut;
+          return (
+            <div
+              key={c.shot.id}
+              data-clip={c.shot.id}
+              onPointerDown={(e) => startClipDrag(e, c.shot.id, c.editStart)}
+              title={`${c.shot.description ?? ""}\n장면 ${c.shot.start}–${c.shot.end}s · ${cameraName(c.shot.camera)}`}
+              className={`relative h-full shrink-0 cursor-grab touch-none select-none border-r border-black/40 px-1.5 py-0.5 text-[10px] leading-tight text-white ${sel ? "ring-2 ring-inset ring-white" : ""} ${dragOver === c.shot.id ? "outline outline-2 outline-amber-300 brightness-125" : ""}`}
+              style={{ width: `${((c.editEnd - c.editStart) / total) * 100}%`, background: SHOT_COLORS[c.index % SHOT_COLORS.length] }}
+            >
+              <div className="truncate font-semibold">
+                {c.index + 1}. {c.shot.id} · {cameraName(c.shot.camera)}
+              </div>
+              <div className="truncate opacity-80">
+                {c.shot.start.toFixed(1)}–{c.shot.end.toFixed(1)}s ({(c.shot.end - c.shot.start).toFixed(1)}s)
+              </div>
+              <span className="absolute inset-y-0 left-0 w-1.5 cursor-ew-resize hover:bg-white/50" onPointerDown={(e) => startTrim(e, c.shot.id, "start")} title="시작점 트림" />
+              <span className="absolute inset-y-0 right-0 w-1.5 cursor-ew-resize hover:bg-white/50" onPointerDown={(e) => startTrim(e, c.shot.id, "end")} title="끝점 트림" />
+            </div>
+          );
+        })}
+        <div className="pointer-events-none absolute inset-y-0 w-0.5 bg-white" style={{ left: `${(editTime / total) * 100}%` }} />
+      </div>
+      <input type="range" min={0} max={total} step={1 / fps} value={editTime} onChange={(e) => setEditTime(Number(e.target.value))} className="w-full accent-amber-400" />
+    </div>
+  );
+}
+
 export function Timeline() {
   const time = useStudio((s) => s.time);
+  const editTime = useStudio((s) => s.editTime);
   const playing = useStudio((s) => s.playing);
   const recording = useStudio((s) => s.recording);
+  const view = useStudio((s) => s.view);
   const spec = useStudio((s) => s.spec);
-  const { setTime, setPlaying } = useStudio.getState();
+  const { setPlaying } = useStudio.getState();
   const { duration, fps } = spec.settings;
+  const cutMode = view.kind === "shot";
+  const shown = cutMode ? editTime : time;
+  const end = cutMode ? editDuration(spec) : duration;
 
   return (
     <div className="flex items-center gap-3 border-t border-white/10 bg-[#15171c] px-4 py-3 text-xs text-zinc-300">
@@ -66,42 +248,17 @@ export function Timeline() {
       <button
         className={`rounded px-2.5 py-1.5 font-medium ${recording ? "animate-pulse bg-red-600 text-white" : "bg-white/10 text-red-300 hover:bg-white/20"}`}
         onClick={() => (recording ? stopRecording() : startRecording())}
-        title="선택한 인물/카메라를 재생하면서 키보드로 움직여 동선을 기록합니다 (R)"
+        title="선택한 인물/카메라를 재생하면서 키보드로 움직여 동선을 기록합니다 (Shift+R)"
       >
         {recording ? "■ 녹화 정지" : "● REC"}
       </button>
-      <span className="w-24 font-mono tabular-nums">{timecode(time, fps)}</span>
-      <div className="relative flex-1">
-        <div className="relative mb-1 h-5">
-          {spec.shots.map((s, i) => (
-            <button
-              key={s.id}
-              className="absolute top-0 h-5 truncate rounded px-1 text-left text-[10px] font-semibold text-white/90"
-              style={{
-                left: `${(s.start / duration) * 100}%`,
-                width: `${((s.end - s.start) / duration) * 100}%`,
-                background: SHOT_COLORS[i % SHOT_COLORS.length],
-              }}
-              onClick={() => setTime(s.start)}
-              title={s.description}
-            >
-              {s.id} · {s.camera}
-            </button>
-          ))}
-        </div>
-        <KeyLane />
-        <input
-          type="range"
-          min={0}
-          max={duration}
-          step={1 / fps}
-          value={time}
-          onChange={(e) => setTime(Number(e.target.value))}
-          className="w-full accent-amber-400"
-        />
+      <div className="w-24">
+        <div className="font-mono tabular-nums">{timecode(shown, fps)}</div>
+        <div className="text-[10px] text-zinc-500">{cutMode ? `장면 ${time.toFixed(2)}s` : "장면 시간"}</div>
       </div>
+      {cutMode ? <EditTrack /> : <SceneTrack />}
       <span className="w-20 text-right font-mono tabular-nums text-zinc-500">
-        f{Math.round(time * fps)} / {Math.round(duration * fps)}
+        f{Math.round(shown * fps)} / {Math.round(end * fps)}
       </span>
     </div>
   );

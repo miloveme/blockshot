@@ -12,7 +12,9 @@ const RULES = `Conventions:
 - References are strings: "actorId" or "actorId.part" (parts: ${BODY_PARTS.join(", ")}).
 - Room spaces are centered at the origin: x in [-width/2, width/2], z in [-depth/2, depth/2]. Walls: north(-Z) south(+Z) east(+X) west(-X).
 - Eye-level camera height is 1.5–1.7 m. Wide 18–28mm, normal 35–50mm, tele/close-up 85mm+.
-- Keep the 180-degree rule between cuts. Shots are usually 2–6 seconds.`;
+- Keep the 180-degree rule between cuts. Shots are usually 2–6 seconds.
+- "shots" in ARRAY ORDER is the edit: each shows scene time [start, end) through its camera. Shots may overlap or repeat
+  scene time to cut the same performance between cameras (coverage).`;
 
 const SPEC_SUMMARY = `Blockshot Spec v${SPEC_VERSION} fields:
 { "specVersion": "${SPEC_VERSION}",

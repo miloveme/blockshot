@@ -165,3 +165,26 @@ export function commitCameraRotation(id: string, position: Vec3, rotation: Vec3)
   });
   if (aimed) state().notify("카메라 조준을 해제하고 회전값으로 바꿨습니다 (속성 → 조준에서 다시 지정 가능)");
 }
+
+/**
+ * Gizmo scale. Props store a per-axis size multiplier; actors stay proportional, so their height follows the
+ * vertical scale (clamped to the schema's 0.5–2.5 m). Cameras have no size.
+ */
+export function commitScale(id: string, scale: Vec3) {
+  state().edit((s) => {
+    const kind = kindOf(s, id);
+    if (kind === "prop") return patchEntity(s, id, { scale: roundVec([Math.max(0.01, scale[0]), Math.max(0.01, scale[1]), Math.max(0.01, scale[2])]) });
+    if (kind === "actor") {
+      const actor = s.actors.find((a) => a.id === id)!;
+      // mannequin base scale is (h·w, h, h·w) with h = height / 1.72 and w the build width; whichever axis
+      // the user dragged furthest decides the new (proportional) height
+      const base = actor.height / 1.72;
+      const w = { slim: 0.85, average: 1, heavy: 1.25 }[actor.build];
+      const factors = [scale[0] / (base * w), scale[1] / base, scale[2] / (base * w)];
+      const f = factors.reduce((best, x) => (Math.abs(x - 1) > Math.abs(best - 1) ? x : best), 1);
+      const height = Math.min(2.5, Math.max(0.5, Math.round(actor.height * f * 100) / 100));
+      return height === actor.height ? null : patchEntity(s, id, { height });
+    }
+    return null;
+  });
+}

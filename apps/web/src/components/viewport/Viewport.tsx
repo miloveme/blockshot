@@ -5,9 +5,9 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, PerspectiveCamera, Text } from "@react-three/drei";
 import * as THREE from "three";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
-import { DEG, type Vec3 } from "@blockshot/core";
+import { DEG, editDuration, type Vec3 } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
-import { commitCamera, commitCameraRotation, commitTransform, snapSteps } from "@/lib/actions";
+import { commitCamera, commitCameraRotation, commitScale, commitTransform, snapSteps } from "@/lib/actions";
 import { registerBridge } from "@/lib/render";
 import { stopRecording } from "@/lib/recorder";
 import { Mannequin } from "./Mannequin";
@@ -184,7 +184,8 @@ function SelectionGizmo() {
         const e = new THREE.Euler().setFromQuaternion(obj.quaternion, "YXZ");
         const rot: Vec3 = [e.x * RAD, e.y * RAD, e.z * RAD];
         const pos: Vec3 = [obj.position.x, obj.position.y, obj.position.z];
-        if (store.sceneState.cameras[id] && tc.mode === "rotate") commitCameraRotation(id, pos, rot);
+        if (tc.mode === "scale") commitScale(id, [obj.scale.x, obj.scale.y, obj.scale.z]);
+        else if (store.sceneState.cameras[id] && tc.mode === "rotate") commitCameraRotation(id, pos, rot);
         else commitTransform(id, pos, rot);
       }
       store.setDragging(null);
@@ -205,12 +206,13 @@ function SelectionGizmo() {
     const { move, rot } = snapSteps();
     tc.setTranslationSnap(move || null);
     tc.setRotationSnap(rot ? rot * DEG : null);
+    tc.setScaleSnap(move || null);
   }, [snapOn, camera, gl, scene]);
 
   useFrame(() => {
     const tc = tcRef.current;
     if (!tc) return;
-    const { selection, recording, rendering } = useStudio.getState();
+    const { selection, recording, rendering, sceneState } = useStudio.getState();
     const want = view.kind === "free" && !recording && !rendering ? selection : null;
     const cur = tc.object && tc.object.parent ? tc.object.name : null;
     if (want === null) {
@@ -222,7 +224,8 @@ function SelectionGizmo() {
       if (obj) tc.attach(obj);
       else if (tc.object) tc.detach();
     }
-    tc.setMode(mode);
+    // cameras have no size
+    tc.setMode(mode === "scale" && sceneState.cameras[want] ? "translate" : mode);
   });
   return null;
 }
@@ -231,6 +234,12 @@ function Playback() {
   useFrame((_, dt) => {
     const s = useStudio.getState();
     if (!s.playing || s.rendering) return;
+    if (s.view.kind === "shot" && !s.recording && s.spec.shots.length) {
+      // cut playback runs on the edit timeline (shots in order, each through its camera)
+      const next = s.editTime + dt;
+      s.setEditTime(next >= editDuration(s.spec) ? 0 : next);
+      return;
+    }
     const next = s.time + dt;
     const end = s.spec.settings.duration;
     if (next < end) s.setTime(next);

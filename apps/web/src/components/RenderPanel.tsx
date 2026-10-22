@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
-import { downloadBlob, renderStill, renderVideo, type CameraMode, type RenderPass, type RenderResult } from "@/lib/render";
+import { editDuration, planFrames } from "@blockshot/core";
+import { downloadBlob, renderStill, renderVideo, type RenderPass, type RenderResult } from "@/lib/render";
+import { viewedCameraId } from "./viewport/util";
 
 const label = "mb-1 block text-[11px] font-medium text-zinc-400";
 const select = "w-full rounded border border-white/10 bg-black/30 px-2 py-1 text-xs";
@@ -31,18 +33,18 @@ export function RenderPanel() {
   const width = Math.round((w0 * scale) / 2) * 2;
   const height = Math.round((h0 * scale) / 2) * 2;
   const shot = spec.shots.find((s) => s.id === range);
-  const from = shot ? shot.start : 0;
-  const to = shot ? shot.end : spec.settings.duration;
-  const cameraMode: CameraMode = camera === "shots" ? { kind: "shots" } : { kind: "camera", id: camera };
+  const fixedCam = camera === "shots" ? undefined : camera;
+  const plan = planFrames(spec, { shotId: shot?.id, camera: fixedCam });
+  const seconds = plan.length / spec.settings.fps;
   const baseName = `${slug(spec.meta.title)}${shot ? `_${shot.id}` : ""}_${pass}`;
 
   const run = async () => {
     setError(null);
     setResult(null);
     abort.current = new AbortController();
-    setProgress({ done: 0, total: Math.round((to - from) * spec.settings.fps) });
+    setProgress({ done: 0, total: plan.length });
     try {
-      const r = await renderVideo({ from, to, width, height, pass, camera: cameraMode, depthFar, signal: abort.current.signal, onProgress: (done, total) => setProgress({ done, total }) });
+      const r = await renderVideo({ frames: plan, width, height, pass, depthFar, signal: abort.current.signal, onProgress: (done, total) => setProgress({ done, total }) });
       setResult({ ...r, url: URL.createObjectURL(r.blob), name: `${baseName}${r.extension}` });
     } catch (e) {
       setError((e as Error).message);
@@ -55,7 +57,9 @@ export function RenderPanel() {
   const still = async () => {
     setError(null);
     try {
-      const blob = await renderStill({ width, height, pass, camera: cameraMode, depthFar });
+      const cam = fixedCam ?? viewedCameraId() ?? useStudio.getState().sceneState.activeCameraId;
+      if (!cam) throw new Error("카메라가 없습니다");
+      const blob = await renderStill({ width, height, pass, camera: cam, depthFar });
       const t = useStudio.getState().time;
       downloadBlob(blob, `${slug(spec.meta.title)}_${pass}_f${Math.round(t * spec.settings.fps)}.png`);
     } catch (e) {
@@ -70,10 +74,10 @@ export function RenderPanel() {
       <div>
         <span className={label}>구간</span>
         <select className={select} value={range} onChange={(e) => setRange(e.target.value)} disabled={rendering}>
-          <option value="all">전체 0–{spec.settings.duration}s</option>
-          {spec.shots.map((s) => (
+          <option value="all">{fixedCam ? `장면 전체 0–${spec.settings.duration}s` : `편집본 전체 (${spec.shots.length}샷 · ${editDuration(spec).toFixed(1)}s)`}</option>
+          {spec.shots.map((s, i) => (
             <option key={s.id} value={s.id}>
-              샷 {s.id} · {s.start}–{s.end}s
+              {i + 1}. 샷 {s.id} · {s.start}–{s.end}s
             </option>
           ))}
         </select>
@@ -82,7 +86,7 @@ export function RenderPanel() {
       <div>
         <span className={label}>카메라</span>
         <select className={select} value={camera} onChange={(e) => setCamera(e.target.value)} disabled={rendering}>
-          <option value="shots">샷 리스트대로 (컷 편집)</option>
+          <option value="shots">편집 순서대로 (샷별 카메라)</option>
           {spec.cameras.map((c) => (
             <option key={c.id} value={c.id}>
               📷 {c.name ?? c.id} 고정
@@ -121,7 +125,7 @@ export function RenderPanel() {
 
       <div className="flex gap-2">
         <button className="flex-1 rounded bg-amber-400 px-3 py-1.5 font-medium text-black hover:bg-amber-300 disabled:opacity-40" onClick={run} disabled={rendering}>
-          🎞 영상 렌더 ({(to - from).toFixed(1)}s)
+          🎞 영상 렌더 ({seconds.toFixed(1)}s)
         </button>
         <button className="rounded bg-white/10 px-3 py-1.5 hover:bg-white/20 disabled:opacity-40" onClick={still} disabled={rendering} title="현재 시간의 프레임 (image-to-video 첫 프레임용)">
           🖼 현재 프레임 PNG

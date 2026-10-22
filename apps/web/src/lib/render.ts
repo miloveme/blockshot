@@ -2,7 +2,7 @@
 
 import * as THREE from "three";
 import { BufferTarget, CanvasSource, Mp4OutputFormat, Output, QUALITY_HIGH, WebMOutputFormat, getFirstEncodableVideoCodec } from "mediabunny";
-import { DEG, type Vec3 } from "@blockshot/core";
+import { DEG, type PlannedFrame, type Vec3 } from "@blockshot/core";
 import { useStudio } from "./store";
 import { aimCamera } from "@/components/viewport/util";
 
@@ -28,15 +28,13 @@ export const registerBridge = (b: ViewportBridge | null) => {
 export const getBridge = () => bridge;
 
 export type RenderPass = "beauty" | "depth";
-export type CameraMode = { kind: "shots" } | { kind: "camera"; id: string };
 
 export interface RenderOptions {
-  from: number;
-  to: number;
+  /** which scene time / camera each output frame shows — from core planFrames (the edit, or one camera) */
+  frames: PlannedFrame[];
   width: number;
   height: number;
   pass: RenderPass;
-  camera: CameraMode;
   /** depth pass: distance (m) mapped to black */
   depthFar: number;
   onProgress?: (done: number, total: number) => void;
@@ -44,9 +42,12 @@ export interface RenderOptions {
 }
 
 export interface CameraFrame {
+  /** output frame index */
   frame: number;
+  /** scene time shown */
   t: number;
   camera: string;
+  shot: string | null;
   position: Vec3;
   /** Euler YXZ, degrees */
   rotation: Vec3;
@@ -87,14 +88,13 @@ function createRenderer(b: ViewportBridge, width: number, height: number) {
 }
 
 /** Poses the scene at time t and draws one frame from the right camera. Returns the camera log entry. */
-function drawFrame(b: ViewportBridge, renderer: THREE.WebGLRenderer, cam: THREE.PerspectiveCamera, t: number, opts: Pick<RenderOptions, "camera" | "pass" | "width" | "height">, depth: THREE.Material | null): CameraFrame | null {
-  const store = useStudio.getState();
-  store.setTime(t);
+function drawFrame(b: ViewportBridge, renderer: THREE.WebGLRenderer, cam: THREE.PerspectiveCamera, plan: PlannedFrame, index: number, opts: Pick<RenderOptions, "width" | "height">, depth: THREE.Material | null): CameraFrame | null {
+  const t = plan.t;
+  const id = plan.camera;
+  useStudio.getState().setTime(t);
   b.advance(performance.now());
-  const ss = useStudio.getState().sceneState;
-  const id = opts.camera.kind === "camera" ? opts.camera.id : ss.activeCameraId;
-  const c = id ? ss.cameras[id] : undefined;
-  if (!id || !c) return null;
+  const c = useStudio.getState().sceneState.cameras[id];
+  if (!c) return null;
   aimCamera(cam, c);
   cam.fov = c.vFov;
   cam.aspect = opts.width / opts.height;
@@ -115,9 +115,10 @@ function drawFrame(b: ViewportBridge, renderer: THREE.WebGLRenderer, cam: THREE.
   const e = new THREE.Euler().setFromQuaternion(cam.quaternion, "YXZ");
   const r4 = (n: number) => Math.round(n * 1e4) / 1e4;
   return {
-    frame: Math.round(t * useStudio.getState().spec.settings.fps),
+    frame: index,
     t: r4(t),
     camera: id,
+    shot: plan.shot,
     position: [r4(cam.position.x), r4(cam.position.y), r4(cam.position.z)],
     rotation: [r4(e.x / DEG), r4(e.y / DEG), r4(e.z / DEG)],
     focalLength: r4(c.focalLength),
@@ -128,16 +129,20 @@ function drawFrame(b: ViewportBridge, renderer: THREE.WebGLRenderer, cam: THREE.
 function withTimeline<T>(fn: () => Promise<T>): Promise<T> {
   const s = useStudio.getState();
   const restore = s.time;
+  const restoreEdit = s.editTime;
   useStudio.setState({ playing: false, rendering: true });
   return fn().finally(() => {
     useStudio.setState({ rendering: false });
-    useStudio.getState().setTime(restore);
+    const after = useStudio.getState();
+    if (after.view.kind === "shot") after.setEditTime(restoreEdit);
+    else after.setTime(restore);
   });
 }
 
 export function renderVideo(opts: RenderOptions): Promise<RenderResult> {
   const b = bridge;
   if (!b) return Promise.reject(new Error("뷰포트가 아직 준비되지 않았습니다"));
+  if (!opts.frames.length) return Promise.reject(new Error("렌더할 프레임이 없습니다 (샷 또는 카메라가 필요합니다)"));
   if (typeof VideoEncoder === "undefined") return Promise.reject(new Error("이 브라우저는 WebCodecs 영상 인코딩을 지원하지 않습니다 (Chrome/Edge 최신 버전을 사용하세요)"));
 
   return withTimeline(async () => {
@@ -159,18 +164,16 @@ export function renderVideo(opts: RenderOptions): Promise<RenderResult> {
 
     try {
       await output.start();
-      const first = Math.round(opts.from * fps);
-      const last = Math.max(first + 1, Math.round(opts.to * fps));
-      const total = last - first;
-      for (let f = first; f < last; f++) {
+      const total = opts.frames.length;
+      for (let f = 0; f < total; f++) {
         if (opts.signal?.aborted) {
           await output.cancel();
           throw new DOMException("렌더링을 취소했습니다", "AbortError");
         }
-        const log = drawFrame(b, renderer, cam, f / fps, { ...opts, width, height }, depth);
+        const log = drawFrame(b, renderer, cam, opts.frames[f]!, f, { width, height }, depth);
         if (log) frames.push(log);
-        await source.add((f - first) / fps, 1 / fps);
-        opts.onProgress?.(f - first + 1, total);
+        await source.add(f / fps, 1 / fps);
+        opts.onProgress?.(f + 1, total);
       }
       await output.finalize();
       if (!target.buffer) throw new Error("인코딩 결과가 비어 있습니다");
@@ -187,7 +190,7 @@ export function renderVideo(opts: RenderOptions): Promise<RenderResult> {
 }
 
 /** Renders the current time as a PNG (e.g. the first frame for image-to-video models). */
-export function renderStill(opts: Pick<RenderOptions, "width" | "height" | "pass" | "camera" | "depthFar">): Promise<Blob> {
+export function renderStill(opts: Pick<RenderOptions, "width" | "height" | "pass" | "depthFar"> & { camera: string }): Promise<Blob> {
   const b = bridge;
   if (!b) return Promise.reject(new Error("뷰포트가 아직 준비되지 않았습니다"));
   return withTimeline(async () => {
@@ -195,7 +198,7 @@ export function renderStill(opts: Pick<RenderOptions, "width" | "height" | "pass
     const renderer = createRenderer(b, opts.width, opts.height);
     const depth = opts.pass === "depth" ? depthMaterial(opts.depthFar) : null;
     try {
-      if (!drawFrame(b, renderer, new THREE.PerspectiveCamera(), t, opts, depth)) throw new Error("이 시간에 사용할 카메라가 없습니다");
+      if (!drawFrame(b, renderer, new THREE.PerspectiveCamera(), { t, camera: opts.camera, shot: null }, 0, opts, depth)) throw new Error("이 시간에 사용할 카메라가 없습니다");
       return await new Promise<Blob>((resolve, reject) => renderer.domElement.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("PNG 생성 실패"))), "image/png"));
     } finally {
       depth?.dispose();

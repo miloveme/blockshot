@@ -40,6 +40,8 @@ export function startRecording() {
     s.notify("레코딩할 인물이나 카메라를 먼저 선택하세요", "error");
     return;
   }
+  // recording works on scene time; leave cut playback first
+  if (s.view.kind === "shot") s.setView({ kind: "free" });
   // start from 0 if the playhead is parked at the end
   const t0 = s.time >= s.spec.settings.duration - 0.05 ? 0 : s.time;
   s.setTime(t0);

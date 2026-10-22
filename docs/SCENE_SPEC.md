@@ -130,7 +130,10 @@ LLM과 사람이 가장 많이 쓰는 레이어. 로드 시 `compile()`이 `trac
 - `ease`는 **해당 키로 들어오는 구간** 에 적용: `linear`(기본), `easeIn`, `easeOut`, `easeInOut`, `step`
 - 같은 대상·속성에 action과 track이 겹치면 **track이 우선** (사용자의 수동 보정)
 
-## 10. shots
+## 10. shots — 편집(컷) 시퀀스
+
+**배열 순서가 곧 편집 순서다.** 각 샷은 장면 시간 `[start, end)`를 `camera`로 보여 주며, 컷 재생과 렌더는 샷을 배열 순서대로 이어 붙인다(편집 길이 = Σ(end − start)).
+샷끼리 장면 시간이 겹치거나 반복돼도 된다 — 같은 연기를 A·B 카메라로 번갈아 쓰는 커버리지 편집, 리액션 컷 반복, 순서 바꾸기가 모두 가능하다.
 
 ```jsonc
 { "id": "S1", "camera": "camA", "start": 0, "end": 3,
@@ -138,7 +141,7 @@ LLM과 사람이 가장 많이 쓰는 레이어. 로드 시 `compile()`이 `trac
   "prompt": "cinematic medium shot, a man walks into a cozy living room..." }
 ```
 
-- 샷 구간이 겹치면 뒤쪽 샷 우선. 샷이 없는 시간은 첫 번째 카메라
+- 자유 시점·카메라 시점(장면 시간 보기)에서 "현재 샷"은 그 장면 시간을 덮는 샷 중 배열 뒤쪽 것. 샷이 없는 시간은 첫 번째 카메라
 - `prompt`는 AI 영상 생성용 텍스트로 내보내기에 포함된다
 
 ## 11. 버전 관리

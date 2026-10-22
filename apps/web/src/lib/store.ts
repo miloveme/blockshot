@@ -1,11 +1,11 @@
 "use client";
 
 import { create } from "zustand";
-import { compile, evaluate, validateSpec, type CompiledScene, type BlockshotSpec, type SceneState } from "@blockshot/core";
+import { compile, editDuration, editTimeOf, evaluate, locateEdit, validateSpec, type BlockshotSpec, type CompiledScene, type SceneState, type Shot } from "@blockshot/core";
 import example from "@blockshot/core/examples/living-room.json";
 
 export type ViewMode = { kind: "free" } | { kind: "shot" } | { kind: "camera"; id: string };
-export type GizmoMode = "translate" | "rotate";
+export type GizmoMode = "translate" | "rotate" | "scale";
 export type Panel = "scene" | "shots" | "ai" | "render";
 /** Live take in progress: the recorder drives `id` from keyboard input while time plays. */
 export interface Recording {
@@ -44,6 +44,13 @@ interface StudioState {
   pilot: boolean;
   /** true while an offline render owns the timeline */
   rendering: boolean;
+  /** cut playback (🎬 view): position on the edit timeline, and the shot under it */
+  editTime: number;
+  cutShotId: string | null;
+  /** shot cut/copied in the edit, pasted after the current shot */
+  clipboard: Omit<Shot, "id"> | null;
+  /** spec before a continuous gesture (e.g. trimming a clip by dragging) — one undo step for the whole drag */
+  gestureBase: BlockshotSpec | null;
 
   /** Replace the whole document (load / import). Clears history and selection. */
   setSpec(spec: BlockshotSpec): void;
@@ -60,6 +67,13 @@ interface StudioState {
   setDragging(id: string | null): void;
   notify(text: string, kind?: "info" | "error"): void;
   setPanel(p: Panel): void;
+  /** Moves the cut playhead; scene time and the viewed camera follow the shot under it. */
+  setEditTime(t: number): void;
+  setClipboard(shot: Omit<Shot, "id"> | null): void;
+  beginGesture(): void;
+  /** Replace the spec during a gesture without adding history. */
+  editLive(fn: (spec: BlockshotSpec) => BlockshotSpec | null): void;
+  endGesture(): void;
   setPilot(on: boolean): void;
 }
 
@@ -74,12 +88,20 @@ export const useStudio = create<StudioState>((set, get) => {
   /** Recompile and re-evaluate for a new spec while keeping time / view. */
   const derive = (spec: BlockshotSpec) => {
     const c = compile(spec);
-    const time = Math.min(get().time, spec.settings.duration);
     const sel = get().selection;
     const exists = sel !== null && [...spec.actors, ...spec.props, ...spec.cameras].some((e) => e.id === sel);
     const view = get().view;
     const viewOk = view.kind !== "camera" || spec.cameras.some((cam) => cam.id === view.id);
-    return { spec, compiled: c, time, sceneState: evaluate(c, time), selection: exists ? sel : null, view: viewOk ? view : ({ kind: "shot" } as ViewMode) };
+    // keep the cut playhead valid after shot edits; in cut view the scene time follows it
+    const editTime = Math.min(get().editTime, Math.max(0, editDuration(spec) - 1e-3));
+    const hit = locateEdit(spec, editTime);
+    const cutView = view.kind === "shot" && hit;
+    const time = cutView ? hit.sceneTime : Math.min(get().time, spec.settings.duration);
+    return {
+      spec, compiled: c, time, sceneState: evaluate(c, time), selection: exists ? sel : null,
+      view: viewOk ? view : ({ kind: "shot" } as ViewMode),
+      editTime: hit ? editTime : 0, cutShotId: hit?.clip.shot.id ?? null,
+    };
   };
 
   return {
@@ -101,6 +123,10 @@ export const useStudio = create<StudioState>((set, get) => {
     recording: null,
     pilot: false,
     rendering: false,
+    editTime: 0,
+    cutShotId: initial.spec.shots[0]?.id ?? null,
+    clipboard: null,
+    gestureBase: null,
 
     setSpec(spec) {
       const c = compile(spec);
@@ -108,7 +134,9 @@ export const useStudio = create<StudioState>((set, get) => {
       set({
         spec, compiled: c, revision: get().revision + 1, time, sceneState: evaluate(c, time),
         view: { kind: "shot" }, selection: null, past: [], future: [],
+        editTime: 0, cutShotId: spec.shots[0]?.id ?? null,
       });
+      get().setEditTime(0);
     },
     edit(fn) {
       const prev = get().spec;
@@ -137,7 +165,41 @@ export const useStudio = create<StudioState>((set, get) => {
       set({ playing });
     },
     setView(view) {
+      if (view.kind === "shot") {
+        // enter the cut at the shot that covers the current scene time (or keep the current cut position)
+        const { spec, time, sceneState, cutShotId } = get();
+        const shotId = sceneState.activeShotId ?? cutShotId;
+        if (shotId && spec.shots.some((x) => x.id === shotId)) {
+          set({ view });
+          get().setEditTime(editTimeOf(spec, shotId, time));
+          return;
+        }
+      }
       set({ view });
+    },
+    setEditTime(t) {
+      const { spec, compiled: c } = get();
+      const hit = locateEdit(spec, t);
+      if (!hit) {
+        set({ editTime: 0, cutShotId: null });
+        return;
+      }
+      set({ editTime: Math.max(0, t), cutShotId: hit.clip.shot.id, time: hit.sceneTime, sceneState: evaluate(c, hit.sceneTime) });
+    },
+    setClipboard(clipboard) {
+      set({ clipboard });
+    },
+    beginGesture() {
+      set({ gestureBase: get().spec });
+    },
+    editLive(fn) {
+      const next = fn(get().spec);
+      if (next && next !== get().spec) set(derive(next));
+    },
+    endGesture() {
+      const base = get().gestureBase;
+      if (base && base !== get().spec) set({ past: [...get().past, base].slice(-HISTORY_LIMIT), future: [] });
+      set({ gestureBase: null });
     },
     select(selection) {
       set({ selection });
