@@ -2,7 +2,7 @@
 
 import {
   addActor, addCamera, addProp, aspectLabel, isAnimated, kindOf, patchEntity, removeEntity, removeKey, resolutionForAspect, upsertKey,
-  type BlockshotSpec, type PropType, type Vec3,
+  type BlockshotSpec, type PropType, type TrackProperty, type Vec3,
 } from "@blockshot/core";
 import { useStudio } from "./store";
 
@@ -13,6 +13,15 @@ const round = (n: number) => Math.round(n * 1e4) / 1e4;
 const roundVec = (v: Vec3): Vec3 => [round(v[0]), round(v[1]), round(v[2])];
 const SNAP_MOVE = 0.1;
 const SNAP_ROT = 15;
+/**
+ * Does an edit of this property become a key at the current time? Yes when the property already changes over time,
+ * when it has a manual track at all (even a single key — a manual track overrides the base value, so patching the
+ * base would silently snap back), or when Auto Key is on.
+ */
+function keyed(s: BlockshotSpec, id: string, property: TrackProperty): boolean {
+  return state().autoKey || isAnimated(s, id, property) || s.tracks.some((t) => t.target === id && t.property === property);
+}
+
 export const snapSteps = () => (state().snapEnabled ? { move: SNAP_MOVE, rot: SNAP_ROT } : { move: 0, rot: 0 });
 
 function add(make: (s: BlockshotSpec) => { spec: BlockshotSpec; id: string }) {
@@ -52,20 +61,20 @@ export function commitTransform(id: string, position: Vec3, rotation: Vec3) {
     if (!kind) return null;
     let next = s;
     if (kind === "prop") return patchEntity(s, id, { position: pos, rotation: rot });
-    next = isAnimated(next, id, "position") ? upsertKey(next, id, "position", t, pos) : patchEntity(next, id, { position: pos });
-    next = isAnimated(next, id, "rotation") ? upsertKey(next, id, "rotation", t, rot) : patchEntity(next, id, { rotation: rot });
+    next = keyed(next, id, "position") ? upsertKey(next, id, "position", t, pos) : patchEntity(next, id, { position: pos });
+    next = keyed(next, id, "rotation") ? upsertKey(next, id, "rotation", t, rot) : patchEntity(next, id, { rotation: rot });
     return next;
   });
 }
 
 export function setLens(cameraId: string, mm: number) {
   const t = state().time;
-  state().edit((s) => (isAnimated(s, cameraId, "focalLength") ? upsertKey(s, cameraId, "focalLength", t, mm) : patchEntity(s, cameraId, { focalLength: mm })));
+  state().edit((s) => (keyed(s, cameraId, "focalLength") ? upsertKey(s, cameraId, "focalLength", t, mm) : patchEntity(s, cameraId, { focalLength: mm })));
 }
 
 export function setPoseCmd(actorId: string, pose: BlockshotSpec["actors"][number]["pose"]) {
   const t = state().time;
-  state().edit((s) => (isAnimated(s, actorId, "pose") ? upsertKey(s, actorId, "pose", t, pose, "step") : patchEntity(s, actorId, { pose })));
+  state().edit((s) => (keyed(s, actorId, "pose") ? upsertKey(s, actorId, "pose", t, pose, "step") : patchEntity(s, actorId, { pose })));
 }
 
 export function setAspect(ratio: number) {
@@ -118,11 +127,11 @@ export function commitCamera(id: string, position: Vec3, rotation: Vec3, target:
   state().edit((s) => {
     const cam = s.cameras.find((c) => c.id === id);
     if (!cam) return null;
-    let next = isAnimated(s, id, "position") ? upsertKey(s, id, "position", t, pos) : patchEntity(s, id, { position: pos });
+    let next = keyed(s, id, "position") ? upsertKey(s, id, "position", t, pos) : patchEntity(s, id, { position: pos });
     if (typeof cam.lookAt === "string") return next;
     if (Array.isArray(cam.lookAt) && target) return patchEntity(next, id, { lookAt: roundVec(target) });
     const rot = roundVec(rotation);
-    next = isAnimated(next, id, "rotation") ? upsertKey(next, id, "rotation", t, rot) : patchEntity(next, id, { rotation: rot });
+    next = keyed(next, id, "rotation") ? upsertKey(next, id, "rotation", t, rot) : patchEntity(next, id, { rotation: rot });
     return next;
   });
 }
@@ -133,7 +142,7 @@ export function matchCameraToFreeView(id: string, view: { position: Vec3; target
   state().edit((s) => {
     if (!s.cameras.some((c) => c.id === id)) return null;
     const pos = roundVec(view.position);
-    const next = isAnimated(s, id, "position") ? upsertKey(s, id, "position", t, pos) : patchEntity(s, id, { position: pos });
+    const next = keyed(s, id, "position") ? upsertKey(s, id, "position", t, pos) : patchEntity(s, id, { position: pos });
     return patchEntity(next, id, { lookAt: roundVec(view.target) });
   });
   state().notify("현재 자유 시점을 카메라에 적용했습니다");
@@ -159,8 +168,8 @@ export function commitCameraRotation(id: string, position: Vec3, rotation: Vec3)
   state().edit((s) => {
     if (!s.cameras.some((c) => c.id === id)) return null;
     let next = patchEntity(s, id, { lookAt: undefined });
-    next = isAnimated(next, id, "position") ? upsertKey(next, id, "position", t, pos) : patchEntity(next, id, { position: pos });
-    next = isAnimated(next, id, "rotation") ? upsertKey(next, id, "rotation", t, rot) : patchEntity(next, id, { rotation: rot });
+    next = keyed(next, id, "position") ? upsertKey(next, id, "position", t, pos) : patchEntity(next, id, { position: pos });
+    next = keyed(next, id, "rotation") ? upsertKey(next, id, "rotation", t, rot) : patchEntity(next, id, { rotation: rot });
     return next;
   });
   if (aimed) state().notify("카메라 조준을 해제하고 회전값으로 바꿨습니다 (속성 → 조준에서 다시 지정 가능)");

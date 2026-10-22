@@ -20,7 +20,8 @@ export function Toolbar({ onImport }: { onImport: () => void }) {
   const canRedo = useStudio((s) => s.future.length > 0);
   const mode = useStudio((s) => s.gizmoMode);
   const snap = useStudio((s) => s.snapEnabled);
-  const { undo, redo, setGizmoMode, setSnap } = useStudio.getState();
+  const autoKey = useStudio((s) => s.autoKey);
+  const { undo, redo, setGizmoMode, setSnap, setAutoKey } = useStudio.getState();
   const toggle = (on: boolean) => (on ? "bg-amber-400 text-black" : "bg-white/10 hover:bg-white/20");
 
   return (
@@ -60,6 +61,13 @@ export function Toolbar({ onImport }: { onImport: () => void }) {
       <button className={`rounded px-2.5 py-1 text-xs ${toggle(mode === "rotate")}`} onClick={() => setGizmoMode("rotate")} title="E">회전</button>
       <button className={`rounded px-2.5 py-1 text-xs ${toggle(mode === "scale")}`} onClick={() => setGizmoMode("scale")} title="R — 소품: 축별 크기 · 인물: 키(균등)">크기</button>
       <button className={`rounded px-2.5 py-1 text-xs ${toggle(snap)}`} onClick={() => setSnap(!snap)} title="S — 0.1 m / 15°">스냅</button>
+      <button
+        className={`rounded px-2.5 py-1 text-xs ${autoKey ? "bg-red-600 text-white" : "bg-white/10 hover:bg-white/20"}`}
+        onClick={() => setAutoKey(!autoKey)}
+        title="자동 키 (Shift+K) — 켜면 인물·카메라를 움직이거나 렌즈·포즈를 바꿀 때마다 현재 시간에 키가 찍힙니다"
+      >
+        ◆ 자동 키
+      </button>
       <span className="mx-1 h-4 w-px bg-white/10" />
       <button className={btn} onClick={() => fileRef.current?.click()} title=".blockshot.json 프로젝트 열기">열기</button>
       <input

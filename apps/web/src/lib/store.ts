@@ -31,6 +31,8 @@ interface StudioState {
   gizmoMode: GizmoMode;
   /** snap translate to 0.1 m and rotate to 15° */
   snapEnabled: boolean;
+  /** Auto Key: every move / rotate / lens / pose edit of an actor or camera becomes a key at the current time */
+  autoKey: boolean;
   /** id currently being dragged with the gizmo — viewport skips driving it from sceneState meanwhile */
   dragging: string | null;
   /** undo / redo stacks of spec snapshots (specs are immutable, so snapshots are cheap) */
@@ -64,6 +66,7 @@ interface StudioState {
   select(id: string | null): void;
   setGizmoMode(m: GizmoMode): void;
   setSnap(on: boolean): void;
+  setAutoKey(on: boolean): void;
   setDragging(id: string | null): void;
   notify(text: string, kind?: "info" | "error"): void;
   setPanel(p: Panel): void;
@@ -115,6 +118,7 @@ export const useStudio = create<StudioState>((set, get) => {
     selection: null,
     gizmoMode: "translate",
     snapEnabled: true,
+    autoKey: false,
     dragging: null,
     past: [],
     future: [],
@@ -210,6 +214,9 @@ export const useStudio = create<StudioState>((set, get) => {
     setSnap(snapEnabled) {
       set({ snapEnabled });
     },
+    setAutoKey(autoKey) {
+      set({ autoKey });
+    },
     setDragging(dragging) {
       set({ dragging });
     },
@@ -226,3 +233,8 @@ export const useStudio = create<StudioState>((set, get) => {
     },
   };
 });
+
+// dev-only handle for debugging / browser checks
+if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
+  (window as unknown as { __studio: typeof useStudio }).__studio = useStudio;
+}

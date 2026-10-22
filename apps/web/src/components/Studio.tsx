@@ -237,6 +237,9 @@ export default function Studio() {
       } else if (e.code === "Space") {
         e.preventDefault();
         s.setPlaying(!s.playing);
+      } else if (e.code === "KeyK" && e.shiftKey) {
+        s.setAutoKey(!s.autoKey);
+        s.notify(s.autoKey ? "자동 키 끔" : "자동 키 켬 — 움직이면 현재 시간에 키가 찍힙니다");
       } else if (e.code === "KeyK") {
         if (e.altKey) removeKeysAtCurrentTime();
         else insertKeyAtCurrentTime();
