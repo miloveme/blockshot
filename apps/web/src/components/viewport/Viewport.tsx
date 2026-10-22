@@ -4,7 +4,7 @@ import { Suspense, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, PerspectiveCamera, Text } from "@react-three/drei";
 import * as THREE from "three";
-import { DEG, type CameraState } from "@previz/core";
+import { DEG, type CameraState } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
 import { Mannequin } from "./Mannequin";
 import { PropObject } from "./Props";

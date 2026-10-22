@@ -1,4 +1,4 @@
-import type { Action, BodyPart, Key, Pose, PrevizSpec, Prop, Target, TrackProperty, Vec3 } from "./schema";
+import type { Action, BodyPart, Key, Pose, BlockshotSpec, Prop, Target, TrackProperty, Vec3 } from "./schema";
 import { applyEase, DEG, unwrapYaw, vec, yawTowards } from "./math";
 import { verticalFov } from "./camera";
 
@@ -20,7 +20,7 @@ interface Segment {
 }
 
 export interface CompiledScene {
-  spec: PrevizSpec;
+  spec: BlockshotSpec;
   /** `${targetId}/${property}` → keys sorted by time */
   tracks: Map<string, CKey[]>;
   /** actor id → head look-at segments */
@@ -92,7 +92,7 @@ export function sampleKeys(keys: ReadonlyArray<CKey>, t: number): KeyValue {
 }
 
 /** Turns high-level actions + manual tracks into flat key lists. Pure. */
-export function compile(spec: PrevizSpec): CompiledScene {
+export function compile(spec: BlockshotSpec): CompiledScene {
   const tracks = new Map<string, CKey[]>();
   const looks = new Map<string, Segment[]>();
   const aims = new Map<string, Segment[]>();

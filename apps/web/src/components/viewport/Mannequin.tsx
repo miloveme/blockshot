@@ -4,7 +4,7 @@ import { Suspense, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
 import * as THREE from "three";
-import { DEG, type ActorState } from "@previz/core";
+import { DEG, type ActorState } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
 
 /**

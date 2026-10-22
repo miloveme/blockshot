@@ -1,7 +1,7 @@
 "use client";
 
 import { Grid } from "@react-three/drei";
-import type { Space } from "@previz/core";
+import type { Space } from "@blockshot/core";
 
 type Rect = { x0: number; x1: number; y0: number; y1: number };
 type Opening = Extract<Space, { type: "room" }>["openings"][number];

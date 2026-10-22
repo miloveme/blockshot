@@ -1,13 +1,13 @@
 "use client";
 
 import { create } from "zustand";
-import { compile, evaluate, validateSpec, type CompiledScene, type PrevizSpec, type SceneState } from "@previz/core";
-import example from "@previz/core/examples/living-room.json";
+import { compile, evaluate, validateSpec, type CompiledScene, type BlockshotSpec, type SceneState } from "@blockshot/core";
+import example from "@blockshot/core/examples/living-room.json";
 
 export type ViewMode = { kind: "free" } | { kind: "shot" } | { kind: "camera"; id: string };
 
 interface StudioState {
-  spec: PrevizSpec;
+  spec: BlockshotSpec;
   compiled: CompiledScene;
   /** Increments on every setSpec — used to remount the 3D scene graph. */
   revision: number;
@@ -16,7 +16,7 @@ interface StudioState {
   time: number;
   playing: boolean;
   view: ViewMode;
-  setSpec(spec: PrevizSpec): void;
+  setSpec(spec: BlockshotSpec): void;
   setTime(t: number): void;
   setPlaying(p: boolean): void;
   setView(v: ViewMode): void;

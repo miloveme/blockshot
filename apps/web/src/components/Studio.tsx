@@ -116,7 +116,7 @@ function downloadSpec() {
   const blob = new Blob([JSON.stringify(spec, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `${spec.meta.title.replace(/[^\p{L}\p{N}_-]+/gu, "_") || "scene"}.previz.json`;
+  a.download = `${spec.meta.title.replace(/[^\p{L}\p{N}_-]+/gu, "_") || "scene"}.blockshot.json`;
   a.click();
   URL.revokeObjectURL(a.href);
 }
@@ -142,7 +142,7 @@ export default function Studio() {
   return (
     <div className="flex h-dvh flex-col bg-[#0f1115] text-zinc-100">
       <header className="flex items-center gap-4 border-b border-white/10 px-4 py-2.5">
-        <span className="font-semibold tracking-tight">Previz</span>
+        <span className="font-semibold tracking-tight">Blockshot</span>
         <span className="truncate text-sm text-zinc-400">{title}</span>
         <div className="ml-auto flex items-center gap-2">
           <ViewButtons />

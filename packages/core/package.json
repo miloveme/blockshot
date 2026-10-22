@@ -1,9 +1,9 @@
 {
-  "name": "@previz/core",
+  "name": "@blockshot/core",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Previz Spec schema, compiler, deterministic evaluator and script builder (headless, no DOM).",
+  "description": "Blockshot Spec schema, compiler, deterministic evaluator and script builder (headless, no DOM).",
   "exports": {
     ".": "./src/index.ts",
     "./examples/*": "./examples/*"

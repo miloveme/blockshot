@@ -1,4 +1,4 @@
-# Previz — 에이전트 작업 가이드
+# Blockshot — 에이전트 작업 가이드
 
 웹 기반 프리비즈 툴. 대본을 3D(마네킹·프리미티브)로 블로킹하고, 카메라·렌즈·타이밍을 검토해 AI 영상 생성용 레퍼런스를 브라우저에서 렌더링한다.
 
@@ -10,7 +10,7 @@
 ```bash
 pnpm install
 pnpm dev            # http://localhost:3000 (apps/web)
-pnpm test           # @previz/core Vitest
+pnpm test           # @blockshot/core Vitest
 pnpm typecheck      # 모든 패키지 tsc
 pnpm --filter web lint
 pnpm build          # core 타입체크 + next build

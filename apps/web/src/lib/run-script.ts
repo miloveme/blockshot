@@ -1,10 +1,10 @@
-import type { PrevizSpecInput } from "@previz/core";
+import type { BlockshotSpecInput } from "@blockshot/core";
 
 const TIMEOUT_MS = 2000;
 
-export type ScriptResult = { ok: true; spec: PrevizSpecInput } | { ok: false; error: string; line?: number };
+export type ScriptResult = { ok: true; spec: BlockshotSpecInput } | { ok: false; error: string; line?: number };
 
-/** Runs a Previz Script in a throwaway Web Worker with a hard timeout. */
+/** Runs a Blockshot Script in a throwaway Web Worker with a hard timeout. */
 export function runScriptInWorker(source: string): Promise<ScriptResult> {
   return new Promise((resolve) => {
     const worker = new Worker(new URL("../workers/script.worker.ts", import.meta.url), { type: "module" });

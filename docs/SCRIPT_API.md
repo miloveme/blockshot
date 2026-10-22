@@ -1,6 +1,6 @@
-# Previz Script API v0.1
+# Blockshot Script API v0.1
 
-Blender의 `bpy` 처럼 코드로 장면을 만든다. 단, **스크립트는 Previz Spec을 만드는 빌더** 일 뿐이며 렌더러·DOM·네트워크에는 접근할 수 없다. 실행 결과는 항상 직렬화 가능한 Spec이고, 그 Spec이 뷰포트에 반영된다.
+Blender의 `bpy` 처럼 코드로 장면을 만든다. 단, **스크립트는 Blockshot Spec을 만드는 빌더** 일 뿐이며 렌더러·DOM·네트워크에는 접근할 수 없다. 실행 결과는 항상 직렬화 가능한 Spec이고, 그 Spec이 뷰포트에 반영된다.
 
 - 구현(빌더): [`packages/core/src/builder.ts`](../packages/core/src/builder.ts)
 - 런타임: 브라우저 Web Worker 샌드박스 (M3), 이후 QuickJS-wasm
@@ -12,7 +12,7 @@ Blender의 `bpy` 처럼 코드로 장면을 만든다. 단, **스크립트는 Pr
 ```
 
 - 전역으로 `scene`, `vec`, `rand` 만 노출
-- 기본 모드는 **새 장면 생성**. `// @previz mode=merge` 주석이 첫 줄에 있으면 현재 장면에 병합(같은 id는 덮어씀)
+- 기본 모드는 **새 장면 생성**. `// @blockshot mode=merge` 주석이 첫 줄에 있으면 현재 장면에 병합(같은 id는 덮어씀)
 - 제한: 실행 2초, 객체 2,000개, `fetch`/`importScripts`/DOM 없음
 
 ## 2. 빠른 예시

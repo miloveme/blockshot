@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { buildFixPrompt, buildPrompt, detectPasted, validateSpec, type Issue, type PromptMode } from "@previz/core";
+import { buildFixPrompt, buildPrompt, detectPasted, validateSpec, type Issue, type PromptMode } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
 import { runScriptInWorker } from "@/lib/run-script";
 
@@ -74,8 +74,8 @@ export function ImportPanel({ onClose }: { onClose: () => void }) {
         />
         <div className="flex items-center gap-2">
           <select className="rounded bg-white/10 px-2 py-1" value={mode} onChange={(e) => setMode(e.target.value as PromptMode)}>
-            <option value="json">출력: Previz JSON</option>
-            <option value="script">출력: Previz Script</option>
+            <option value="json">출력: Blockshot JSON</option>
+            <option value="script">출력: Blockshot Script</option>
           </select>
           <button
             className="rounded bg-amber-400 px-3 py-1 font-medium text-black hover:bg-amber-300 disabled:opacity-40"

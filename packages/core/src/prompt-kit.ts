@@ -1,4 +1,4 @@
-import { PROP_TYPES, POSES, BODY_PARTS, SPEC_VERSION, type PrevizSpec } from "./schema";
+import { PROP_TYPES, POSES, BODY_PARTS, SPEC_VERSION, type BlockshotSpec } from "./schema";
 
 /**
  * Prompt kit v0 — assembles the prompt a user pastes into an external LLM (docs/AI_PROMPT_KIT.md).
@@ -14,7 +14,7 @@ const RULES = `Conventions:
 - Eye-level camera height is 1.5–1.7 m. Wide 18–28mm, normal 35–50mm, tele/close-up 85mm+.
 - Keep the 180-degree rule between cuts. Shots are usually 2–6 seconds.`;
 
-const SPEC_SUMMARY = `Previz Spec v${SPEC_VERSION} fields:
+const SPEC_SUMMARY = `Blockshot Spec v${SPEC_VERSION} fields:
 { "specVersion": "${SPEC_VERSION}",
   "meta": { "title", "description"? },
   "settings": { "fps": 24, "duration": seconds, "resolution": [w, h] },
@@ -35,7 +35,7 @@ const SPEC_SUMMARY = `Previz Spec v${SPEC_VERSION} fields:
   "shots": [{ "id", "camera", "start", "end", "description"?, "prompt"? }] }
 Poses: ${POSES.join(", ")}. Prop types: ${PROP_TYPES.join(", ")}. Ease: linear, easeIn, easeOut, easeInOut, step.`;
 
-const SCRIPT_SUMMARY = `Previz Script API (JavaScript; globals: scene, vec, rand):
+const SCRIPT_SUMMARY = `Blockshot Script API (JavaScript; globals: scene, vec, rand):
 scene.settings({ fps, duration, resolution }); scene.meta({ title });
 scene.room({ width, depth, height, doors: [{ wall, offset }], windows: [{ wall, offset }] }) | scene.ground() | scene.street();
 const a = scene.actor(id, { name, color, height, at: [x,0,z], facing: yawDeg, pose });
@@ -47,7 +47,7 @@ scene.shot(id, { camera: c, start, end, description, prompt });
 vec.polar(radius, deg, y) gives a point on a circle; rand() is seeded.
 Poses: ${POSES.join(", ")}. Prop types: ${PROP_TYPES.join(", ")}.`;
 
-export function buildPrompt(opts: { request: string; mode?: PromptMode; current?: PrevizSpec }): string {
+export function buildPrompt(opts: { request: string; mode?: PromptMode; current?: BlockshotSpec }): string {
   const mode = opts.mode ?? "json";
   const fence = mode === "json" ? "json" : "js";
   return [

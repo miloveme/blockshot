@@ -1,6 +1,6 @@
 # AI 프롬프트 키트 — MCP 없이 LLM과 협업하기
 
-Vercel 서버리스에서는 상시 연결형 MCP 서버를 두기 어렵다. 그래서 Suno가 "가사/스타일 프롬프트 → 곡"으로 동작하듯, Previz는 **"프롬프트 → Spec/Script → 붙여넣기 → 실행"** 루프로 외부 LLM을 연결한다. 앱은 LLM을 직접 호출하지 않아도 된다(서버 비용 0, 어떤 LLM이든 사용 가능).
+Vercel 서버리스에서는 상시 연결형 MCP 서버를 두기 어렵다. 그래서 Suno가 "가사/스타일 프롬프트 → 곡"으로 동작하듯, Blockshot는 **"프롬프트 → Spec/Script → 붙여넣기 → 실행"** 루프로 외부 LLM을 연결한다. 앱은 LLM을 직접 호출하지 않아도 된다(서버 비용 0, 어떤 LLM이든 사용 가능).
 
 ## 1. 전체 흐름
 
@@ -19,7 +19,7 @@ Vercel 서버리스에서는 상시 연결형 MCP 서버를 두기 어렵다. �
 조립된 프롬프트는 아래 블록 순서로 이어 붙인다. 각 블록은 [`packages/core/src/prompt-kit/`](../packages/core/src/prompt-kit/) 에 템플릿으로 둔다 (M3).
 
 1. **역할 지시** — "너는 프리비즈 장면 설계자다. 출력은 반드시 하나의 코드블록."
-2. **출력 모드** — `json`(Previz Spec, 기본) 또는 `script`(Previz Script)
+2. **출력 모드** — `json`(Blockshot Spec, 기본) 또는 `script`(Blockshot Script)
 3. **규약 요약** — 단위·좌표계·정면 방향·참조 문법 (SCENE_SPEC §1을 10줄로 압축)
 4. **스키마 요약** — 필드 목록(타입·기본값), 사용 가능한 enum(포즈, 소품 타입, 액션 타입)
 5. **연출 가이드** — 렌즈 선택 기준(광각 18–24 / 표준 35–50 / 망원 85+), 180도 규칙, 눈높이 1.5–1.7m, 샷 길이 2–6초
@@ -66,7 +66,7 @@ Vercel에 정적 파일로 배포 → URL만 주면 LLM이 스스로 읽는다.
 | 경로 | 내용 |
 | --- | --- |
 | `/llms.txt` | 서비스 소개 + 아래 문서 링크 (llms.txt 관례) |
-| `/schema/previz.schema.json` | zod에서 생성한 JSON Schema |
+| `/schema/blockshot.schema.json` | zod에서 생성한 JSON Schema |
 | `/docs/scene-spec.md` | SCENE_SPEC 사본 |
 | `/docs/script-api.md` | SCRIPT_API 사본 |
 | `/examples/*.json` | 예시 장면 |

@@ -5,7 +5,7 @@
 ## M0 기반 ✅ (이 저장소 초기 커밋)
 
 - [x] pnpm 모노레포 (`apps/web`, `packages/core`)
-- [x] Previz Spec v0.1 zod 스키마 + JSON Schema 생성
+- [x] Blockshot Spec v0.1 zod 스키마 + JSON Schema 생성
 - [x] 검증(교차 참조 포함) + LLM 수정 요청 프롬프트
 - [x] `compile` / `evaluate` (walkTo, runTo, turnTo, pose, lookAt, cameraMove, cameraLookAt, zoom, orbit)
 - [x] Script 빌더(`scene.*`) + Web Worker 샌드박스 실행
@@ -25,7 +25,7 @@
 - [ ] 렌즈 프리셋 바, 화면비 선택(2.39/1.85/16:9/9:16/1:1) + 마스크
 - [ ] 탑뷰(평면도) 2D 패널: 카메라 위치·화각 부채꼴, 180도 축선 표시
 - [ ] Undo/Redo (immer patches)
-- [ ] IndexedDB 자동 저장, `.previz.json` 열기(드래그 앤 드롭)
+- [ ] IndexedDB 자동 저장, `.blockshot.json` 열기(드래그 앤 드롭)
 - [ ] 단축키 체계 문서화
 
 ## M2 렌더링
@@ -39,7 +39,7 @@
 
 ## M3 AI & 스크립트
 
-- [ ] Monaco 스크립트 에디터 + `previz` 타입 선언 주입 + 예제 스니펫
+- [ ] Monaco 스크립트 에디터 + `blockshot` 타입 선언 주입 + 예제 스니펫
 - [ ] 스크립트 저장(프로젝트에 포함), 재실행, merge 모드
 - [ ] QuickJS 샌드박스로 교체
 - [ ] 프롬프트 키트 템플릿화 + 장르별 few-shot (대화, 추격, 광고 제품샷)

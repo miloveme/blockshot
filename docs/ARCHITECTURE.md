@@ -2,15 +2,15 @@
 
 ## 1. 원칙
 
-1. **Spec이 진실 원천** — UI·스크립트·AI 모두 `PrevizSpec`을 만들고, 렌더러는 읽기만 한다.
-2. **순수 코어** — `@previz/core`는 DOM·three.js 의존이 없다. 검증·컴파일·평가·스크립트 빌더가 Node에서 테스트된다.
+1. **Spec이 진실 원천** — UI·스크립트·AI 모두 `BlockshotSpec`을 만들고, 렌더러는 읽기만 한다.
+2. **순수 코어** — `@blockshot/core`는 DOM·three.js 의존이 없다. 검증·컴파일·평가·스크립트 빌더가 Node에서 테스트된다.
 3. **결정론** — `evaluate(compile(spec), t)`는 같은 입력에 같은 결과. 렌더러는 시간 t만 받아 그린다 → 실시간 재생과 오프라인 렌더가 같은 코드 경로.
 4. **서버 없음이 기본** — 편집·실행·렌더 모두 브라우저. Vercel은 정적 호스팅 + (선택) BYOK 프록시.
 
 ## 2. 모노레포 구조
 
 ```
-previz/
+blockshot/
 ├─ apps/
 │  └─ web/                         Next.js (App Router) — Vercel 배포 대상
 │     ├─ public/
@@ -30,7 +30,7 @@ previz/
 │        └─ workers/
 │           └─ script.worker.ts    스크립트 샌드박스 (네트워크/스토리지 제거)
 ├─ packages/
-│  └─ core/                        @previz/core — 헤드리스
+│  └─ core/                        @blockshot/core — 헤드리스
 │     ├─ src/
 │     │  ├─ schema.ts              zod 스키마 = 포맷 정의
 │     │  ├─ validate.ts            스키마 + 교차 참조 검증, LLM 수정 프롬프트
@@ -51,7 +51,7 @@ previz/
 ```
            ┌──────────── UI 편집 (M1) ────────────┐
            │                                       ▼
- LLM 출력 ─┼─▶ detectPasted ─▶ (script) Worker ─▶ PrevizSpecInput
+ LLM 출력 ─┼─▶ detectPasted ─▶ (script) Worker ─▶ BlockshotSpecInput
  파일 열기 ─┘                                       │
                                                    ▼
                                           validateSpec (zod + refs)

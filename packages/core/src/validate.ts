@@ -1,4 +1,4 @@
-import { PrevizSpec, type Target } from "./schema";
+import { BlockshotSpec, type Target } from "./schema";
 
 export interface Issue {
   path: string;
@@ -7,10 +7,10 @@ export interface Issue {
 }
 
 export type ValidationResult =
-  | { ok: true; spec: PrevizSpec; warnings: Issue[] }
+  | { ok: true; spec: BlockshotSpec; warnings: Issue[] }
   | { ok: false; errors: Issue[]; warnings: Issue[] };
 
-const KNOWN_TOP_LEVEL = new Set(Object.keys(PrevizSpec.shape));
+const KNOWN_TOP_LEVEL = new Set(Object.keys(BlockshotSpec.shape));
 
 function formatPath(path: ReadonlyArray<PropertyKey>): string {
   return path.reduce<string>((acc, seg) => (typeof seg === "number" ? `${acc}[${seg}]` : acc ? `${acc}.${String(seg)}` : String(seg)), "");
@@ -40,7 +40,7 @@ export function validateSpec(input: unknown): ValidationResult {
     }
   }
 
-  const parsed = PrevizSpec.safeParse(input);
+  const parsed = BlockshotSpec.safeParse(input);
   if (!parsed.success) {
     const errors = parsed.error.issues.map((i) => ({
       path: formatPath(i.path),

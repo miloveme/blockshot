@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Previz Spec v0.1 — the single source of truth for a project.
+ * Blockshot Spec v0.1 — the single source of truth for a project.
  * Conventions (see docs/SCENE_SPEC.md): Y-up, meters, seconds, degrees, Euler order YXZ,
  * rotation.y = 0 faces +Z.
  */
@@ -157,7 +157,7 @@ export const Shot = z.object({
 });
 export type Shot = z.infer<typeof Shot>;
 
-export const PrevizSpec = z.object({
+export const BlockshotSpec = z.object({
   specVersion: z.literal(SPEC_VERSION),
   meta: z.object({ title: z.string().default("Untitled"), description: z.string().optional() }).default({ title: "Untitled" }),
   settings: Settings.default({ fps: 24, duration: 6, resolution: [1920, 1080], seed: 1 }),
@@ -170,6 +170,6 @@ export const PrevizSpec = z.object({
   shots: z.array(Shot).default([]),
 });
 /** Fully-defaulted spec (output of parsing). */
-export type PrevizSpec = z.infer<typeof PrevizSpec>;
+export type BlockshotSpec = z.infer<typeof BlockshotSpec>;
 /** What humans / LLMs may write (defaults optional). */
-export type PrevizSpecInput = z.input<typeof PrevizSpec>;
+export type BlockshotSpecInput = z.input<typeof BlockshotSpec>;

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { DEG, type Prop } from "@previz/core";
+import { DEG, type Prop } from "@blockshot/core";
 
 /** Simple primitive-built props at real-world size (meters). `scale` multiplies presets. */
 

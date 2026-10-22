@@ -6,16 +6,16 @@ import { copyFileSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { PrevizSpec } from "../src/schema";
+import { BlockshotSpec } from "../src/schema";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "../../..");
 const pub = resolve(repo, "apps/web/public");
 
-const schemaOut = resolve(pub, "schema/previz.schema.json");
+const schemaOut = resolve(pub, "schema/blockshot.schema.json");
 mkdirSync(dirname(schemaOut), { recursive: true });
-const schema = z.toJSONSchema(PrevizSpec, { io: "input" });
-writeFileSync(schemaOut, JSON.stringify({ title: "Previz Spec v0.1", ...schema }, null, 2) + "\n");
+const schema = z.toJSONSchema(BlockshotSpec, { io: "input" });
+writeFileSync(schemaOut, JSON.stringify({ title: "Blockshot Spec v0.1", ...schema }, null, 2) + "\n");
 
 mkdirSync(resolve(pub, "docs"), { recursive: true });
 copyFileSync(resolve(repo, "docs/SCENE_SPEC.md"), resolve(pub, "docs/scene-spec.md"));

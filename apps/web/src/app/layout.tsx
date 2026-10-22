@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Previz",
+  title: "Blockshot",
   description: "웹 기반 프리비즈 — 대본을 3D로 블로킹하고 AI 영상 생성용 레퍼런스를 렌더링합니다.",
 };
 

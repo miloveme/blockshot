@@ -1,4 +1,4 @@
-# Previz — 웹 기반 프리비즈(Pre-visualization) 툴 PRD
+# Blockshot — 웹 기반 프리비즈(Pre-visualization) 툴 PRD
 
 - 문서 버전: v0.1 (초안)
 - 작성일: 2026-10-22
@@ -10,7 +10,7 @@
 
 대본·스토리보드를 **단순화된 3D 공간(마네킹 인물 · 프리미티브 소품 · 방/거리 공간)** 에 빠르게 배치하고, **카메라 동선 · 렌즈 화각 · 타이밍** 을 테스트한 뒤, 브라우저 안에서 **로컬 렌더링으로 참조 영상(beauty / depth / pose / lineart)** 을 뽑아 **AI 영상 생성 모델의 레퍼런스** 로 쓰는 웹 앱.
 
-장면은 **하나의 JSON 문서(Previz Spec)** 로 표현되고, 사람은 UI로, AI는 **JSON 또는 스크립트(Blender `bpy` 같은 `previz` API)** 로 같은 문서를 만든다. MCP 없이도 Suno처럼 "프롬프트 → 결과물(JSON/스크립트) → 붙여넣기 → 실행" 흐름으로 AI와 협업한다.
+장면은 **하나의 JSON 문서(Blockshot Spec)** 로 표현되고, 사람은 UI로, AI는 **JSON 또는 스크립트(Blender `bpy` 같은 `blockshot` API)** 로 같은 문서를 만든다. MCP 없이도 Suno처럼 "프롬프트 → 결과물(JSON/스크립트) → 붙여넣기 → 실행" 흐름으로 AI와 협업한다.
 
 ## 2. 배경과 문제
 
@@ -27,7 +27,7 @@
 1. **5분 안에** 대본 한 씬을 3D로 블로킹하고 카메라 무빙이 있는 10초 참조 영상을 뽑을 수 있다.
 2. 인물·소품·공간은 **단순 모델**(마네킹/프리미티브)로 충분히 의도를 전달한다.
 3. **실제 렌즈(mm) · 센서 · 화면비** 기반의 카메라로 화각을 정확히 시뮬레이션한다.
-4. 장면 전체가 **결정론적 JSON(Previz Spec)** 이며, 같은 Spec은 항상 같은 영상을 만든다.
+4. 장면 전체가 **결정론적 JSON(Blockshot Spec)** 이며, 같은 Spec은 항상 같은 영상을 만든다.
 5. **스크립트 API** 로 모델·애니메이션·카메라를 코드로 생성할 수 있다 (Blender 스크립팅과 유사).
 6. **AI 프롬프트 키트**: 사용자가 외부 LLM(ChatGPT/Claude/Gemini)에 붙여넣을 프롬프트를 앱이 생성하고, LLM 출력(JSON/스크립트)을 앱에 붙여넣으면 검증 → 실행된다.
 7. **브라우저 로컬 렌더링**(WebCodecs)으로 MP4/PNG 시퀀스를 서버 비용 없이 출력한다.
@@ -62,12 +62,12 @@
 ### S2. AI로 장면 생성 (프롬프트 키트)
 1. 사용자가 "AI로 만들기" 패널에서 대본/요청을 입력
 2. 앱이 **완성된 LLM 프롬프트**(시스템 지침 + 스키마 요약 + 예시 + 사용자 요청)를 생성 → 복사
-3. 사용자가 ChatGPT/Claude에 붙여넣기 → LLM이 Previz JSON 또는 스크립트 출력
+3. 사용자가 ChatGPT/Claude에 붙여넣기 → LLM이 Blockshot JSON 또는 스크립트 출력
 4. 앱에 붙여넣기 → zod 검증 → 오류 시 **LLM에게 다시 보낼 수정 요청 프롬프트** 를 자동 생성
 5. 통과하면 3D 뷰포트에 즉시 반영, 이후 UI로 미세 조정
 
 ### S3. 스크립트로 반복 작업
-1. 스크립트 에디터(Monaco)에서 `previz` API로 군중 20명을 원형 배치하고 카메라 오빗 생성
+1. 스크립트 에디터(Monaco)에서 `blockshot` API로 군중 20명을 원형 배치하고 카메라 오빗 생성
 2. 실행 → Spec 생성/병합 → 뷰포트 반영. 스크립트는 프로젝트에 저장되어 재실행 가능
 
 ### S4. AI 영상 모델 레퍼런스로 전달
@@ -78,11 +78,11 @@
 
 우선순위: **P0** = MVP 필수, **P1** = v1 출시, **P2** = 이후.
 
-### 6.1 장면 문서 (Previz Spec) — P0
+### 6.1 장면 문서 (Blockshot Spec) — P0
 - 단일 JSON 문서가 프로젝트의 진실 원천(single source of truth). 상세: [`SCENE_SPEC.md`](./SCENE_SPEC.md)
 - 단위: 미터, 초, Y-up 오른손 좌표계, 각도는 도(degree)
 - 구성: `meta`, `settings`(fps, 해상도, 길이), `space`, `actors[]`, `props[]`, `cameras[]`, `lights[]`, `tracks[]`(애니메이션), `shots[]`
-- zod 스키마로 검증, JSON Schema 자동 생성(`/schema/previz.schema.json` 정적 서빙)
+- zod 스키마로 검증, JSON Schema 자동 생성(`/schema/blockshot.schema.json` 정적 서빙)
 - `specVersion` 필드와 마이그레이션 함수 제공
 
 ### 6.2 기본 에셋 라이브러리 — P0
@@ -123,10 +123,10 @@
   - P1: **pose**(OpenPose 스타일 컬러 스켈레톤), **lineart/edge**, **normal**, **segmentation**(객체별 단색 ID 마스크)
 - 해상도: 1280×720, 1920×1080, 1080×1920, 사용자 정의 / fps 24·25·30
 - 내보내기 묶음(P1): 샷별 ZIP = `first_frame.png` + `{pass}.mp4` + `camera.json`(프레임별 위치·회전·focal) + `shot.txt`(프롬프트)
-- 프로젝트 파일 저장/불러오기: `.previz.json`
+- 프로젝트 파일 저장/불러오기: `.blockshot.json`
 
 ### 6.7 스크립트 API — P0(코어)/P1(에디터)
-- JavaScript(TypeScript 타입 제공) 기반 `previz` API. 상세: [`SCRIPT_API.md`](./SCRIPT_API.md)
+- JavaScript(TypeScript 타입 제공) 기반 `blockshot` API. 상세: [`SCRIPT_API.md`](./SCRIPT_API.md)
 - **스크립트는 Spec을 생성/수정할 뿐**, 렌더러를 직접 만지지 않는다 → 결과는 항상 직렬화 가능한 Spec
 - 실행 샌드박스: Web Worker + 허용 API만 노출 (P0), QuickJS-wasm 격리 (P1, 외부 공유 스크립트 실행 시)
 - 실행 제한: 시간(2초), 생성 객체 수, 네트워크·DOM 접근 불가
@@ -139,15 +139,15 @@ Vercel 서버리스 환경에서 장시간 연결형 MCP 대신, **"프롬프트
 | --- | --- | --- |
 | **프롬프트 키트 (복사/붙여넣기)** | P0 | 앱이 시스템 지침 + 스키마 요약 + few-shot 예시 + 사용자 요청을 하나의 프롬프트로 조립. 사용자가 외부 LLM에 붙여넣고 결과를 다시 앱에 붙여넣음 |
 | **자가 교정 루프** | P0 | 검증 실패 시 경로·기대값·받은 값을 담은 "수정 요청 프롬프트" 자동 생성 |
-| **정적 스펙 엔드포인트** | P0 | `/llms.txt`, `/schema/previz.schema.json`, `/docs/script-api.md` 를 정적 파일로 공개 → 웹 브라우징 가능한 LLM이 직접 읽음 |
+| **정적 스펙 엔드포인트** | P0 | `/llms.txt`, `/schema/blockshot.schema.json`, `/docs/script-api.md` 를 정적 파일로 공개 → 웹 브라우징 가능한 LLM이 직접 읽음 |
 | **URL 임포트** | P1 | `?spec=<base64url+gzip>` 또는 `#script=` 로 장면 공유/주입 (LLM이 링크를 만들어 줄 수 있음) |
 | **부분 패치** | P1 | 전체 문서 대신 JSON Patch(RFC 6902) / `ops[]` 로 기존 장면 수정 |
 | **BYOK 앱 내 생성** | P2 | 사용자 API 키로 Vercel Route Handler(스트리밍)에서 LLM 호출. 키는 브라우저에만 저장 |
 | **원격 MCP(HTTP Streamable)** | P2 | Vercel에서도 stateless HTTP MCP는 가능 — 수요 확인 후 검토 |
 
 입력 포맷은 두 가지를 모두 받는다:
-1. **Previz Spec JSON** (선언형, 검증이 쉬움 — 기본 권장)
-2. **Previz Script** (명령형, 반복·수학적 배치에 유리)
+1. **Blockshot Spec JSON** (선언형, 검증이 쉬움 — 기본 권장)
+2. **Blockshot Script** (명령형, 반복·수학적 배치에 유리)
 
 붙여넣기 영역은 자동 판별: `{`로 시작하고 `specVersion`이 있으면 Spec, 그 외 코드면 Script, 코드펜스(```json / ```js)가 섞여 있으면 추출.
 
@@ -156,7 +156,7 @@ Vercel 서버리스 환경에서 장시간 연결형 MCP 대신, **"프롬프트
 - 스토리보드 이미지 첨부는 앱에서 처리하지 않고, 프롬프트 키트 안내문에 "멀티모달 LLM에 이미지와 함께 붙여넣기"로 유도
 
 ### 6.10 저장 & 공유 — P0/P1
-- P0: IndexedDB 자동 저장, `.previz.json` 다운로드/업로드
+- P0: IndexedDB 자동 저장, `.blockshot.json` 다운로드/업로드
 - P1: 공유 링크(URL 인코딩, 작은 장면), P2: 클라우드 저장(Supabase 또는 Vercel Blob) + 로그인
 
 ## 7. 비기능 요구사항

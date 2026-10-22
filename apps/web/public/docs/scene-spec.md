@@ -1,9 +1,9 @@
-# Previz Spec v0.1 — 장면 문서 포맷
+# Blockshot Spec v0.1 — 장면 문서 포맷
 
-Previz Spec은 프로젝트의 **유일한 진실 원천** 이다. UI 편집, 스크립트, AI 출력 모두 이 문서를 만들거나 수정한다. 렌더러는 Spec을 읽기만 한다.
+Blockshot Spec은 프로젝트의 **유일한 진실 원천** 이다. UI 편집, 스크립트, AI 출력 모두 이 문서를 만들거나 수정한다. 렌더러는 Spec을 읽기만 한다.
 
 - 정식 스키마(코드): [`packages/core/src/schema.ts`](../packages/core/src/schema.ts) (zod)
-- JSON Schema: `pnpm --filter @previz/core gen:schema` → `apps/web/public/schema/previz.schema.json`
+- JSON Schema: `pnpm --filter @blockshot/core gen:schema` → `apps/web/public/schema/blockshot.schema.json`
 - 예시: [`packages/core/examples/living-room.json`](../packages/core/examples/living-room.json)
 
 ## 1. 규약

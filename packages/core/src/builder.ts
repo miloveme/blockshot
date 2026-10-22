@@ -4,7 +4,7 @@ import {
   type BodyPart,
   type Ease,
   type Pose,
-  type PrevizSpecInput,
+  type BlockshotSpecInput,
   type PropType,
   type Sensor,
   type Settings,
@@ -16,8 +16,8 @@ import { createRand, DEG, vec, yawTowards } from "./math";
 import { partPosition } from "./evaluate";
 
 /**
- * Script builder — the `scene` object exposed to Previz Scripts (docs/SCRIPT_API.md).
- * It only produces a PrevizSpecInput; it never touches rendering.
+ * Script builder — the `scene` object exposed to Blockshot Scripts (docs/SCRIPT_API.md).
+ * It only produces a BlockshotSpecInput; it never touches rendering.
  *
  * Relative camera moves (dolly/truck/pedestal) are computed from the last commanded
  * camera position and aim, in call order.
@@ -54,7 +54,7 @@ export interface CameraHandle {
 }
 
 export function createSceneBuilder() {
-  const spec: Required<Pick<PrevizSpecInput, "actors" | "props" | "cameras" | "actions" | "tracks" | "shots">> & PrevizSpecInput = {
+  const spec: Required<Pick<BlockshotSpecInput, "actors" | "props" | "cameras" | "actions" | "tracks" | "shots">> & BlockshotSpecInput = {
     specVersion: SPEC_VERSION,
     actors: [],
     props: [],
@@ -211,7 +211,7 @@ export function createSceneBuilder() {
     facing(from: Target, to: Target) {
       return yawTowards(resolveRough(from), resolveRough(to));
     },
-    toSpec(): PrevizSpecInput {
+    toSpec(): BlockshotSpecInput {
       return JSON.parse(JSON.stringify(spec));
     },
   };
@@ -222,11 +222,11 @@ export function createSceneBuilder() {
 export type SceneBuilder = ReturnType<typeof createSceneBuilder>["scene"];
 
 /**
- * Executes a Previz Script and returns the produced spec input.
+ * Executes a Blockshot Script and returns the produced spec input.
  * SECURITY: `new Function` is not a sandbox. Call this only inside an isolated Web Worker
  * (apps/web) or QuickJS — never on the main thread with untrusted code.
  */
-export function runScript(source: string): PrevizSpecInput {
+export function runScript(source: string): BlockshotSpecInput {
   const { scene, vec: v, rand } = createSceneBuilder();
   const fn = new Function("scene", "vec", "rand", `"use strict";\n${source}`);
   fn(scene, v, rand);
