@@ -1,0 +1,353 @@
+import type { Action, BodyPart, Key, Pose, PrevizSpec, Prop, Target, TrackProperty, Vec3 } from "./schema";
+import { applyEase, DEG, unwrapYaw, vec, yawTowards } from "./math";
+import { verticalFov } from "./camera";
+
+const WALK_SPEED = 1.3;
+const RUN_SPEED = 3.5;
+const TURN_TIME = 0.3;
+const ORBIT_SAMPLES_PER_SEC = 12;
+
+type KeyValue = Key["value"];
+interface CKey {
+  t: number;
+  value: KeyValue;
+  ease: Key["ease"];
+}
+interface Segment {
+  start: number;
+  end: number;
+  target: Target;
+}
+
+export interface CompiledScene {
+  spec: PrevizSpec;
+  /** `${targetId}/${property}` → keys sorted by time */
+  tracks: Map<string, CKey[]>;
+  /** actor id → head look-at segments */
+  looks: Map<string, Segment[]>;
+  /** camera id → aim segments */
+  aims: Map<string, Segment[]>;
+}
+
+export interface ActorState {
+  id: string;
+  name?: string;
+  color: string;
+  height: number;
+  build: "slim" | "average" | "heavy";
+  position: Vec3;
+  rotation: Vec3;
+  pose: Pose;
+  /** seconds since the current pose started — drives walk/run cycles */
+  poseTime: number;
+  lookTarget: Vec3 | null;
+}
+
+export interface CameraState {
+  id: string;
+  name?: string;
+  position: Vec3;
+  /** world point the camera aims at; null → use rotation */
+  target: Vec3 | null;
+  rotation: Vec3;
+  focalLength: number;
+  vFov: number;
+  aspect: number;
+}
+
+export interface SceneState {
+  t: number;
+  frame: number;
+  actors: Record<string, ActorState>;
+  props: Record<string, Prop>;
+  cameras: Record<string, CameraState>;
+  activeCameraId: string | null;
+  activeShotId: string | null;
+}
+
+const trackKey = (id: string, prop: TrackProperty) => `${id}/${prop}`;
+
+function insertKey(keys: CKey[], key: CKey) {
+  const i = keys.findIndex((k) => k.t > key.t);
+  if (i === -1) keys.push(key);
+  else keys.splice(i, 0, key);
+}
+
+/** Sample a key list at time t. */
+export function sampleKeys(keys: ReadonlyArray<CKey>, t: number): KeyValue {
+  const first = keys[0]!;
+  if (t <= first.t) return first.value;
+  for (let i = 1; i < keys.length; i++) {
+    const k1 = keys[i]!;
+    if (t < k1.t) {
+      const k0 = keys[i - 1]!;
+      if (k1.ease === "step" || typeof k0.value === "string" || typeof k1.value === "string") return k0.value;
+      const u = applyEase(k1.ease, (t - k0.t) / (k1.t - k0.t));
+      if (typeof k0.value === "number" && typeof k1.value === "number") return k0.value + (k1.value - k0.value) * u;
+      if (Array.isArray(k0.value) && Array.isArray(k1.value)) return vec.lerp(k0.value, k1.value, u);
+      return k0.value;
+    }
+  }
+  return keys[keys.length - 1]!.value;
+}
+
+/** Turns high-level actions + manual tracks into flat key lists. Pure. */
+export function compile(spec: PrevizSpec): CompiledScene {
+  const tracks = new Map<string, CKey[]>();
+  const looks = new Map<string, Segment[]>();
+  const aims = new Map<string, Segment[]>();
+  const scene: CompiledScene = { spec, tracks, looks, aims };
+
+  const track = (id: string, prop: TrackProperty, initial: KeyValue): CKey[] => {
+    const k = trackKey(id, prop);
+    let keys = tracks.get(k);
+    if (!keys) {
+      keys = [{ t: 0, value: initial, ease: prop === "pose" ? "step" : "linear" }];
+      tracks.set(k, keys);
+    }
+    return keys;
+  };
+
+  for (const a of spec.actors) {
+    track(a.id, "position", a.position);
+    track(a.id, "rotation", a.rotation);
+    track(a.id, "pose", a.pose);
+  }
+  for (const c of spec.cameras) {
+    track(c.id, "position", c.position);
+    track(c.id, "rotation", c.rotation);
+    track(c.id, "focalLength", c.focalLength);
+    if (c.lookAt !== undefined) aims.set(c.id, [{ start: 0, end: Infinity, target: c.lookAt }]);
+  }
+
+  // Actor actions first (camera actions may reference actor positions), then by start time.
+  const ordered = [...spec.actions].sort((x, y) => Number("camera" in x) - Number("camera" in y) || x.start - y.start);
+
+  for (const action of ordered) compileAction(scene, action, track);
+
+  // Manual tracks override generated ones for the same target/property.
+  for (const t of spec.tracks) {
+    tracks.set(trackKey(t.target, t.property), [...t.keys].sort((a, b) => a.t - b.t));
+  }
+  return scene;
+}
+
+function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop: TrackProperty, initial: KeyValue) => CKey[]) {
+  const { spec } = scene;
+  switch (a.type) {
+    case "walkTo":
+    case "runTo": {
+      const actor = spec.actors.find((x) => x.id === a.actor)!;
+      const pos = track(a.actor, "position", actor.position);
+      const rot = track(a.actor, "rotation", actor.rotation);
+      const pose = track(a.actor, "pose", actor.pose);
+      const startPos = sampleKeys(pos, a.start) as Vec3;
+      const startRot = sampleKeys(rot, a.start) as Vec3;
+      const prevPose = sampleKeys(pose, a.start) as Pose;
+      const waypoints: Vec3[] = Array.isArray(a.to[0]) ? (a.to as Vec3[]) : [a.to as Vec3];
+      const points = [startPos, ...waypoints];
+      const lengths = points.slice(1).map((p, i) => vec.distance(points[i]!, p));
+      const total = lengths.reduce((s, l) => s + l, 0) || 1e-6;
+      const speed = a.speed ?? (a.type === "runTo" ? RUN_SPEED : WALK_SPEED);
+      const duration = a.duration ?? total / speed;
+
+      insertKey(pos, { t: a.start, value: startPos, ease: "linear" });
+      insertKey(rot, { t: a.start, value: startRot, ease: "linear" });
+      let time = a.start;
+      let yaw = startRot[1];
+      lengths.forEach((len, i) => {
+        const segDur = (len / total) * duration;
+        yaw = unwrapYaw(yaw, yawTowards(points[i]!, points[i + 1]!));
+        insertKey(rot, { t: time + Math.min(TURN_TIME, segDur / 2), value: [startRot[0], yaw, startRot[2]], ease: "easeInOut" });
+        time += segDur;
+        insertKey(pos, { t: time, value: points[i + 1]!, ease: "linear" });
+      });
+      insertKey(pose, { t: a.start, value: a.type === "runTo" ? "run" : "walk", ease: "step" });
+      insertKey(pose, { t: a.start + duration, value: prevPose === "walk" || prevPose === "run" ? "stand" : prevPose, ease: "step" });
+      break;
+    }
+    case "turnTo": {
+      const actor = spec.actors.find((x) => x.id === a.actor)!;
+      const rot = track(a.actor, "rotation", actor.rotation);
+      const from = sampleKeys(rot, a.start) as Vec3;
+      let yaw: number;
+      if (typeof a.target === "number") yaw = a.target;
+      else {
+        const here = sampleKeys(track(a.actor, "position", actor.position), a.start) as Vec3;
+        yaw = yawTowards(here, resolveTarget(scene, a.target, a.start));
+      }
+      insertKey(rot, { t: a.start, value: from, ease: "linear" });
+      insertKey(rot, { t: a.start + a.duration, value: [from[0], unwrapYaw(from[1], yaw), from[2]], ease: "easeInOut" });
+      break;
+    }
+    case "pose": {
+      const actor = spec.actors.find((x) => x.id === a.actor)!;
+      insertKey(track(a.actor, "pose", actor.pose), { t: a.start, value: a.pose, ease: "step" });
+      break;
+    }
+    case "lookAt": {
+      const list = scene.looks.get(a.actor) ?? [];
+      list.push({ start: a.start, end: a.end ?? Infinity, target: a.target });
+      scene.looks.set(a.actor, list);
+      break;
+    }
+    case "cameraMove": {
+      const cam = spec.cameras.find((x) => x.id === a.camera)!;
+      const pos = track(a.camera, "position", cam.position);
+      insertKey(pos, { t: a.start, value: sampleKeys(pos, a.start), ease: "linear" });
+      insertKey(pos, { t: a.start + a.duration, value: a.to, ease: a.ease });
+      break;
+    }
+    case "cameraLookAt": {
+      const list = scene.aims.get(a.camera) ?? [];
+      list.push({ start: a.start, end: Infinity, target: a.target });
+      scene.aims.set(a.camera, list);
+      break;
+    }
+    case "zoom": {
+      const cam = spec.cameras.find((x) => x.id === a.camera)!;
+      const fl = track(a.camera, "focalLength", cam.focalLength);
+      insertKey(fl, { t: a.start, value: sampleKeys(fl, a.start), ease: "linear" });
+      insertKey(fl, { t: a.start + a.duration, value: a.focalLength, ease: a.ease });
+      break;
+    }
+    case "orbit": {
+      const cam = spec.cameras.find((x) => x.id === a.camera)!;
+      const pos = track(a.camera, "position", cam.position);
+      const center = resolveTarget(scene, a.around, a.start);
+      const p0 = sampleKeys(pos, a.start) as Vec3;
+      const radius = Math.hypot(p0[0] - center[0], p0[2] - center[2]);
+      const angle0 = Math.atan2(p0[0] - center[0], p0[2] - center[2]) / DEG;
+      const n = Math.max(2, Math.ceil(a.duration * ORBIT_SAMPLES_PER_SEC));
+      for (let k = 0; k <= n; k++) {
+        const angle = angle0 + a.degrees * applyEase(a.ease, k / n);
+        insertKey(pos, {
+          t: a.start + (a.duration * k) / n,
+          value: [center[0] + radius * Math.sin(angle * DEG), p0[1], center[2] + radius * Math.cos(angle * DEG)],
+          ease: "linear",
+        });
+      }
+      if (!scene.aims.has(a.camera)) scene.aims.set(a.camera, [{ start: 0, end: Infinity, target: a.around }]);
+      break;
+    }
+  }
+}
+
+function activeSegment(list: Segment[] | undefined, t: number): Segment | undefined {
+  if (!list) return undefined;
+  let found: Segment | undefined;
+  for (const s of list) if (t >= s.start && t < s.end && (!found || s.start >= found.start)) found = s;
+  return found;
+}
+
+/** Height ratios (of actor height) and lateral/forward offsets per body part. */
+const PART_LAYOUT: Record<"stand" | "sit", Record<BodyPart, [y: number, side: number, forward: number]>> = {
+  stand: { head: [0.93, 0, 0], chest: [0.72, 0, 0], pelvis: [0.53, 0, 0], hand_l: [0.48, 0.2, 0], hand_r: [0.48, -0.2, 0], foot_l: [0.03, 0.1, 0.05], foot_r: [0.03, -0.1, 0.05] },
+  sit: { head: [0.7, 0, 0.05], chest: [0.5, 0, 0], pelvis: [0.27, 0, 0], hand_l: [0.33, 0.18, 0.25], hand_r: [0.33, -0.18, 0.25], foot_l: [0.03, 0.1, 0.45], foot_r: [0.03, -0.1, 0.45] },
+};
+
+/** World position of an actor body part. Local +X is the actor's left (actor faces +Z at yaw 0). */
+export function partPosition(state: Pick<ActorState, "position" | "rotation" | "height" | "pose">, part: BodyPart): Vec3 {
+  const layout = PART_LAYOUT[state.pose === "sit" ? "sit" : "stand"][part];
+  const h = state.height;
+  const s = h / 1.72;
+  const yaw = state.rotation[1] * DEG;
+  const x = layout[1] * s;
+  const z = layout[2] * s;
+  return [
+    state.position[0] + x * Math.cos(yaw) + z * Math.sin(yaw),
+    state.position[1] + layout[0] * h,
+    state.position[2] - x * Math.sin(yaw) + z * Math.cos(yaw),
+  ];
+}
+
+function actorCore(scene: CompiledScene, id: string, t: number) {
+  const actor = scene.spec.actors.find((a) => a.id === id)!;
+  const position = sampleKeys(scene.tracks.get(trackKey(id, "position"))!, t) as Vec3;
+  const rotation = sampleKeys(scene.tracks.get(trackKey(id, "rotation"))!, t) as Vec3;
+  const poseKeys = scene.tracks.get(trackKey(id, "pose"))!;
+  let poseStart = 0;
+  let pose = poseKeys[0]!.value as Pose;
+  for (const k of poseKeys) {
+    if (k.t > t) break;
+    if (k.value !== pose || k === poseKeys[0]) poseStart = k.t;
+    pose = k.value as Pose;
+  }
+  return { actor, position, rotation, pose, poseTime: Math.max(0, t - poseStart) };
+}
+
+/** Resolve a Vec3 or "id[.part]" reference to a world point at time t. */
+export function resolveTarget(scene: CompiledScene, target: Target, t: number): Vec3 {
+  if (typeof target !== "string") return target;
+  const [id, part] = target.split(".") as [string, string | undefined];
+  if (scene.spec.actors.some((a) => a.id === id)) {
+    const core = actorCore(scene, id, t);
+    return partPosition({ ...core, height: core.actor.height }, (part as BodyPart) ?? "chest");
+  }
+  const camKeys = scene.tracks.get(trackKey(id, "position"));
+  if (camKeys) return sampleKeys(camKeys, t) as Vec3;
+  const prop = scene.spec.props.find((p) => p.id === id);
+  if (prop) return prop.position;
+  return [0, 0, 0];
+}
+
+/** Deterministic scene state at time t (seconds). Pure. */
+export function evaluate(scene: CompiledScene, t: number): SceneState {
+  const { spec } = scene;
+  const [w, h] = spec.settings.resolution;
+  const aspect = w / h;
+
+  const actors: Record<string, ActorState> = {};
+  for (const a of spec.actors) {
+    const core = actorCore(scene, a.id, t);
+    const look = activeSegment(scene.looks.get(a.id), t);
+    actors[a.id] = {
+      id: a.id,
+      name: a.name,
+      color: a.color,
+      height: a.height,
+      build: a.build,
+      position: core.position,
+      rotation: core.rotation,
+      pose: core.pose,
+      poseTime: core.poseTime,
+      lookTarget: look ? resolveTarget(scene, look.target, t) : null,
+    };
+  }
+
+  const cameras: Record<string, CameraState> = {};
+  for (const c of spec.cameras) {
+    const focalLength = sampleKeys(scene.tracks.get(trackKey(c.id, "focalLength"))!, t) as number;
+    const lookTrack = scene.tracks.get(trackKey(c.id, "lookAt"));
+    const aim = activeSegment(scene.aims.get(c.id), t);
+    cameras[c.id] = {
+      id: c.id,
+      name: c.name,
+      position: sampleKeys(scene.tracks.get(trackKey(c.id, "position"))!, t) as Vec3,
+      rotation: sampleKeys(scene.tracks.get(trackKey(c.id, "rotation"))!, t) as Vec3,
+      target: lookTrack ? (sampleKeys(lookTrack, t) as Vec3) : aim ? resolveTarget(scene, aim.target, t) : null,
+      focalLength,
+      vFov: verticalFov(focalLength, c.sensor, aspect),
+      aspect,
+    };
+  }
+
+  let activeShotId: string | null = null;
+  let activeCameraId: string | null = spec.cameras[0]?.id ?? null;
+  for (const s of spec.shots) {
+    if (t >= s.start && t < s.end) {
+      activeShotId = s.id;
+      activeCameraId = s.camera;
+    }
+  }
+
+  return {
+    t,
+    frame: Math.round(t * spec.settings.fps),
+    actors,
+    props: Object.fromEntries(spec.props.map((p) => [p.id, p])),
+    cameras,
+    activeCameraId,
+    activeShotId,
+  };
+}

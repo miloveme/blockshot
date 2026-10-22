@@ -1,0 +1,17 @@
+# Previz
+
+> Web-based previsualization tool. A scene is a single JSON document (Previz Spec) or a JavaScript
+> "Previz Script" that builds one. Paste either into the app ("✨ AI / 스크립트") to block actors,
+> props, cameras, lenses and timing in 3D and render reference video for AI video models.
+
+Output exactly one fenced code block: ```json (Previz Spec) or ```js (Previz Script).
+
+## Docs
+
+- [Scene Spec](/docs/scene-spec.md): document format, conventions (Y-up, meters, seconds, degrees; rotation.y = 0 faces +Z), actions, shots
+- [Script API](/docs/script-api.md): `scene.*` builder API for procedural scenes
+- [JSON Schema](/schema/previz.schema.json): machine-readable schema (input form, defaults optional)
+
+## Examples
+
+- [Living room, two actors, two cameras](/examples/living-room.json)

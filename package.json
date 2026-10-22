@@ -1,0 +1,17 @@
+{
+  "name": "previz",
+  "private": true,
+  "packageManager": "pnpm@10.32.1",
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter @previz/core build && pnpm --filter web build",
+    "test": "pnpm --filter @previz/core test",
+    "typecheck": "pnpm -r typecheck",
+    "gen:schema": "pnpm --filter @previz/core gen:schema",
+    "lint": "pnpm --filter web lint",
+    "check": "pnpm test && pnpm typecheck && pnpm lint && pnpm build"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

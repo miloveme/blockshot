@@ -1,0 +1,36 @@
+{
+  "specVersion": "0.1",
+  "meta": { "title": "거실 — 민수의 귀가", "description": "민수가 문으로 들어와 소파에 앉아 있는 지영에게 다가간다." },
+  "settings": { "fps": 24, "duration": 8, "resolution": [1920, 1080], "seed": 1 },
+  "space": {
+    "type": "room", "width": 6, "depth": 8, "height": 2.8,
+    "openings": [
+      { "kind": "door", "wall": "north", "offset": 1.5, "width": 0.9, "height": 2.1 },
+      { "kind": "window", "wall": "west", "offset": 0, "width": 2.0, "height": 1.2, "sill": 0.9 }
+    ]
+  },
+  "actors": [
+    { "id": "minsu", "name": "민수", "color": "#e4572e", "height": 1.78, "position": [1.5, 0, -3.6], "rotation": [0, 0, 0], "pose": "stand" },
+    { "id": "jiyoung", "name": "지영", "color": "#4c9f70", "height": 1.63, "position": [-0.6, 0, -2.45], "rotation": [0, 0, 0], "pose": "sit" }
+  ],
+  "props": [
+    { "id": "sofa", "type": "sofa", "position": [-0.3, 0, -2.6], "color": "#6b7a90" },
+    { "id": "table", "type": "table", "position": [-0.3, 0, -1.3], "scale": [0.8, 0.6, 0.8], "color": "#a0785a" },
+    { "id": "lamp", "type": "lamp", "position": [-2.4, 0, -3.4] }
+  ],
+  "cameras": [
+    { "id": "camA", "name": "A — 와이드", "position": [2.6, 1.6, 2.8], "lookAt": "minsu.head", "focalLength": 28 },
+    { "id": "camB", "name": "B — OTS", "position": [-1.0, 1.22, -2.9], "lookAt": "minsu.chest", "focalLength": 28 }
+  ],
+  "actions": [
+    { "type": "walkTo", "actor": "minsu", "to": [[1.2, 0, -2.2], [0.7, 0, -1.7]], "start": 0.5, "duration": 3.2 },
+    { "type": "lookAt", "actor": "jiyoung", "target": "minsu.head", "start": 1.0 },
+    { "type": "turnTo", "actor": "minsu", "target": "jiyoung", "start": 3.8, "duration": 0.6 },
+    { "type": "pose", "actor": "minsu", "pose": "talk", "start": 4.5 },
+    { "type": "cameraMove", "camera": "camA", "to": [1.9, 1.5, 1.0], "start": 0, "duration": 4, "ease": "easeInOut" }
+  ],
+  "shots": [
+    { "id": "S1", "camera": "camA", "start": 0, "end": 4.2, "description": "민수가 들어와 소파 쪽으로 걷는다. 카메라는 천천히 달리 인.", "prompt": "cinematic wide shot, a man in his 30s walks into a warm living room at dusk, slow dolly in" },
+    { "id": "S2", "camera": "camB", "start": 4.2, "end": 8, "description": "지영 어깨 너머로 민수의 미소.", "prompt": "over-the-shoulder medium shot, 28mm, shallow depth of field, he smiles softly" }
+  ]
+}
