@@ -39,8 +39,11 @@ export function Mannequin({ id }: { id: string }) {
     const g = root.current;
     if (!a || !g) return;
     const s = a.height / 1.72;
-    g.position.set(...a.position);
-    g.rotation.set(a.rotation[0] * DEG, a.rotation[1] * DEG, a.rotation[2] * DEG, "YXZ");
+    // the gizmo owns the transform while this actor is being dragged
+    if (useStudio.getState().dragging !== id) {
+      g.position.set(...a.position);
+      g.rotation.set(a.rotation[0] * DEG, a.rotation[1] * DEG, a.rotation[2] * DEG, "YXZ");
+    }
     g.scale.set(s * width, s, s * width);
     if (!joints.current) {
       const found: Partial<Record<JointName, THREE.Group>> = {};
@@ -55,7 +58,14 @@ export function Mannequin({ id }: { id: string }) {
   });
 
   return (
-    <group ref={root}>
+    <group
+      ref={root}
+      name={`obj:${id}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        useStudio.getState().select(id);
+      }}
+    >
       <group name="pelvis" position={[0, HIP_Y, 0]}>
         <mesh castShadow>
           <sphereGeometry args={[0.13, 16, 12]} />

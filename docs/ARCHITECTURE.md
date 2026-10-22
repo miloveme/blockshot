@@ -21,11 +21,14 @@ blockshot/
 │        ├─ app/                   라우트 (현재 / 하나)
 │        ├─ components/
 │        │  ├─ Studio.tsx          레이아웃, 뷰 전환, 단축키
-│        │  ├─ Timeline.tsx        재생/스크럽/샷 블록
+│        │  ├─ Timeline.tsx        재생/스크럽/샷 블록/키 표시
+│        │  ├─ Toolbar·Properties·ShotEditor·LensBar.tsx  편집 UI
 │        │  ├─ ImportPanel.tsx     프롬프트 키트 + 붙여넣기 + 자가 교정
 │        │  └─ viewport/           R3F 장면: Viewport, Mannequin, Props, Space
 │        ├─ lib/
-│        │  ├─ store.ts            zustand: spec, compiled, sceneState, time, view
+│        │  ├─ store.ts            zustand: spec, compiled, sceneState, time, view, selection, undo/redo
+│        │  ├─ actions.ts          UI 명령 (core/edit + store.edit 1회 = undo 1단계)
+│        │  ├─ persist.ts          IndexedDB 자동 저장, .blockshot.json 열기/저장
 │        │  └─ run-script.ts       Worker 실행 + 타임아웃
 │        └─ workers/
 │           └─ script.worker.ts    스크립트 샌드박스 (네트워크/스토리지 제거)
@@ -37,6 +40,7 @@ blockshot/
 │     │  ├─ evaluate.ts            compile(actions→tracks) + evaluate(t) + 참조 해석
 │     │  ├─ builder.ts             Script API (`scene.*`) + runScript
 │     │  ├─ camera.ts              렌즈/센서 → FOV
+│     │  ├─ edit.ts                UI 편집 순수 연산 (추가·삭제·키·샷·화면비·스냅), 새 spec 반환
 │     │  ├─ math.ts                vec, easing, yaw, seeded PRNG
 │     │  ├─ paste.ts               붙여넣기 판별(코드펜스, 관대한 JSON)
 │     │  └─ prompt-kit.ts          LLM 프롬프트 조립

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { DEG, type Prop } from "@blockshot/core";
+import { useStudio } from "@/lib/store";
 
 /** Simple primitive-built props at real-world size (meters). `scale` multiplies presets. */
 
@@ -123,6 +124,11 @@ function PropMesh({ type, color }: { type: Prop["type"]; color: string }): React
 export function PropObject({ prop }: { prop: Prop }) {
   return (
     <group
+      name={`obj:${prop.id}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        useStudio.getState().select(prop.id);
+      }}
       position={prop.position}
       rotation={[prop.rotation[0] * DEG, prop.rotation[1] * DEG, prop.rotation[2] * DEG, "YXZ"]}
       scale={prop.scale}
