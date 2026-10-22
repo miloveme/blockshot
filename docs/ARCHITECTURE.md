@@ -18,7 +18,7 @@ blockshot/
 │     │  ├─ schema/                생성된 JSON Schema (pnpm gen:schema)
 │     │  ├─ docs/ examples/        LLM이 읽는 정적 문서 사본
 │     └─ src/
-│        ├─ app/                   라우트: / 랜딩, /studio 앱(+loading.tsx)
+│        ├─ app/                   라우트: / 랜딩, /projects 프로젝트 목록, /studio 앱(+loading.tsx)
 │        ├─ components/
 │        │  ├─ Studio.tsx          레이아웃, 뷰 전환, 단축키
 │        │  ├─ Timeline.tsx        재생/스크럽/샷 블록/키 표시
@@ -28,7 +28,8 @@ blockshot/
 │        ├─ lib/
 │        │  ├─ store.ts            zustand: spec, compiled, sceneState, time, view, selection, undo/redo
 │        │  ├─ actions.ts          UI 명령 (core/edit + store.edit 1회 = undo 1단계)
-│        │  ├─ persist.ts          IndexedDB 자동 저장, .blockshot.json 열기/저장
+│        │  ├─ projects.ts         IndexedDB 다중 프로젝트 저장소 (목록/생성/복제/삭제)
+│        │  ├─ persist.ts          현재 프로젝트 자동 저장(이탈 시 flush), .blockshot.json 열기/저장
 │        │  └─ run-script.ts       Worker 실행 + 타임아웃
 │        └─ workers/
 │           └─ script.worker.ts    스크립트 샌드박스 (네트워크/스토리지 제거)
@@ -40,6 +41,7 @@ blockshot/
 │     │  ├─ evaluate.ts            compile(actions→tracks) + evaluate(t) + 참조 해석
 │     │  ├─ builder.ts             Script API (`scene.*`) + runScript
 │     │  ├─ camera.ts              렌즈/센서 → FOV
+│     │  ├─ templates.ts           새 프로젝트 시작 장면 (공간 프리셋)
 │     │  ├─ edit.ts                UI 편집 순수 연산 (추가·삭제·키·샷·화면비·스냅), 새 spec 반환
 │     │  ├─ math.ts                vec, easing, yaw, seeded PRNG
 │     │  ├─ paste.ts               붙여넣기 판별(코드펜스, 관대한 JSON)

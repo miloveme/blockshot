@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useEffect } from "react";
 import { useStudio, type Panel, type ViewMode } from "@/lib/store";
 import { Timeline } from "./Timeline";
@@ -294,8 +295,20 @@ export default function Studio() {
       }}
     >
       <header className="flex items-center gap-4 border-b border-white/10 px-4 py-2.5">
-        <span className="font-semibold tracking-tight">Blockshot</span>
-        <span className="truncate text-sm text-zinc-400">{title}</span>
+        <Link href="/projects" className="rounded bg-white/10 px-2.5 py-1 text-xs hover:bg-white/20" title="프로젝트 목록 (자동 저장됨)">
+          ← 프로젝트
+        </Link>
+        <input
+          key={title}
+          defaultValue={title}
+          aria-label="프로젝트 제목"
+          className="w-56 truncate rounded border border-transparent bg-transparent px-2 py-1 text-sm text-zinc-200 outline-none hover:border-white/10 focus:border-amber-400"
+          onBlur={(e) => {
+            const v = e.currentTarget.value.trim();
+            if (v && v !== title) useStudio.getState().edit((sp) => ({ ...sp, meta: { ...sp.meta, title: v } }));
+          }}
+          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+        />
         <div className="ml-auto flex items-center gap-3">
           <ViewButtons />
           <Toolbar onImport={() => useStudio.getState().setPanel("ai")} />

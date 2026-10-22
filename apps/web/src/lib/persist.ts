@@ -1,49 +1,35 @@
 "use client";
 
 import { validateSpec, type BlockshotSpec } from "@blockshot/core";
+import example from "@blockshot/core/examples/living-room.json";
 import { useStudio } from "./store";
+import { createProject, getCurrentId, getProject, listProjects, parseSpecText, saveProject, setCurrentId, storageAvailable } from "./projects";
 
-/** IndexedDB autosave of the current document + `.blockshot.json` open/save helpers. */
+/** Autosave of the current project + `.blockshot.json` open/save helpers. */
 
-const DB_NAME = "blockshot";
-const STORE = "kv";
-const KEY = "current";
 const SAVE_DEBOUNCE_MS = 500;
 
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
+/** The project to open: remembered one → most recent → a fresh sample (first visit straight to /studio). */
+async function resolveProject(): Promise<{ id: string; spec: BlockshotSpec }> {
+  const remembered = getCurrentId();
+  const found = remembered ? await getProject(remembered) : undefined;
+  if (found) return { id: found.id, spec: found.spec };
+  const latest = (await listProjects())[0];
+  if (latest) return { id: latest.id, spec: latest.spec };
+  const sample = validateSpec(example);
+  if (!sample.ok) throw new Error("Bundled example spec is invalid");
+  return { id: await createProject(sample.spec), spec: sample.spec };
 }
 
-async function idb<T>(mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
-  const db = await openDb();
-  try {
-    return await new Promise<T>((resolve, reject) => {
-      const req = run(db.transaction(STORE, mode).objectStore(STORE));
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-  } finally {
-    db.close();
-  }
-}
-
-/** Loads the saved document (if valid) into the store, then keeps saving edits. Returns a stop function. */
+/** Loads the current project into the store, then keeps saving edits to it. Returns a stop function that flushes. */
 export async function startAutosave(): Promise<() => void> {
-  if (typeof indexedDB === "undefined") return () => {};
+  if (!storageAvailable()) return () => {};
+  let id: string;
   try {
-    const saved = await idb<unknown>("readonly", (s) => s.get(KEY));
-    if (saved) {
-      const r = validateSpec(saved);
-      if (r.ok) {
-        useStudio.getState().setSpec(r.spec);
-        useStudio.getState().notify("자동 저장본을 불러왔습니다");
-      }
-    }
+    const project = await resolveProject();
+    id = project.id;
+    setCurrentId(id);
+    useStudio.getState().setSpec(project.spec);
   } catch {
     // storage unavailable (private mode etc.) — editing still works, just not persisted
     return () => {};
@@ -51,37 +37,31 @@ export async function startAutosave(): Promise<() => void> {
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   let last: BlockshotSpec = useStudio.getState().spec;
+  let dirty = false;
+  const flush = () => {
+    clearTimeout(timer);
+    if (!dirty) return;
+    dirty = false;
+    saveProject(id, last).catch(() => {});
+  };
   const unsub = useStudio.subscribe((s) => {
     if (s.spec === last) return;
     last = s.spec;
+    dirty = true;
     clearTimeout(timer);
-    const spec = s.spec;
-    timer = setTimeout(() => {
-      idb("readwrite", (st) => st.put(spec, KEY)).catch(() => {});
-    }, SAVE_DEBOUNCE_MS);
+    timer = setTimeout(flush, SAVE_DEBOUNCE_MS);
   });
   return () => {
-    clearTimeout(timer);
     unsub();
+    flush(); // leaving the studio must not drop the last 500 ms of edits
   };
 }
 
-/** Parses and loads a `.blockshot.json` text. Reports problems through the store notice. */
+/** Parses and loads a `.blockshot.json` text into the open project. Reports problems through the store notice. */
 export function loadSpecText(text: string, source: string) {
   const { notify, setSpec } = useStudio.getState();
-  let json: unknown;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    notify(`${source}: JSON 형식이 아닙니다`, "error");
-    return;
-  }
-  const r = validateSpec(json);
-  if (!r.ok) {
-    const first = r.errors[0]!;
-    notify(`${source}: ${first.path || "(root)"} — ${first.message}${r.errors.length > 1 ? ` 외 ${r.errors.length - 1}건` : ""}`, "error");
-    return;
-  }
+  const r = parseSpecText(text, source);
+  if (!r.ok) return notify(r.message, "error");
   setSpec(r.spec);
   notify(`${source} 열기 완료`);
 }
