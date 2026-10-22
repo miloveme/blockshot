@@ -66,7 +66,10 @@ ${catalogTable()}
 - Seat chairs/sofas toward what people look at (a table, a TV, each other). Put cups/phones ON surfaces: set position y to the surface height (table top = 0.76 × scale y).
 - No two props may overlap on the floor (stacked items excepted). Keep walking paths ≥ 0.8 m wide and never route an actor through furniture: add waypoints around it.
 - Place actors on free floor, standing near what they interact with; seated actors (pose "sit") go on a sofa/chair footprint. Keep doors and windows unblocked.
-- Put the cameras where the audience would stand; keep every shot's subject inside the frame.`;
+- Put the cameras where the audience would stand; keep every shot's subject inside the frame.
+- Mirrors: prop type "mirror" is a REAL reflective mirror (0.9 × 1.8 m at scale 1, "color" = frame, position y = bottom edge). It reflects what is in front of it (+Z at yaw 0; same wall/yaw rules as furniture) and only from its front side. NEVER fake a reflection with a second actor or flipped copy — put the real actor in front of the mirror and let the mirror show it.
+  To film a reflection, put the camera in front of the mirror, off to one side so it is not in the reflection, aimed at the spot on the mirror where the reflection appears. For a mirror on the north wall at z = Zm, the reflection of a point (x, y, z) appears at (x, y, 2·Zm − z): aim at that point's line of sight through the mirror.
+  "Reveal it was a mirror": start with a long lens (100–135mm) so the frame is filled only by the mirror surface, then "zoom" out to 24–35mm (and/or dolly back) so the mirror frame, the wall and the real actor appear. Keep the actor walking toward the mirror during the move.`;
 
 /** World position of a wall opening: where on the floor plan the door/window is. */
 function openingWorld(space: Extract<Space, { type: "room" }>, o: Extract<Space, { type: "room" }>["openings"][number]): [number, number] {

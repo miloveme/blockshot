@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { EXAMPLE_SCRIPT, EXAMPLE_SPEC, buildPrompt, createBlankSpec, describeSpace, lintLayout, runScript, validateSpec, type BlockshotSpec } from "../src";
+import { compile, evaluate, EXAMPLE_SCRIPT, EXAMPLE_SPEC, buildPrompt, createBlankSpec, describeSpace, lintLayout, runScript, validateSpec, type BlockshotSpec } from "../src";
 import example from "../examples/living-room.json";
+import mirrorReveal from "../examples/mirror-reveal.json";
 
 const parse = (input: unknown): BlockshotSpec => {
   const r = validateSpec(input);
@@ -34,6 +35,13 @@ describe("prompt kit", () => {
     expect(buildPrompt({ request: "x", mode: "script", project: blank })).toContain("scene.prop(");
   });
 
+  it("teaches the LLM how to use the real mirror prop", () => {
+    const prompt = buildPrompt({ request: "x" });
+    expect(prompt).toContain('prop type "mirror" is a REAL reflective mirror');
+    expect(prompt).toContain("Reveal it was a mirror");
+    expect(prompt).toContain("mirror: 0.9 × 1.8 × 0.04");
+  });
+
   it("derives the project block from the current scene", () => {
     const spec = parse(example);
     expect(buildPrompt({ request: "x", current: spec })).toContain("Project setting");
@@ -44,6 +52,17 @@ describe("prompt kit", () => {
 describe("lintLayout", () => {
   it("accepts the bundled living-room example", () => {
     expect(lintLayout(parse(example))).toEqual([]);
+  });
+
+  it("accepts the mirror-reveal example (mirror prop, zoom-out reveal)", () => {
+    const spec = parse(mirrorReveal);
+    expect(spec.props.some((p) => p.type === "mirror")).toBe(true);
+    expect(lintLayout(spec)).toEqual([]);
+    const cam = spec.cameras[0]!;
+    const start = evaluate(compile(spec), 0).cameras[cam.id]!.focalLength;
+    const end = evaluate(compile(spec), spec.settings.duration).cameras[cam.id]!.focalLength;
+    expect(start).toBeGreaterThanOrEqual(100); // opens on the mirror surface only…
+    expect(end).toBeLessThanOrEqual(35); // …and zooms out to reveal the mirror and the real actor
   });
 
   it("flags an empty room", () => {

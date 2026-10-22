@@ -84,6 +84,8 @@
 
 ## M5 이후
 
+- [x] (앞당김) 반사 거울 소품 `mirror` — 평면 반사, 거울 리빌 샷 가능 (예제 `mirror-reveal.json`)
+
 - [ ] BYOK 앱 내 생성 (`/api/generate` 스트리밍)
 - [ ] GLB 임포트 (사용자 모델), 리깅된 마네킹 옵션
 - [ ] 클라우드 저장 + 로그인 (Supabase 또는 Vercel Blob)

@@ -80,7 +80,7 @@ export type Actor = z.infer<typeof Actor>;
 
 export const PROP_TYPES = [
   "box", "cylinder", "sphere", "plane",
-  "chair", "table", "sofa", "bed", "door", "window", "car", "lamp", "cup", "phone",
+  "chair", "table", "sofa", "bed", "door", "window", "car", "lamp", "cup", "phone", "mirror",
 ] as const;
 export const PropType = z.enum(PROP_TYPES);
 export type PropType = z.infer<typeof PropType>;

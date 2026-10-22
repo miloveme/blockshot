@@ -1,6 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
+import * as THREE from "three";
+import { Reflector } from "three/examples/jsm/objects/Reflector.js";
 import { DEG, type Prop } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
 
@@ -28,6 +30,29 @@ function legs(w: number, d: number, h: number, t: number, color: string) {
   return ([[1, 1], [1, -1], [-1, 1], [-1, -1]] as const).map(([sx, sz], i) => (
     <Box key={i} size={[t, h, t]} at={[(sx * (w - t)) / 2, h / 2, (sz * (d - t)) / 2]} color={color} />
   ));
+}
+
+/** Planar mirror: a framed Reflector that re-renders the scene as seen in its plane (works for every camera and in recordings). */
+const MIRROR_W = 0.9;
+const MIRROR_H = 1.8;
+function Mirror({ color }: { color: string }) {
+  const reflector = useMemo(
+    () => new Reflector(new THREE.PlaneGeometry(MIRROR_W, MIRROR_H), { textureWidth: 768, textureHeight: 1536, clipBias: 0.003, color: new THREE.Color("#d8dde6") }),
+    [],
+  );
+  useEffect(() => () => reflector.dispose(), [reflector]);
+  const frame = 0.04;
+  return (
+    <>
+      <primitive object={reflector} position={[0, MIRROR_H / 2, 0.02]} />
+      <Box size={[MIRROR_W + frame * 2, frame, 0.04]} at={[0, MIRROR_H + frame / 2, 0]} color={color} />
+      <Box size={[MIRROR_W + frame * 2, frame, 0.04]} at={[0, -frame / 2, 0]} color={color} />
+      <Box size={[frame, MIRROR_H, 0.04]} at={[-(MIRROR_W + frame) / 2, MIRROR_H / 2, 0]} color={color} />
+      <Box size={[frame, MIRROR_H, 0.04]} at={[(MIRROR_W + frame) / 2, MIRROR_H / 2, 0]} color={color} />
+      {/* backing so the back of the mirror is not see-through */}
+      <Box size={[MIRROR_W, MIRROR_H, 0.01]} at={[0, MIRROR_H / 2, -0.005]} color="#2a2d33" />
+    </>
+  );
 }
 
 function PropMesh({ type, color }: { type: Prop["type"]; color: string }): ReactNode {
@@ -116,6 +141,8 @@ function PropMesh({ type, color }: { type: Prop["type"]; color: string }): React
       );
     case "cup":
       return <Cyl r={0.04} h={0.1} at={[0, 0.05, 0]} color={color} />;
+    case "mirror":
+      return <Mirror color={color} />;
     case "phone":
       return <Box size={[0.075, 0.008, 0.155]} at={[0, 0.004, 0]} color={dark} />;
   }

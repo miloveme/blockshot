@@ -29,5 +29,6 @@ export const PROP_CATALOG: Record<PropType, PropInfo> = {
   car: { size: [1.8, 1.6, 4.4], note: "front (hood) toward +Z" },
   lamp: { size: [0.44, 1.68, 0.44], note: "floor lamp" },
   cup: { size: [0.08, 0.1, 0.08], passable: true, note: "tabletop item — set position y to the surface height" },
+  mirror: { size: [0.9, 1.8, 0.04], passable: true, note: "REAL reflective mirror (shows actors/props/room); stand or hang it against a wall, reflecting toward +Z; position y = bottom edge (hang: set y)" },
   phone: { size: [0.075, 0.01, 0.155], passable: true, note: "tabletop item — set position y to the surface height" },
 };
