@@ -30,8 +30,8 @@ export default function Home() {
         <nav className="flex items-center gap-5 text-sm text-zinc-400">
           <a href="#features" className="hover:text-white">기능</a>
           <a href="#how" className="hover:text-white">사용 방법</a>
-          <Link href="/studio" className="rounded bg-amber-400 px-3.5 py-1.5 font-medium text-black hover:bg-amber-300">
-            스튜디오 열기
+          <Link href="/projects" className="rounded bg-amber-400 px-3.5 py-1.5 font-medium text-black hover:bg-amber-300">
+            내 프로젝트
           </Link>
         </nav>
       </header>
@@ -49,7 +49,7 @@ export default function Home() {
               3D 마네킹으로 인물 배치와 카메라 동선을 검토하고, 브라우저에서 바로 참조 영상을 렌더링합니다. 설치도 서버도 필요 없습니다.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/studio" className="rounded bg-amber-400 px-6 py-3 text-sm font-semibold text-black hover:bg-amber-300">
+              <Link href="/projects" className="rounded bg-amber-400 px-6 py-3 text-sm font-semibold text-black hover:bg-amber-300">
                 지금 시작하기 →
               </Link>
               <a href="#how" className="rounded border border-white/15 px-6 py-3 text-sm text-zinc-200 hover:bg-white/5">
@@ -90,10 +90,10 @@ export default function Home() {
 
         <section className="mx-auto w-full max-w-6xl px-6 pb-24 pt-8">
           <div className="rounded-xl border border-amber-400/30 bg-amber-400/5 px-6 py-12 text-center">
-            <h2 className="text-2xl font-semibold tracking-tight">샘플 장면으로 바로 시작해 보세요</h2>
-            <p className="mx-auto mt-3 max-w-md text-sm text-zinc-400">거실 장면이 미리 로드되어 있습니다. 인물을 옮기고, 렌즈를 바꾸고, 렌더까지 해보세요.</p>
-            <Link href="/studio" className="mt-6 inline-block rounded bg-amber-400 px-6 py-3 text-sm font-semibold text-black hover:bg-amber-300">
-              스튜디오 열기 →
+            <h2 className="text-2xl font-semibold tracking-tight">바로 시작해 보세요</h2>
+            <p className="mx-auto mt-3 max-w-md text-sm text-zinc-400">새 프로젝트를 만들거나 샘플 거실 장면으로 시작해 보세요. 인물을 옮기고, 렌즈를 바꾸고, 렌더까지 해보세요.</p>
+            <Link href="/projects" className="mt-6 inline-block rounded bg-amber-400 px-6 py-3 text-sm font-semibold text-black hover:bg-amber-300">
+              내 프로젝트 →
             </Link>
           </div>
         </section>
