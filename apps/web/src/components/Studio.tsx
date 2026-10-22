@@ -5,6 +5,12 @@ import { useEffect, useState } from "react";
 import { useStudio, type ViewMode } from "@/lib/store";
 import { Timeline } from "./Timeline";
 import { ImportPanel } from "./ImportPanel";
+import { Toolbar } from "./Toolbar";
+import { LensBar } from "./LensBar";
+import { Outliner, Properties } from "./Properties";
+import { ShotEditor } from "./ShotEditor";
+import { deleteSelected, insertKeyAtCurrentTime, removeKeysAtCurrentTime } from "@/lib/actions";
+import { loadSpecText, startAutosave } from "@/lib/persist";
 
 const Viewport = dynamic(() => import("./viewport/Viewport"), { ssr: false });
 
@@ -62,63 +68,61 @@ function ViewButtons() {
   );
 }
 
-function SidePanel() {
-  const spec = useStudio((s) => s.spec);
-  const activeShotId = useStudio((s) => s.sceneState.activeShotId);
-  const { setTime, setView } = useStudio.getState();
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <aside className="flex w-72 flex-col gap-4 overflow-y-auto border-l border-white/10 bg-[#15171c] p-4 text-sm text-zinc-300">
-      <section>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">샷 리스트</h3>
-        <ol className="flex flex-col gap-2">
-          {spec.shots.map((s) => (
-            <li key={s.id}>
-              <button
-                className={`w-full rounded border p-2 text-left ${s.id === activeShotId ? "border-amber-400 bg-amber-400/10" : "border-white/10 hover:bg-white/5"}`}
-                onClick={() => {
-                  setTime(s.start);
-                  setView({ kind: "shot" });
-                }}
-              >
-                <div className="flex justify-between font-mono text-xs">
-                  <span className="font-semibold text-white">{s.id}</span>
-                  <span>
-                    {s.start.toFixed(1)}–{s.end.toFixed(1)}s · {s.camera}
-                  </span>
-                </div>
-                {s.description ? <p className="mt-1 text-xs text-zinc-400">{s.description}</p> : null}
-              </button>
-            </li>
-          ))}
-          {spec.shots.length === 0 ? <li className="text-xs text-zinc-500">샷이 없습니다</li> : null}
-        </ol>
-      </section>
-      <section>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">인물</h3>
-        <ul className="flex flex-col gap-1 text-xs">
-          {spec.actors.map((a) => (
-            <li key={a.id} className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded-full" style={{ background: a.color }} />
-              {a.name ?? a.id} <span className="text-zinc-500">({a.height}m)</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-      <section className="text-xs text-zinc-500">
-        {spec.settings.resolution.join("×")} · {spec.settings.fps}fps · {spec.settings.duration}s
+    <section>
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+function SidePanel() {
+  const [tab, setTab] = useState<"scene" | "shots">("scene");
+  const settings = useStudio((s) => s.spec.settings);
+  const tabBtn = (id: typeof tab, label: string) => (
+    <button
+      onClick={() => setTab(id)}
+      className={`flex-1 rounded px-2 py-1 text-xs ${tab === id ? "bg-white/15 text-white" : "text-zinc-400 hover:bg-white/5"}`}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <aside className="flex w-80 flex-col gap-4 overflow-y-auto border-l border-white/10 bg-[#15171c] p-4 text-sm text-zinc-300">
+      <div className="flex gap-1">
+        {tabBtn("scene", "장면")}
+        {tabBtn("shots", "샷 리스트")}
+      </div>
+      {tab === "scene" ? (
+        <>
+          <Section title="아웃라이너">
+            <Outliner />
+          </Section>
+          <Section title="속성">
+            <Properties />
+          </Section>
+        </>
+      ) : (
+        <ShotEditor />
+      )}
+      <section className="mt-auto text-xs text-zinc-500">
+        {settings.resolution.join("×")} · {settings.fps}fps · {settings.duration}s
       </section>
     </aside>
   );
 }
 
-function downloadSpec() {
-  const spec = useStudio.getState().spec;
-  const blob = new Blob([JSON.stringify(spec, null, 2)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `${spec.meta.title.replace(/[^\p{L}\p{N}_-]+/gu, "_") || "scene"}.blockshot.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+function Toast() {
+  const notice = useStudio((s) => s.notice);
+  if (!notice) return null;
+  return (
+    <div
+      className={`pointer-events-none fixed bottom-24 left-1/2 z-50 max-w-[80vw] -translate-x-1/2 rounded px-3 py-2 text-xs shadow-lg ${notice.kind === "error" ? "bg-red-600 text-white" : "bg-zinc-700 text-zinc-100"}`}
+    >
+      {notice.text}
+    </div>
+  );
 }
 
 export default function Studio() {
@@ -127,12 +131,49 @@ export default function Studio() {
   const [w, h] = useStudio((s) => s.spec.settings.resolution);
 
   useEffect(() => {
+    let stop: (() => void) | undefined;
+    let cancelled = false;
+    void startAutosave().then((fn) => (cancelled ? fn() : (stop = fn)));
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, []);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
-      if (e.code === "Space") {
+      // typing fields keep their keys; the timeline slider / color picker must not swallow shortcuts
+      const el = e.target;
+      if (el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) return;
+      if (el instanceof HTMLInputElement && !["range", "color", "checkbox"].includes(el.type)) return;
+      const s = useStudio.getState();
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.code === "KeyZ") {
         e.preventDefault();
-        const s = useStudio.getState();
+        if (e.shiftKey) s.redo();
+        else s.undo();
+      } else if (mod && e.code === "KeyY") {
+        e.preventDefault();
+        s.redo();
+      } else if (mod) {
+        return;
+      } else if (e.code === "Space") {
+        e.preventDefault();
         s.setPlaying(!s.playing);
+      } else if (e.code === "KeyK") {
+        if (e.altKey) removeKeysAtCurrentTime();
+        else insertKeyAtCurrentTime();
+      } else if (e.code === "Delete" || e.code === "Backspace") {
+        e.preventDefault();
+        deleteSelected();
+      } else if (e.code === "KeyW") s.setGizmoMode("translate");
+      else if (e.code === "KeyE") s.setGizmoMode("rotate");
+      else if (e.code === "KeyS") s.setSnap(!s.snapEnabled);
+      else if (e.code === "KeyV") s.setView({ kind: "free" });
+      else if (e.code === "Digit0") s.setView({ kind: "shot" });
+      else if (/^Digit[1-9]$/.test(e.code)) {
+        const cam = s.spec.cameras[Number(e.code.slice(5)) - 1];
+        if (cam) s.setView({ kind: "camera", id: cam.id });
       }
     };
     window.addEventListener("keydown", onKey);
@@ -140,18 +181,21 @@ export default function Studio() {
   }, []);
 
   return (
-    <div className="flex h-dvh flex-col bg-[#0f1115] text-zinc-100">
+    <div
+      className="flex h-dvh flex-col bg-[#0f1115] text-zinc-100"
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        const f = e.dataTransfer.files[0];
+        if (f) void f.text().then((text) => loadSpecText(text, f.name));
+      }}
+    >
       <header className="flex items-center gap-4 border-b border-white/10 px-4 py-2.5">
         <span className="font-semibold tracking-tight">Blockshot</span>
         <span className="truncate text-sm text-zinc-400">{title}</span>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-3">
           <ViewButtons />
-          <button className="rounded bg-white/10 px-2.5 py-1 text-xs hover:bg-white/20" onClick={downloadSpec}>
-            JSON 내보내기
-          </button>
-          <button className="rounded bg-amber-400 px-2.5 py-1 text-xs font-medium text-black hover:bg-amber-300" onClick={() => setImportOpen(true)}>
-            ✨ AI / 스크립트
-          </button>
+          <Toolbar onImport={() => setImportOpen(true)} />
         </div>
       </header>
       <div className="flex min-h-0 flex-1">
@@ -170,7 +214,9 @@ export default function Studio() {
           <SidePanel />
         )}
       </div>
+      <LensBar />
       <Timeline />
+      <Toast />
     </div>
   );
 }
