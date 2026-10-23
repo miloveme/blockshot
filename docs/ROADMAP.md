@@ -93,6 +93,7 @@
 
 - [x] 리깅 엔진(core/rig·poses·quat): 19본 VRM식 스켈레톤 + FK, 포즈/제스처/시선/팔 IK 레이어, `ActorState.rig`를 마네킹이 그대로 적용. 액션 `gesture`·`reach`, 속성 패널 "연기" UI, 프롬프트/스크립트 반영 ([docs/RIG.md](RIG.md))
 - [x] 손가락 30본 + 발끝 본(`handShape` 액션, 걷기 발목 굴림), 액션 라벨(`act1`…)과 `patchActions`/`removeActions`·`scene.patchAction/removeAction`, 속성 패널 동작 목록(시간·길이 수정/삭제)
+- [x] 애니메이션 프롬프트 `@` 멘션: 입력 중 `@`로 에셋/카메라/동작 목록을 띄워 정확한 id를 삽입 (MentionTextarea, core `mentionables`)
 - [ ] R2: 리깅된 GLB 캐릭터(본 이름 매핑·리타깃), GLB 애니메이션 클립 재생(`play`)
 - [x] `sitDown`/`standUp` 액션(좌석으로 이동·회전·내려앉기, 소파 offset으로 다인 착석) + 에셋/속성 패널 버튼, 포즈 전환 0.35초 블렌드
 - [ ] 인물 리깅: 지금은 관절 11개의 프리미티브 마네킹(절차적 포즈). 스킨 메시·목/손목/발목/손가락, 모션 클립(걷기 외), 리깅된 GLB 캐릭터와 애니메이션 임포트는 미구현

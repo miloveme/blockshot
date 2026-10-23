@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { addonFromSpec, addonIssues, applyAddon, buildAnimatePrompt, buildFixPrompt, buildLayoutFixPrompt, buildPrompt, detectPasted, lintLayout, parseAddon, validateSpec, type Issue, type PromptMode } from "@blockshot/core";
+import { mentionables, addonFromSpec, addonIssues, applyAddon, buildAnimatePrompt, buildFixPrompt, buildLayoutFixPrompt, buildPrompt, detectPasted, lintLayout, parseAddon, validateSpec, type Issue, type PromptMode } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
+import { MentionTextarea } from "./MentionTextarea";
 import { runScriptInWorker } from "@/lib/run-script";
 
 /** AI prompt kit (copy) + paste-back import with self-correction (docs/AI_PROMPT_KIT.md). */
@@ -15,6 +16,8 @@ export function ImportPanel({ onClose }: { onClose: () => void }) {
   const [errors, setErrors] = useState<Issue[]>([]);
   const [layoutIssues, setLayoutIssues] = useState<Issue[]>([]);
   const [status, setStatus] = useState<string>("");
+  const spec = useStudio((s) => s.spec);
+  const items = mentionables(spec);
   const [lastFormat, setLastFormat] = useState<"json" | "script">("json");
 
   const copy = async (text: string, label: string) => {
@@ -122,12 +125,23 @@ export function ImportPanel({ onClose }: { onClose: () => void }) {
 
       <section className="flex flex-col gap-2">
         <h3 className="font-medium text-amber-300">① 프롬프트 만들기</h3>
-        <textarea
-          className="h-28 rounded border border-white/10 bg-black/30 p-2 font-mono text-xs"
-          placeholder={target === "animate" ? "어떻게 움직일지 입력하세요. 예) 인물1이 문 쪽에서 소파로 걸어와 앉는다. 카메라는 천천히 줌인. 6초." : "대본이나 연출 요청을 입력하세요. 예) 밤 골목, 여자가 뒤를 돌아보며 뛰고 남자가 쫓아온다. 6초, 3컷."}
-          value={request}
-          onChange={(e) => setRequest(e.target.value)}
-        />
+        {target === "animate" ? (
+          <MentionTextarea
+            className="h-28 w-full rounded border border-white/10 bg-black/30 p-2 font-mono text-xs"
+            placeholder="어떻게 움직일지 입력하세요. @를 누르면 배치한 인물·소품·카메라·동작을 골라 넣을 수 있어요. 예) @man1이 문 쪽에서 @sofa1로 걸어와 앉는다. 카메라는 천천히 줌인. 6초."
+            value={request}
+            onChange={setRequest}
+            items={items}
+          />
+        ) : (
+          <textarea
+            className="h-28 rounded border border-white/10 bg-black/30 p-2 font-mono text-xs"
+            placeholder="대본이나 연출 요청을 입력하세요. 예) 밤 골목, 여자가 뒤를 돌아보며 뛰고 남자가 쫓아온다. 6초, 3컷."
+            value={request}
+            onChange={(e) => setRequest(e.target.value)}
+          />
+        )}
+        {target === "animate" ? <p className="text-xs text-zinc-500">💡 <b className="text-zinc-300">@</b>를 입력하면 장면의 에셋 목록이 나옵니다. 정확한 id가 프롬프트에 들어가 LLM이 엉뚱한 오브젝트를 고르지 않아요. 기존 동작(@act3)도 지목할 수 있어요.</p> : null}
         <div className="flex flex-wrap items-center gap-2">
           <select className="w-full rounded bg-white/10 px-2 py-1" value={mode} onChange={(e) => setMode(e.target.value as PromptMode)}>
             <option value="json">출력: Blockshot JSON</option>

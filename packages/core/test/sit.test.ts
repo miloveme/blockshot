@@ -152,3 +152,25 @@ describe("scripts, prompts", () => {
     expect(buildAnimatePrompt({ request: "x", spec: scene(), mode: "script" })).toContain("a.sitDown(seatId");
   });
 });
+
+describe("approaching a seat from behind", () => {
+  const spec = () =>
+    validateSpec({
+      specVersion: "0.1",
+      actors: [{ id: "a", position: [0, 0, -2] }, { id: "b", position: [0, 0, 2] }],
+      props: [{ id: "c", type: "chair", position: [0, 0, 0], rotation: [0, 0, 0] }],
+      actions: [{ type: "sitDown", actor: "a", on: "c", start: 0, duration: 2 }, { type: "sitDown", actor: "b", on: "c", start: 0, duration: 2 }],
+    });
+  it("walks round to the front of the chair instead of through its back", () => {
+    const r = spec();
+    if (!r.ok) throw new Error("invalid");
+    const c = compile(r.spec);
+    const behind = evaluate(c, 1.3).actors.a!.position; // 65% of the way
+    expect(behind[2]).toBeCloseTo(0.6, 1); // chair faces +Z, so its open side is z = +0.6
+    expect(evaluate(c, 2).actors.a!.position[2]).toBeCloseTo(0, 5);
+    expect(evaluate(c, 0.7).actors.a!.position[2]).toBeLessThan(0.6); // still on the way round
+    // an actor who starts in front goes straight in
+    expect(evaluate(c, 1).actors.b!.position[2]).toBeLessThan(2);
+    expect(evaluate(c, 1.3).actors.b!.position[2]).toBeGreaterThan(0);
+  });
+});
