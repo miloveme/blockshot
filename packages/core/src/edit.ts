@@ -1,5 +1,5 @@
 import type { Actor, BlockshotSpec, Camera, Key, Prop, PropType, Shot, TrackProperty, Vec3 } from "./schema";
-import { compile } from "./evaluate";
+import { compile, evaluate } from "./evaluate";
 import { parseRef } from "./mirror";
 
 /**
@@ -258,4 +258,91 @@ export function removeKeysAt(spec: BlockshotSpec, id: string, t: number, toleran
     else tracks = [...tracks, { target: id, property: p, keys }];
   }
   return changed ? { ...spec, tracks } : spec;
+}
+
+// ---- movement paths (walkTo / runTo actions) ----------------------------------------------------
+
+type MoveAction = Extract<BlockshotSpec["actions"][number], { type: "walkTo" | "runTo" }>;
+
+/** The actor's walkTo / runTo actions with their index in `spec.actions`, in time order. */
+export function movesOf(spec: BlockshotSpec, actorId: string): Array<{ index: number; action: MoveAction }> {
+  return spec.actions
+    .flatMap((action, index) => (action.type === "walkTo" || action.type === "runTo") && action.actor === actorId ? [{ index, action }] : [])
+    .sort((a, b) => a.action.start - b.action.start);
+}
+
+/** Appends a walk (or run) along the clicked waypoints, starting at `start` seconds. */
+export function addWalkPath(spec: BlockshotSpec, actorId: string, points: Vec3[], opts: { start: number; run?: boolean; speed?: number }): BlockshotSpec {
+  if (points.length === 0 || !spec.actors.some((a) => a.id === actorId)) return spec;
+  const to: Vec3 | Vec3[] = points.length === 1 ? points[0]! : points;
+  const start = roundT(Math.max(0, opts.start));
+  const action = { type: opts.run ? ("runTo" as const) : ("walkTo" as const), actor: actorId, to, start, ...(opts.speed ? { speed: opts.speed } : {}) };
+  // grow the project so the walk can finish (the default speeds mirror evaluate.ts)
+  const from = evaluate(compile(spec), start).actors[actorId]!.position;
+  const length = [from, ...points].slice(1).reduce((sum, p, i) => sum + Math.hypot(p[0] - [from, ...points][i]![0], p[2] - [from, ...points][i]![2]), 0);
+  const speed = opts.speed ?? (opts.run ? 3.5 : 1.3);
+  const end = Math.ceil((start + length / speed) * 10) / 10;
+  const settings = end > spec.settings.duration ? { ...spec.settings, duration: end } : spec.settings;
+  return { ...spec, settings, actions: [...spec.actions, action] };
+}
+
+export function removeActionAt(spec: BlockshotSpec, index: number): BlockshotSpec {
+  if (index < 0 || index >= spec.actions.length) return spec;
+  return { ...spec, actions: spec.actions.filter((_, i) => i !== index) };
+}
+
+export function patchMoveAt(spec: BlockshotSpec, index: number, patch: { start?: number; speed?: number | undefined; run?: boolean; to?: Vec3 | Vec3[] }): BlockshotSpec {
+  const a = spec.actions[index];
+  if (!a || (a.type !== "walkTo" && a.type !== "runTo")) return spec;
+  const { run, ...rest } = patch;
+  const next = { ...a, ...rest, type: run === undefined ? a.type : run ? ("runTo" as const) : ("walkTo" as const) } as MoveAction;
+  if ("speed" in patch && patch.speed === undefined) delete (next as { speed?: number }).speed;
+  return { ...spec, actions: spec.actions.map((x, i) => (i === index ? next : x)) };
+}
+
+// ---- space (room structure) ----------------------------------------------------------------------
+
+type Opening = Extract<BlockshotSpec["space"], { type: "room" }>["openings"][number];
+
+/** Replaces the space. Switching kinds keeps nothing of the old one; use patchSpace for tweaks. */
+export function setSpace(spec: BlockshotSpec, space: BlockshotSpec["space"]): BlockshotSpec {
+  return { ...spec, space };
+}
+
+export function patchRoom(spec: BlockshotSpec, patch: { width?: number; depth?: number; height?: number }): BlockshotSpec {
+  if (spec.space.type !== "room") return spec;
+  const clean = Object.fromEntries(Object.entries(patch).filter(([, v]) => typeof v === "number" && v > 0));
+  return { ...spec, space: { ...spec.space, ...clean } };
+}
+
+export function addOpening(spec: BlockshotSpec, kind: Opening["kind"], wall: Opening["wall"] = "north"): BlockshotSpec {
+  if (spec.space.type !== "room") return spec;
+  const o: Opening = kind === "door" ? { kind, wall, offset: 0, width: 0.9, height: 2.1, sill: 0 } : { kind, wall, offset: 0, width: 1.2, height: 1.2, sill: 0.9 };
+  return { ...spec, space: { ...spec.space, openings: [...spec.space.openings, o] } };
+}
+
+export function patchOpening(spec: BlockshotSpec, index: number, patch: Partial<Opening>): BlockshotSpec {
+  if (spec.space.type !== "room" || !spec.space.openings[index]) return spec;
+  const openings = spec.space.openings.map((o, i) => (i === index ? { ...o, ...patch } : o));
+  return { ...spec, space: { ...spec.space, openings } };
+}
+
+export function removeOpening(spec: BlockshotSpec, index: number): BlockshotSpec {
+  if (spec.space.type !== "room") return spec;
+  return { ...spec, space: { ...spec.space, openings: spec.space.openings.filter((_, i) => i !== index) } };
+}
+
+// ---- imported model assets -------------------------------------------------------------------------
+
+/** Registers (or replaces, by id) a model asset's metadata. */
+export function addAsset(spec: BlockshotSpec, asset: BlockshotSpec["assets"][number]): BlockshotSpec {
+  const rest = spec.assets.filter((a) => a.id !== asset.id);
+  return { ...spec, assets: [...rest, asset] };
+}
+
+/** Removes the asset and every model prop that uses it. */
+export function removeAsset(spec: BlockshotSpec, assetId: string): BlockshotSpec {
+  const users = spec.props.filter((p) => p.asset === assetId).map((p) => p.id);
+  const base = users.reduce((s, id) => removeEntity(s, id), spec);
+  return { ...base, assets: base.assets.filter((a) => a.id !== assetId) };
 }

@@ -53,18 +53,39 @@ export function patch(id: string, p: Parameters<typeof patchEntity>[2]) {
  * static ones change the base value.
  */
 export function commitTransform(id: string, position: Vec3, rotation: Vec3) {
-  const t = state().time;
+  state().edit((s) => transformed(s, id, position, rotation, state().time));
+}
+
+/** Pure form of commitTransform (also used for live drags in the plan view). */
+export function transformed(s: BlockshotSpec, id: string, position: Vec3, rotation: Vec3, t: number): BlockshotSpec | null {
   const pos = roundVec(position);
   const rot = roundVec(rotation);
-  state().edit((s) => {
-    const kind = kindOf(s, id);
-    if (!kind) return null;
-    let next = s;
-    if (kind === "prop") return patchEntity(s, id, { position: pos, rotation: rot });
-    next = keyed(next, id, "position") ? upsertKey(next, id, "position", t, pos) : patchEntity(next, id, { position: pos });
-    next = keyed(next, id, "rotation") ? upsertKey(next, id, "rotation", t, rot) : patchEntity(next, id, { rotation: rot });
-    return next;
-  });
+  const kind = kindOf(s, id);
+  if (!kind) return null;
+  if (kind === "prop") return patchEntity(s, id, { position: pos, rotation: rot });
+  let next = keyed(s, id, "position") ? upsertKey(s, id, "position", t, pos) : patchEntity(s, id, { position: pos });
+  next = keyed(next, id, "rotation") ? upsertKey(next, id, "rotation", t, rot) : patchEntity(next, id, { rotation: rot });
+  return next;
+}
+
+/**
+ * Pure: turns an object to face `yaw` degrees on the floor plan. Props / actors change rotation.y; a camera aimed at a
+ * point swings that point around the camera, an unaimed camera gets the rotation, one aimed at a reference keeps its aim.
+ */
+export function yawed(s: BlockshotSpec, id: string, yaw: number, t: number, current: { position: Vec3; rotation: Vec3 }): BlockshotSpec | null {
+  const kind = kindOf(s, id);
+  const y = Math.round(yaw * 100) / 100;
+  if (kind === "prop") return patchEntity(s, id, { rotation: [current.rotation[0], y, current.rotation[2]] });
+  if (kind === "actor") return transformed(s, id, current.position, [current.rotation[0], y, current.rotation[2]], t);
+  const cam = s.cameras.find((c) => c.id === id);
+  if (!cam || typeof cam.lookAt === "string") return null;
+  if (Array.isArray(cam.lookAt)) {
+    // camera looks along -Z at yaw 0, so the facing direction is (-sin, -cos)
+    const dist = Math.max(1, Math.hypot(cam.lookAt[0] - current.position[0], cam.lookAt[2] - current.position[2]));
+    const r = (y * Math.PI) / 180;
+    return patchEntity(s, id, { lookAt: roundVec([current.position[0] - Math.sin(r) * dist, cam.lookAt[1], current.position[2] - Math.cos(r) * dist]) });
+  }
+  return keyed(s, id, "rotation") ? upsertKey(s, id, "rotation", t, roundVec([current.rotation[0], y, current.rotation[2]])) : patchEntity(s, id, { rotation: [current.rotation[0], y, current.rotation[2]] });
 }
 
 export function setLens(cameraId: string, mm: number) {

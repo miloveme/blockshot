@@ -37,3 +37,8 @@ export function createBlankSpec(options: { title?: string; space?: SpaceKind } =
     shots: [{ id: "S1", camera: "cam1", start: 0, end: 3 }],
   });
 }
+
+/** Default parameters when the user switches a project to another kind of space. */
+export function defaultSpace(kind: SpaceKind): BlockshotSpec["space"] {
+  return BlockshotSpec.shape.space.parse(SPACES[kind].space);
+}

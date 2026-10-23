@@ -64,6 +64,7 @@ export function Mannequin({ id }: { id: string }) {
       ref={root}
       name={`obj:${id}`}
       onClick={(e) => {
+        if (useStudio.getState().tool) return;
         e.stopPropagation();
         useStudio.getState().select(id);
       }}

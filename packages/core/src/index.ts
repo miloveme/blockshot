@@ -13,3 +13,5 @@ export * from "./templates";
 export * from "./catalog";
 export * from "./layout";
 export * from "./mirror";
+export * from "./placement";
+export * from "./plan";

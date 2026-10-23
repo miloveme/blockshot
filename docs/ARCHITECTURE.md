@@ -22,7 +22,8 @@ blockshot/
 │        ├─ components/
 │        │  ├─ Studio.tsx          레이아웃, 뷰 전환, 단축키
 │        │  ├─ Timeline.tsx        재생/스크럽/샷 블록/키 표시
-│        │  ├─ Toolbar·Properties·ShotEditor·LensBar.tsx  편집 UI
+│        │  ├─ Toolbar·Properties·ShotEditor·LensBar·AssetPanel·SpaceEditor·ToolHud.tsx  편집 UI
+│        │  ├─ PlanView.tsx        탑뷰(SVG) — 드래그 이동/회전, 줌, 경로, 축선
 │        │  ├─ ImportPanel.tsx     프롬프트 키트 + 붙여넣기 + 자가 교정
 │        │  └─ viewport/           R3F 장면: Viewport, Mannequin, Props, Space
 │        ├─ lib/
@@ -30,6 +31,9 @@ blockshot/
 │        │  ├─ actions.ts          UI 명령 (core/edit + store.edit 1회 = undo 1단계)
 │        │  ├─ projects.ts         IndexedDB 다중 프로젝트 저장소 (목록/생성/복제/삭제)
 │        │  ├─ persist.ts          현재 프로젝트 자동 저장(이탈 시 flush), .blockshot.json 열기/저장
+│        │  ├─ models.ts           GLB 가져오기·로드(IndexedDB, 내용 해시 id)
+│        │  ├─ placement.ts        배치 도구(고스트·클릭·경로 확정)
+│        │  ├─ assetCatalog.ts     내장 에셋 라이브러리 목록
 │        │  └─ run-script.ts       Worker 실행 + 타임아웃
 │        └─ workers/
 │           └─ script.worker.ts    스크립트 샌드박스 (네트워크/스토리지 제거)
@@ -43,6 +47,8 @@ blockshot/
 │     │  ├─ camera.ts              렌즈/센서 → FOV
 │     │  ├─ templates.ts           새 프로젝트 시작 장면 (공간 프리셋)
 │     │  ├─ edit.ts                UI 편집 순수 연산 (추가·삭제·키·샷·화면비·스냅), 새 spec 반환
+│     │  ├─ placement.ts           클릭 배치(벽 스냅·클램프), 인물/카메라/소품 추가
+│     │  ├─ plan.ts                탑뷰 기하(경계, 카메라 부채꼴, 축선)
 │     │  ├─ math.ts                vec, easing, yaw, seeded PRNG
 │     │  ├─ paste.ts               붙여넣기 판별(코드펜스, 관대한 JSON)
 │     │  └─ prompt-kit.ts          LLM 프롬프트 조립

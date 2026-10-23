@@ -1,6 +1,9 @@
 import { PROP_TYPES, POSES, BODY_PARTS, SPEC_VERSION, type BlockshotSpec, type Space } from "./schema";
 import { PROP_CATALOG } from "./catalog";
 
+/** Imported models need a user-owned asset, so they are never offered to an LLM. */
+const LLM_PROP_TYPES = PROP_TYPES.filter((t) => t !== "model");
+
 /**
  * Prompt kit v0 — assembles the prompt a user pastes into an external LLM (docs/AI_PROMPT_KIT.md).
  * M3 will move the blocks into editable templates and add few-shot examples per genre.
@@ -36,7 +39,7 @@ const SPEC_SUMMARY = `Blockshot Spec v${SPEC_VERSION} fields:
     { "type": "zoom", "camera", "focalLength", "start", "duration", "ease"? },
     { "type": "orbit", "camera", "around", "degrees", "start", "duration", "ease"? } ],
   "shots": [{ "id", "camera", "start", "end", "description"?, "prompt"? }] }
-Poses: ${POSES.join(", ")}. Prop types: ${PROP_TYPES.join(", ")}. Ease: linear, easeIn, easeOut, easeInOut, step.`;
+Poses: ${POSES.join(", ")}. Prop types: ${LLM_PROP_TYPES.join(", ")}. Ease: linear, easeIn, easeOut, easeInOut, step.`;
 
 const SCRIPT_SUMMARY = `Blockshot Script API (JavaScript; globals: scene, vec, rand):
 scene.settings({ fps, duration, resolution }); scene.meta({ title });
@@ -48,10 +51,10 @@ const c = scene.camera(id, { lens, at: [x,y,z], lookAt: a.head });
 c.moveTo(pos, { start, duration, ease }); c.dolly(m, {...}); c.truck(m, {...}); c.pedestal(m, {...}); c.orbit(target, { degrees, start, duration }); c.zoom(mm, {...}); c.lookAt(target, { start });
 scene.shot(id, { camera: c, start, end, description, prompt });
 vec.polar(radius, deg, y) gives a point on a circle; rand() is seeded.
-Poses: ${POSES.join(", ")}. Prop types: ${PROP_TYPES.join(", ")}.`;
+Poses: ${POSES.join(", ")}. Prop types: ${LLM_PROP_TYPES.join(", ")}.`;
 
 const catalogTable = () =>
-  PROP_TYPES.map((t) => {
+  LLM_PROP_TYPES.map((t) => {
     const { size, note } = PROP_CATALOG[t];
     return `- ${t}: ${size[0]} × ${size[1]} × ${size[2]} m (x × y × z) — ${note}`;
   }).join("\n");

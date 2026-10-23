@@ -52,7 +52,9 @@ export function ImportPanel({ onClose }: { onClose: () => void }) {
       setErrors(v.errors);
       return;
     }
-    useStudio.getState().setSpec(v.spec);
+    // an AI answer never contains the user's imported models; keep the library so those cards survive
+    const kept = useStudio.getState().spec.assets;
+    useStudio.getState().setSpec(v.spec.assets.length ? v.spec : { ...v.spec, assets: kept });
     const layout = lintLayout(v.spec);
     if (layout.length > 0) {
       // keep the panel open: the scene is applied, but the user can ask the LLM to fix the placement

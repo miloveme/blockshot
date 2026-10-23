@@ -33,7 +33,8 @@ Blockshot Spec은 프로젝트의 **유일한 진실 원천** 이다. UI 편집,
   "actions":  [ ... ],        // 고수준 동작(walkTo 등) — 로드 시 tracks로 컴파일
   "tracks":   [ ... ],        // 저수준 키프레임
   "shots":    [ ... ],        // 편집(컷) 시퀀스 — 배열 순서 = 편집 순서
-  "bin":      [ ... ]         // 보관함(저장된 컷)
+  "bin":      [ ... ],        // 보관함(저장된 컷)
+  "assets":   [ ... ]         // 불러온 3D 모델(GLB) 메타데이터 — 파일 자체는 브라우저에 저장
 }
 ```
 
@@ -84,11 +85,21 @@ Blockshot Spec은 프로젝트의 **유일한 진실 원천** 이다. UI 편집,
   "scale": [1, 1, 1], "color": "#7a869a" }
 ```
 
-`type`: `box`, `cylinder`, `sphere`, `plane`, `chair`, `table`, `sofa`, `bed`, `door`, `window`, `car`, `lamp`, `cup`, `phone`, `mirror`
+`type`: `box`, `cylinder`, `sphere`, `plane`, `chair`, `table`, `sofa`, `bed`, `door`, `window`, `car`, `lamp`, `cup`, `phone`, `mirror`, `model`
 
 `mirror`는 **실제 반사 거울**이다(평면 반사, 모든 카메라·녹화에 적용). 기본 0.9×1.8 m, `rotation.y = 0`이면 +Z 방향을 비춘다(가구와 같은 규칙). `color`는 프레임 색, `position.y`는 거울 아래 모서리 높이. 비춰진 모습은 직접 모델링하지 않는다 — 카메라를 거울 앞에서 거울 면을 향하게 둔다. 예: `examples/mirror-reveal.json`.
 
 **반사 참조**: 참조 문자열 뒤에 `@거울id`를 붙이면(`"man.chest@mirror"`, `"man@mirror"`) 그 점이 거울 속에서 보이는 위치(거울 면 반대편의 가상 위치)로 해석된다. 카메라 `lookAt`·`cameraLookAt`·`orbit.around`에 쓰면 반사를 정확히 겨냥하고, 인물이 움직이면 반사도 따라간다. `@`의 거울 id는 `type: "mirror"` 소품이어야 한다(검증 오류). 거울 회전은 yaw만 지원.
+**`model` (불러온 GLB)**: `{ "id": "wardrobe1", "type": "model", "asset": "glb-3fa9…", "position": [...], "scale": [1,1,1] }`. `asset`은 최상위 `assets[]`의 `id`여야 한다(없으면 검증 오류). 모델은 **바닥 중앙이 원점**이 되도록 자동 정렬되며 `scale`은 불러온 실제 크기(m)에 대한 배율이다. `type: "model"`은 사용자가 가진 파일이 필요하므로 **LLM 프롬프트 키트에는 노출되지 않는다.**
+
+### assets — 불러온 모델
+
+```jsonc
+{ "id": "glb-3fa9c2d41b7e0a55", "name": "wardrobe", "kind": "glb", "size": [0.8, 2.1, 0.5], "bytes": 481232 }
+```
+
+`id`는 파일 내용의 SHA-256 앞 8바이트(`glb-…`)라서 같은 모델은 프로젝트가 달라도 한 번만 저장된다. `size`는 정렬된 모델의 바운딩 박스(m)이며 배치 보정·충돌 경고에 쓰인다. **GLB 파일은 Spec(`.blockshot.json`)에 들어가지 않고** 브라우저(IndexedDB)에만 있다 — 다른 브라우저에서 열면 모델 자리에 빨간 점선 상자가 나오고, 속성 패널의 “GLB 파일 다시 불러오기”로 연결한다. 압축(Draco/Meshopt)·애니메이션은 지원하지 않는다.
+
 프리미티브(`box` 등)는 `scale`이 실제 크기(m)다. 프리셋 소품은 현실 크기로 모델링되어 있고 `scale`은 배율이다.
 
 ## 7. cameras

@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, type ReactNode } from "react";
+import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Text } from "@react-three/drei";
 import * as THREE from "three";
 import { Reflector } from "three/examples/jsm/objects/Reflector.js";
-import { DEG, type Prop } from "@blockshot/core";
+import { DEG, propSize, type Prop } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
+import { instantiate, loadModel } from "@/lib/models";
 
 /** Simple primitive-built props at real-world size (meters). `scale` multiplies presets. */
 
@@ -143,9 +145,46 @@ function PropMesh({ type, color }: { type: Prop["type"]; color: string }): React
       return <Cyl r={0.04} h={0.1} at={[0, 0.05, 0]} color={color} />;
     case "mirror":
       return <Mirror color={color} />;
+    case "model":
+      return null; // rendered by ModelProp (needs the asset id)
     case "phone":
       return <Box size={[0.075, 0.008, 0.155]} at={[0, 0.004, 0]} color={dark} />;
   }
+}
+
+/** An imported GLB. Shows a dashed placeholder box (with the asset's size) while loading or when the file is missing here. */
+function ModelProp({ prop }: { prop: Prop }) {
+  const asset = useStudio((s) => s.spec.assets.find((a) => a.id === prop.asset));
+  const [model, setModel] = useState<{ id: string; obj: THREE.Object3D | null } | null>(null);
+  const id = prop.asset ?? "";
+
+  useEffect(() => {
+    let live = true;
+    void loadModel(id).then((m) => live && setModel({ id, obj: m ? instantiate(m) : null }));
+    return () => {
+      live = false;
+    };
+  }, [id]);
+
+  const obj = model?.id === id ? model.obj : null;
+  const loaded = model?.id === id;
+  if (obj) return <primitive object={obj} />;
+  const [w, h, d] = asset ? asset.size : propSize(prop, []);
+  return (
+    <group>
+      <mesh position={[0, h / 2, 0]}>
+        <boxGeometry args={[w, h, d]} />
+        <meshBasicMaterial color={loaded ? "#ef4444" : "#9aa3b2"} wireframe transparent opacity={0.7} />
+      </mesh>
+      {loaded ? (
+        <Suspense fallback={null}>
+          <Text position={[0, h + 0.15, 0]} fontSize={0.14} color="#ef4444" anchorY="bottom">
+            {`모델 파일 없음: ${asset?.name ?? id}`}
+          </Text>
+        </Suspense>
+      ) : null}
+    </group>
+  );
 }
 
 export function PropObject({ prop }: { prop: Prop }) {
@@ -153,6 +192,7 @@ export function PropObject({ prop }: { prop: Prop }) {
     <group
       name={`obj:${prop.id}`}
       onClick={(e) => {
+        if (useStudio.getState().tool) return;
         e.stopPropagation();
         useStudio.getState().select(prop.id);
       }}
@@ -160,7 +200,7 @@ export function PropObject({ prop }: { prop: Prop }) {
       rotation={[prop.rotation[0] * DEG, prop.rotation[1] * DEG, prop.rotation[2] * DEG, "YXZ"]}
       scale={prop.scale}
     >
-      <PropMesh type={prop.type} color={prop.color} />
+      {prop.type === "model" ? <ModelProp prop={prop} /> : <PropMesh type={prop.type} color={prop.color} />}
     </group>
   );
 }

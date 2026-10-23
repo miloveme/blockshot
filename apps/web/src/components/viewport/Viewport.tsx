@@ -14,6 +14,7 @@ import { Mannequin } from "./Mannequin";
 import { PropObject } from "./Props";
 import { SpaceObject } from "./Space";
 import { Recorder } from "./Recorder";
+import { PathOverlay, PlacementController } from "./Placement";
 import { EDITOR_LAYER, PIP_MARGIN, PIP_SCALE, aimCamera, markEditor, pipCameraId, viewedCameraId } from "./util";
 
 const RAD = 1 / DEG;
@@ -107,7 +108,7 @@ function CameraGizmo({ id }: { id: string }) {
       ref={ref}
       name={`obj:${id}`}
       onClick={(e) => {
-        if (useStudio.getState().view.kind !== "free") return;
+        if (useStudio.getState().view.kind !== "free" || useStudio.getState().tool) return;
         e.stopPropagation();
         useStudio.getState().select(id);
       }}
@@ -212,8 +213,8 @@ function SelectionGizmo() {
   useFrame(() => {
     const tc = tcRef.current;
     if (!tc) return;
-    const { selection, recording, rendering, sceneState } = useStudio.getState();
-    const want = view.kind === "free" && !recording && !rendering ? selection : null;
+    const { selection, recording, rendering, sceneState, tool } = useStudio.getState();
+    const want = view.kind === "free" && !recording && !rendering && !tool ? selection : null;
     const cur = tc.object && tc.object.parent ? tc.object.name : null;
     if (want === null) {
       if (tc.object) tc.detach();
@@ -344,6 +345,8 @@ function Scene() {
       {view.kind === "camera" && pilot ? <CameraPilot /> : null}
       <SelectionRing />
       <SelectionGizmo />
+      <PlacementController />
+      <PathOverlay />
     </>
   );
 }
@@ -357,7 +360,10 @@ export default function Viewport() {
       dpr={[1, 2]}
       gl={{ preserveDrawingBuffer: true, antialias: true }}
       onCreated={({ raycaster }) => raycaster.layers.enableAll()}
-      onPointerMissed={() => useStudio.getState().select(null)}
+      onPointerMissed={() => {
+        // clicks on the floor belong to an armed tool (placing / drawing a path), not to deselecting
+        if (!useStudio.getState().tool) useStudio.getState().select(null);
+      }}
     >
       <Scene key={revision} />
     </Canvas>
