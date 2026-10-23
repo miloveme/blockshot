@@ -1,6 +1,6 @@
-import type { Gesture, Pose, Vec3 } from "./schema";
+import type { Gesture, HandShape, Pose, Vec3 } from "./schema";
 import { Q } from "./quat";
-import { ARM, RIG, mirrorLayer, restPose, smoothstep, solveRig, type BoneName, type Layer, type RigPose, type Skeleton } from "./rig";
+import { ARM, FINGERS, FINGER_SEGMENTS, RIG, mirrorLayer, restPose, smoothstep, solveRig, type BoneName, type Finger, type Layer, type RigPose, type Skeleton } from "./rig";
 
 /**
  * Pose library, acting gestures, arm IK and head look-at — everything that turns "what the actor is doing" into bone
@@ -32,6 +32,12 @@ export function basePose(name: Pose, t: number): RigPose {
       set(p, "leftLowerArm", run ? -1.4 : -0.25);
       set(p, "rightLowerArm", run ? -1.4 : -0.25);
       set(p, "spine", run ? 0.25 : 0.04);
+      // ankles keep the sole roughly level; the trailing foot rolls onto its toes
+      for (const side of ["left", "right"] as const) {
+        const leg = (p.rot[`${side}UpperLeg`]![0] + p.rot[`${side}LowerLeg`]![0]) as number;
+        set(p, `${side}Foot`, Math.max(-0.5, Math.min(0.5, -leg * 0.6)));
+        set(p, `${side}Toes`, -Math.max(0, leg) * 0.5);
+      }
       p.hips = [0, -(run ? 0.06 : 0.02) + Math.abs(Math.cos(phase)) * (run ? 0.05 : 0.02), 0];
       return p;
     }
@@ -49,6 +55,7 @@ export function basePose(name: Pose, t: number): RigPose {
       return p;
     case "point":
       set(p, "rightUpperArm", -Math.PI / 2, 0, -0.1);
+      Object.assign(p.rot, handLayer("point", "right"));
       return p;
     case "talk":
       set(p, "leftUpperArm", -0.35 + Math.sin(t * 2.1) * 0.12);
@@ -63,6 +70,33 @@ export function basePose(name: Pose, t: number): RigPose {
     case "stand":
       return p;
   }
+}
+
+// ---- hands -------------------------------------------------------------------------------------------
+
+/** Curl (radians, + = closing toward the palm) of [proximal, intermediate, distal] for every finger. */
+const CURL: Record<HandShape, Record<Finger, [number, number, number]>> = {
+  open: { Thumb: [0, 0, 0], Index: [0, 0, 0], Middle: [0, 0, 0], Ring: [0, 0, 0], Little: [0, 0, 0] },
+  relaxed: { Thumb: [0.1, 0.15, 0.1], Index: [0.25, 0.3, 0.2], Middle: [0.3, 0.35, 0.22], Ring: [0.35, 0.4, 0.25], Little: [0.4, 0.45, 0.28] },
+  fist: { Thumb: [0.5, 0.7, 0.5], Index: [1.4, 1.6, 1.0], Middle: [1.45, 1.65, 1.0], Ring: [1.5, 1.7, 1.05], Little: [1.5, 1.7, 1.05] },
+  grip: { Thumb: [0.4, 0.5, 0.3], Index: [0.9, 1.0, 0.6], Middle: [1.0, 1.1, 0.65], Ring: [1.05, 1.15, 0.7], Little: [1.1, 1.2, 0.7] },
+  point: { Thumb: [0.4, 0.6, 0.4], Index: [0, 0, 0], Middle: [1.45, 1.65, 1.0], Ring: [1.5, 1.7, 1.05], Little: [1.5, 1.7, 1.05] },
+  pinch: { Thumb: [0.55, 0.5, 0.25], Index: [0.7, 0.6, 0.3], Middle: [0.3, 0.35, 0.22], Ring: [0.35, 0.4, 0.25], Little: [0.4, 0.45, 0.28] },
+};
+
+/** Finger bone rotations for a hand shape. Fingers hang along -Y; a left hand closes toward -X (rotation about Z). */
+export function handLayer(shape: HandShape, side: "left" | "right"): Layer {
+  const left: Layer = {};
+  for (const f of FINGERS) FINGER_SEGMENTS.forEach((seg, i) => (left[`left${f}${seg}` as BoneName] = [0, 0, -CURL[shape][f][i]!]));
+  return side === "left" ? left : mirrorLayer(left);
+}
+
+/** Both hands, relaxed — what every actor's fingers do unless told otherwise. */
+export const RELAXED_HANDS: Layer = { ...handLayer("relaxed", "left"), ...handLayer("relaxed", "right") };
+
+/** Layer for a hand-shape action: `hand` "both" shapes the two hands. */
+export function handShapeLayer(shape: HandShape, hand: "left" | "right" | "both"): Layer {
+  return hand === "both" ? { ...handLayer(shape, "left"), ...handLayer(shape, "right") } : handLayer(shape, hand);
 }
 
 // ---- acting gestures ---------------------------------------------------------------------------------
@@ -86,7 +120,7 @@ export const GESTURE_DEFS: Record<Gesture, GestureDef> = {
     duration: 2.2,
     side: "right",
     hold: true,
-    sample: (u) => ({ rightUpperArm: [0, 0, -2.25], rightLowerArm: [0, 0, 0.45 + Math.sin(u * 10) * 0.45], head: [0, 0.12, -0.08] }),
+    sample: (u) => ({ rightUpperArm: [0, 0, -2.25], rightLowerArm: [0, 0, 0.45 + Math.sin(u * 10) * 0.45], head: [0, 0.12, -0.08], ...handLayer("open", "right") }),
   },
   // yes
   nod: {
@@ -118,7 +152,7 @@ export const GESTURE_DEFS: Record<Gesture, GestureDef> = {
     hold: true,
     sample: (u) => {
       const k = 0.5 + 0.5 * Math.sin(u * 16);
-      return { rightUpperArm: [-1.05, 0, -0.1 - 0.35 * k], rightLowerArm: [-1.25, 0, 0], ...mirrorLayer({ rightUpperArm: [-1.05, 0, -0.1 - 0.35 * k], rightLowerArm: [-1.25, 0, 0] }) };
+      return { rightUpperArm: [-1.05, 0, -0.1 - 0.35 * k], rightLowerArm: [-1.25, 0, 0], ...mirrorLayer({ rightUpperArm: [-1.05, 0, -0.1 - 0.35 * k], rightLowerArm: [-1.25, 0, 0] }), ...handShapeLayer("open", "both") };
     },
   },
   crossArms: {
@@ -139,6 +173,7 @@ export const GESTURE_DEFS: Record<Gesture, GestureDef> = {
       rightUpperArm: [0.15, 0, -0.6], rightLowerArm: [-1.55, 0.7, 0],
       leftUpperArm: [0.15, 0, 0.6], leftLowerArm: [-1.55, -0.7, 0],
       spine: [-0.03, 0, 0],
+      ...handShapeLayer("fist", "both"),
     }),
   },
   // hand to the chin, other arm across the body
@@ -176,6 +211,7 @@ export const GESTURE_DEFS: Record<Gesture, GestureDef> = {
       leftUpperArm: [0, 0, 2.7 + Math.sin(u * 9) * 0.12], rightUpperArm: [0, 0, -2.7 - Math.sin(u * 9) * 0.12],
       leftLowerArm: [0, 0, 0.2], rightLowerArm: [0, 0, -0.2],
       head: [-0.2, 0, 0],
+      ...handShapeLayer("fist", "both"),
     }),
   },
 };

@@ -4,7 +4,7 @@ import { Q, type Quat } from "./quat";
 /**
  * Humanoid rig — the skeleton every actor is posed with.
  *
- * - 21 bones with VRM/Unity-style names, so imported characters can be retargeted by name later.
+ * - 19 body bones + toes + 30 finger bones (3 segments × 5 fingers × 2 hands) with VRM/Unity-style names, so imported characters can be retargeted by name later.
  * - Rest pose: standing, arms hanging, every bone's local axes aligned with the actor's (+X = the actor's LEFT,
  *   +Y up, +Z forward). Limb bones point down -Y at rest, so a NEGATIVE X rotation swings a limb forward.
  * - A pose is just Euler (XYZ, radians) rotations per bone plus a hips translation: pure data, so it can be blended,
@@ -12,19 +12,51 @@ import { Q, type Quat } from "./quat";
  */
 export const REST_HEIGHT = 1.72;
 
-export const BONES = [
+const CORE_BONES = [
   "hips", "spine", "chest", "neck", "head",
   "leftShoulder", "leftUpperArm", "leftLowerArm", "leftHand",
   "rightShoulder", "rightUpperArm", "rightLowerArm", "rightHand",
   "leftUpperLeg", "leftLowerLeg", "leftFoot",
   "rightUpperLeg", "rightLowerLeg", "rightFoot",
 ] as const;
-export type BoneName = (typeof BONES)[number];
+export type CoreBone = (typeof CORE_BONES)[number];
+
+type Side = "left" | "right";
+export const FINGERS = ["Thumb", "Index", "Middle", "Ring", "Little"] as const;
+export const FINGER_SEGMENTS = ["Proximal", "Intermediate", "Distal"] as const;
+export type Finger = (typeof FINGERS)[number];
+export type FingerBone = `${Side}${Finger}${(typeof FINGER_SEGMENTS)[number]}`;
+export type ToeBone = `${Side}Toes`;
+export type BoneName = CoreBone | ToeBone | FingerBone;
+
+const SIDES: readonly Side[] = ["left", "right"];
+
+/** Parents always come before their children (FK relies on it). */
+export const BONES: readonly BoneName[] = [
+  ...CORE_BONES,
+  ...SIDES.map((s) => `${s}Toes` as ToeBone),
+  ...SIDES.flatMap((s) => FINGERS.flatMap((f) => FINGER_SEGMENTS.map((seg) => `${s}${f}${seg}` as FingerBone))),
+];
 
 interface BoneDef {
   parent: BoneName | null;
   /** rest offset from the parent bone's origin, in meters at REST_HEIGHT */
   offset: Vec3;
+}
+
+/** Finger geometry (left hand; the right hand mirrors X): knuckle position on the hand and segment lengths. */
+const FINGER_REST: Record<Finger, { knuckle: Vec3; len: [number, number, number] }> = {
+  Thumb: { knuckle: [-0.012, -0.03, 0.028], len: [0.035, 0.03, 0.025] },
+  Index: { knuckle: [0, -0.085, 0.026], len: [0.04, 0.025, 0.02] },
+  Middle: { knuckle: [0, -0.087, 0.009], len: [0.045, 0.028, 0.02] },
+  Ring: { knuckle: [0, -0.084, -0.008], len: [0.04, 0.026, 0.02] },
+  Little: { knuckle: [0, -0.078, -0.024], len: [0.032, 0.02, 0.018] },
+};
+
+/** Length of a finger segment (distal = fingertip pad), in rest meters — for drawing. */
+export function fingerSegmentLength(bone: BoneName): number | null {
+  for (const f of FINGERS) for (let i = 0; i < 3; i++) if (bone.endsWith(f + FINGER_SEGMENTS[i])) return FINGER_REST[f].len[i]!;
+  return null;
 }
 
 export const RIG: Record<BoneName, BoneDef> = {
@@ -47,7 +79,23 @@ export const RIG: Record<BoneName, BoneDef> = {
   rightUpperLeg: { parent: "hips", offset: [-0.1, -0.04, 0] },
   rightLowerLeg: { parent: "rightUpperLeg", offset: [0, -0.44, 0] },
   rightFoot: { parent: "rightLowerLeg", offset: [0, -0.41, 0] },
-};
+  // toes hinge at the ball of the foot
+  leftToes: { parent: "leftFoot", offset: [0, -0.012, 0.12] },
+  rightToes: { parent: "rightFoot", offset: [0, -0.012, 0.12] },
+} as Record<BoneName, BoneDef>;
+for (const side of SIDES) {
+  const sign = side === "left" ? 1 : -1;
+  for (const f of FINGERS) {
+    const { knuckle, len } = FINGER_REST[f];
+    FINGER_SEGMENTS.forEach((seg, i) => {
+      const name = `${side}${f}${seg}` as FingerBone;
+      RIG[name] = {
+        parent: i === 0 ? (`${side}Hand` as BoneName) : (`${side}${f}${FINGER_SEGMENTS[i - 1]}` as BoneName),
+        offset: i === 0 ? [knuckle[0] * sign, knuckle[1], knuckle[2]] : [0, -len[i - 1]!, 0],
+      };
+    });
+  }
+}
 
 /** Forearm / upper-arm lengths (rest meters) — the two segments of the arm IK. */
 export const ARM = { upper: 0.29, lower: 0.27 } as const;

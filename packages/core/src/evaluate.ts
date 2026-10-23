@@ -1,11 +1,11 @@
-import type { Action, BodyPart, Gesture, Key, Pose, BlockshotSpec, Prop, Target, TrackProperty, Vec3 } from "./schema";
+import type { Action, BodyPart, Gesture, HandShape, Key, Pose, BlockshotSpec, Prop, Target, TrackProperty, Vec3 } from "./schema";
 import { applyEase, DEG, unwrapYaw, vec, yawTowards } from "./math";
 import { verticalFov } from "./camera";
 import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
 import { seatPose } from "./catalog";
 import { REST_HEIGHT, applyLayer, blendPoses, smoothstep, solveRig, toLocal, toWorld, type BoneName, type RigPose, type Skeleton } from "./rig";
 import { Q } from "./quat";
-import { basePose, envelope, GESTURE_DEFS, lookLayer, sampleGesture, solveArm } from "./poses";
+import { basePose, envelope, GESTURE_DEFS, handShapeLayer, lookLayer, RELAXED_HANDS, sampleGesture, solveArm } from "./poses";
 
 const WALK_SPEED = 1.3;
 const RUN_SPEED = 3.5;
@@ -42,7 +42,8 @@ export interface CompiledScene {
 /** A timed body layer on top of the actor's base pose. */
 export type ActLayer =
   | { kind: "gesture"; gesture: Gesture; start: number; end: number; side: "left" | "right"; intensity: number }
-  | { kind: "reach"; target: Target; hand: "left" | "right"; start: number; end: number };
+  | { kind: "reach"; target: Target; hand: "left" | "right"; start: number; end: number }
+  | { kind: "hand"; shape: HandShape; hand: "left" | "right" | "both"; start: number; end: number };
 
 export interface ActorState {
   id: string;
@@ -246,6 +247,12 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       scene.acts.set(a.actor, list);
       break;
     }
+    case "handShape": {
+      const list = scene.acts.get(a.actor) ?? [];
+      list.push({ kind: "hand", shape: a.shape, hand: a.hand, start: a.start, end: a.start + a.duration });
+      scene.acts.set(a.actor, list);
+      break;
+    }
     case "reach": {
       const list = scene.acts.get(a.actor) ?? [];
       list.push({ kind: "reach", target: a.target, hand: a.hand, start: a.start, end: a.start + a.duration });
@@ -411,9 +418,10 @@ function rigPart(sk: Skeleton, part: BodyPart, scale: number, position: Vec3, ro
  */
 function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnType<typeof actorCore>, lookTarget: Vec3 | null): { pose: RigPose; skeleton: Skeleton } {
   const scale = core.actor.height / REST_HEIGHT;
-  let pose = basePose(core.pose, core.poseTime);
+  const withHands = (p: RigPose) => ({ hips: p.hips, rot: { ...RELAXED_HANDS, ...p.rot } });
+  let pose = withHands(basePose(core.pose, core.poseTime));
   if (core.blend < 1 && core.prevPose !== core.pose) {
-    pose = blendPoses(basePose(core.prevPose, core.prevPoseTime), pose, smoothstep(core.blend));
+    pose = blendPoses(withHands(basePose(core.prevPose, core.prevPoseTime)), pose, smoothstep(core.blend));
   }
   if (lookTarget) {
     const local = toLocal(lookTarget, core.position, core.rotation);
@@ -426,6 +434,8 @@ function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnTyp
     if (layer.kind === "gesture") {
       const g = sampleGesture(layer.gesture, u, d, layer.side, layer.intensity);
       pose = applyLayer(pose, g.layer, g.weight);
+    } else if (layer.kind === "hand") {
+      pose = applyLayer(pose, handShapeLayer(layer.shape, layer.hand), envelope(u, d, true));
     } else {
       const w = envelope(u, d, true);
       if (w <= 0) continue;

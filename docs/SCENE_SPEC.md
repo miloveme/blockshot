@@ -122,6 +122,8 @@ Blockshot Spec은 프로젝트의 **유일한 진실 원천** 이다. UI 편집,
 
 LLM과 사람이 가장 많이 쓰는 레이어. 로드 시 `compile()`이 `tracks`로 풀어낸다.
 
+모든 액션은 선택 필드 `id`(라벨)를 가질 수 있다. 없으면 위치 라벨 `act1`, `act2` …(1부터)로 불리며, AI 부분 수정(`patchActions`/`removeActions`)과 스크립트(`scene.patchAction/removeAction`)가 이 라벨로 액션을 지목한다. 명시한 `id`는 중복될 수 없다.
+
 | type | 필드 | 효과 |
 | --- | --- | --- |
 | `walkTo` | `actor, to: Vec3 \| Vec3[], start, duration?, speed?` | 위치 이동 + 진행 방향으로 회전 + `walk` 포즈. `duration` 없으면 `speed`(기본 1.3 m/s)로 계산 |
@@ -130,6 +132,7 @@ LLM과 사람이 가장 많이 쓰는 레이어. 로드 시 `compile()`이 `trac
 | `pose` | `actor, pose, start` | 포즈 전환 — 이전 포즈에서 0.35초 동안 관절별로 부드럽게 섞인다(`ActorState.blend`) |
 | `sitDown` | `actor, on: 의자/소파 소품 id, start, duration?(1), offset?(0)` | 좌석까지 걸어가(이동 키) 좌석이 향한 방향으로 돌고 마지막 0.35초에 `sit`으로 내려앉는다. 소파는 `offset`(m, 소파 폭 방향)으로 여러 명이 나눠 앉는다. `on`은 `chair`/`sofa`여야 한다(검증 오류) |
 | `gesture` | `actor, gesture, start, duration?, side?, intensity?(1)` | 몸짓 레이어를 현재 포즈 위에 얹는다(0.25초 페이드). `gesture`: wave, nod, shakeHead, shrug, clap, crossArms, handsOnHips, think, bow, lookAround, cheer. 한 손 제스처는 `side`로 손을 고른다 |
+| `handShape` | `actor, shape, hand?(both), start, duration?(2)` | 손가락 모양을 잡는다: `open`·`relaxed`·`fist`·`point`·`pinch`·`grip`. 기본 손은 `relaxed` |
 | `reach` | `actor, target, hand?(right), start, duration?(1.5)` | 손을 점/소품/인물 부위로 뻗는다(2본 IK, 팔 길이를 넘으면 최대한 뻗음). 집기·가리키기·악수에 사용 |
 | `standUp` | `actor, start, duration?(0.8), to?` | `stand`로 일어나 바라보는 방향으로 0.6 m(또는 `to`) 걸어 나온다 |
 | `lookAt` | `actor, target, start, end?` | 머리 방향 |

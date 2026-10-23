@@ -19,3 +19,4 @@ export * from "./addon";
 export * from "./quat";
 export * from "./rig";
 export * from "./poses";
+export * from "./actions";

@@ -1,7 +1,8 @@
-import type { Actor, BlockshotSpec, Camera, Gesture, Key, Prop, PropType, Shot, Target, TrackProperty, Vec3 } from "./schema";
+import type { Actor, BlockshotSpec, Camera, Gesture, HandShape, Key, Prop, PropType, Shot, Target, TrackProperty, Vec3 } from "./schema";
 import { compile, evaluate } from "./evaluate";
 import { parseRef } from "./mirror";
 import { SEATS } from "./catalog";
+import { mergeAction, patchProblem } from "./actions";
 
 /**
  * Pure editing operations for UI tools. Every function returns a NEW spec (inputs are never mutated),
@@ -293,6 +294,13 @@ export function removeActionAt(spec: BlockshotSpec, index: number): BlockshotSpe
   return { ...spec, actions: spec.actions.filter((_, i) => i !== index) };
 }
 
+/** Changes fields of the action at `index` (start, duration, target …); the type cannot change. */
+export function patchActionAt(spec: BlockshotSpec, index: number, fields: Record<string, unknown>): BlockshotSpec {
+  const action = spec.actions[index];
+  if (!action || patchProblem(action, fields)) return spec;
+  return extendDuration({ ...spec, actions: spec.actions.map((a, i) => (i === index ? mergeAction(a, fields) : a)) });
+}
+
 export function patchMoveAt(spec: BlockshotSpec, index: number, patch: { start?: number; speed?: number | undefined; run?: boolean; to?: Vec3 | Vec3[] }): BlockshotSpec {
   const a = spec.actions[index];
   if (!a || (a.type !== "walkTo" && a.type !== "runTo")) return spec;
@@ -370,6 +378,13 @@ export function addStandUp(spec: BlockshotSpec, actorId: string, opts: { start: 
 export function addGesture(spec: BlockshotSpec, actorId: string, gesture: Gesture, opts: { start: number; duration?: number; side?: "left" | "right" }): BlockshotSpec {
   if (!spec.actors.some((a) => a.id === actorId)) return spec;
   const action = { type: "gesture" as const, actor: actorId, gesture, start: roundT(Math.max(0, opts.start)), intensity: 1, ...(opts.duration ? { duration: opts.duration } : {}), ...(opts.side ? { side: opts.side } : {}) };
+  return extendDuration({ ...spec, actions: [...spec.actions, action] });
+}
+
+/** Holds a hand shape (fist, point …) for `duration` seconds. */
+export function addHandShape(spec: BlockshotSpec, actorId: string, shape: HandShape, opts: { start: number; hand?: "left" | "right" | "both"; duration?: number }): BlockshotSpec {
+  if (!spec.actors.some((a) => a.id === actorId)) return spec;
+  const action = { type: "handShape" as const, actor: actorId, shape, hand: opts.hand ?? "both", start: roundT(Math.max(0, opts.start)), duration: opts.duration ?? 2 };
   return extendDuration({ ...spec, actions: [...spec.actions, action] });
 }
 

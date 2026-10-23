@@ -4,7 +4,7 @@ import { Suspense, useRef, type ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
 import * as THREE from "three";
-import { BONES, DEG, RIG, type ActorState, type BoneName } from "@blockshot/core";
+import { BONES, DEG, RIG, fingerSegmentLength, type ActorState, type BoneName } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
 import { EditorOnly } from "./EditorOnly";
 
@@ -18,10 +18,10 @@ const BUILD_WIDTH = { slim: 0.85, average: 1, heavy: 1.25 } as const;
 
 const children = (parent: BoneName | null) => BONES.filter((b) => RIG[b].parent === parent);
 
-function Capsule({ r, len, y = 0, color, z = 0 }: { r: number; len: number; y?: number; z?: number; color: string }) {
+function Capsule({ r, len, y = 0, color, z = 0, noShadow }: { r: number; len: number; y?: number; z?: number; color: string; noShadow?: boolean }) {
   return (
-    <mesh position={[0, y, z]} castShadow>
-      <capsuleGeometry args={[r, Math.max(0.01, len - r * 2), 4, 10]} />
+    <mesh position={[0, y, z]} castShadow={!noShadow}>
+      <capsuleGeometry args={[r, Math.max(0.005, len - r * 2), 3, 6]} />
       <meshStandardMaterial color={color} roughness={0.85} />
     </mesh>
   );
@@ -80,13 +80,24 @@ function Visual({ bone, color }: { bone: BoneName; color: string }): ReactNode {
     case "leftFoot":
     case "rightFoot":
       return (
-        <mesh position={[0, 0.01, 0.05]} castShadow>
-          <boxGeometry args={[0.1, 0.06, 0.24]} />
+        <mesh position={[0, 0.01, 0.03]} castShadow>
+          <boxGeometry args={[0.1, 0.06, 0.2]} />
           <meshStandardMaterial color={color} roughness={0.85} />
         </mesh>
       );
-    default:
-      return null;
+    case "leftToes":
+    case "rightToes":
+      return (
+        <mesh position={[0, 0, 0.03]} castShadow>
+          <boxGeometry args={[0.1, 0.035, 0.07]} />
+          <meshStandardMaterial color={color} roughness={0.85} />
+        </mesh>
+      );
+    default: {
+      // finger segments: thin capsules hanging along -Y
+      const len = fingerSegmentLength(bone);
+      return len ? <Capsule r={0.0085} len={len} y={-len / 2} color={color} noShadow /> : null;
+    }
   }
 }
 

@@ -602,6 +602,10 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [
@@ -675,6 +679,10 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [
@@ -735,6 +743,10 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [
@@ -770,6 +782,10 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [
@@ -826,12 +842,68 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [
               "type",
               "actor",
               "gesture",
+              "start"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "handShape"
+              },
+              "actor": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              },
+              "shape": {
+                "type": "string",
+                "enum": [
+                  "open",
+                  "relaxed",
+                  "fist",
+                  "point",
+                  "pinch",
+                  "grip"
+                ]
+              },
+              "hand": {
+                "default": "both",
+                "type": "string",
+                "enum": [
+                  "left",
+                  "right",
+                  "both"
+                ]
+              },
+              "duration": {
+                "default": 2,
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "start": {
+                "type": "number",
+                "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              }
+            },
+            "required": [
+              "type",
+              "actor",
+              "shape",
               "start"
             ]
           },
@@ -887,6 +959,10 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [
@@ -923,6 +999,10 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [
@@ -968,6 +1048,10 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [
@@ -1018,6 +1102,10 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [
@@ -1073,6 +1161,10 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [
@@ -1122,6 +1214,10 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [
@@ -1165,6 +1261,10 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [
@@ -1232,6 +1332,10 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [

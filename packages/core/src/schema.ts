@@ -36,6 +36,11 @@ export const GESTURES = ["wave", "nod", "shakeHead", "shrug", "clap", "crossArms
 export const GestureName = z.enum(GESTURES);
 export type Gesture = z.infer<typeof GestureName>;
 
+/** Hand shapes for the finger bones. */
+export const HAND_SHAPES = ["open", "relaxed", "fist", "point", "pinch", "grip"] as const;
+export const HandShapeName = z.enum(HAND_SHAPES);
+export type HandShape = z.infer<typeof HandShapeName>;
+
 export const Settings = z.object({
   fps: z.number().int().min(1).max(120).default(24),
   duration: z.number().positive().default(6),
@@ -137,7 +142,8 @@ export const Camera = z.object({
 });
 export type Camera = z.infer<typeof Camera>;
 
-const timed = { start: z.number().min(0) };
+/** every action has a start time and an optional label (`id`) so edits can address it ("patchActions" / "removeActions") */
+const timed = { start: z.number().min(0), id: Id.optional() };
 
 export const Action = z.discriminatedUnion("type", [
   z.object({ type: z.literal("walkTo"), actor: Id, to: z.union([Vec3, z.array(Vec3).min(1)]), duration: z.number().positive().optional(), speed: z.number().positive().optional(), ...timed }),
@@ -146,6 +152,8 @@ export const Action = z.discriminatedUnion("type", [
   z.object({ type: z.literal("pose"), actor: Id, pose: Pose, ...timed }),
   /** a piece of body language: wave, nod, shrug … `side` picks the hand of one-handed ones; `intensity` scales it */
   z.object({ type: z.literal("gesture"), actor: Id, gesture: GestureName, side: z.enum(["left", "right"]).optional(), duration: z.number().positive().optional(), intensity: z.number().min(0).max(1).default(1), ...timed }),
+  /** hold a hand shape (fist, point, pinch, grip, open) with one or both hands for `duration` */
+  z.object({ type: z.literal("handShape"), actor: Id, shape: HandShapeName, hand: z.enum(["left", "right", "both"]).default("both"), duration: z.number().positive().default(2), ...timed }),
   /** reach a hand toward a point / object / body part (IK) — pointing, touching, handing over — and hold it for `duration` */
   z.object({ type: z.literal("reach"), actor: Id, target: Target, hand: z.enum(["left", "right"]).default("right"), duration: z.number().positive().default(1.5), ...timed }),
   /** walk onto a chair / sofa, turn to face the way it faces and lower into the seat */

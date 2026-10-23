@@ -89,8 +89,13 @@ export function validateSpec(input: unknown): ValidationResult {
   };
 
   spec.cameras.forEach((c, i) => c.lookAt !== undefined && checkTarget(c.lookAt, `cameras[${i}].lookAt`));
+  const seenActionIds = new Set<string>();
   spec.actions.forEach((a, i) => {
     const p = `actions[${i}]`;
+    if (a.id) {
+      if (seenActionIds.has(a.id)) errors.push({ path: `${p}.id`, message: `Duplicate action id "${a.id}"` });
+      seenActionIds.add(a.id);
+    }
     if ("actor" in a) checkActor(a.actor, `${p}.actor`);
     if (a.type === "sitDown") {
       const seat = spec.props.find((x) => x.id === a.on);

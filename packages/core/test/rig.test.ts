@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  ARM, BONES, addGesture, addReach, buildAnimatePrompt, createSceneBuilder, GESTURES, Q, REST_HEIGHT, applyLayer, basePose, blendPoses, compile, envelope, evaluate, lookLayer, mirrorLayer, resolveTarget, restPose, sampleGesture,
+  ARM, BONES, RIG, handLayer, addGesture, addReach, buildAnimatePrompt, createSceneBuilder, GESTURES, Q, REST_HEIGHT, applyLayer, basePose, blendPoses, compile, envelope, evaluate, lookLayer, mirrorLayer, resolveTarget, restPose, sampleGesture,
   solveArm, solveRig, toLocal, toWorld, validateSpec, type BlockshotSpec, type Vec3,
 } from "../src";
 
@@ -274,5 +274,52 @@ describe("authoring: builder, edit ops and prompt kit", () => {
   it("prompts teach the acting vocabulary", () => {
     const p = buildAnimatePrompt({ request: "x", spec: parse({ specVersion: "0.1", actors: [{ id: "a" }] }) });
     for (const w of ["gesture", "reach", "wave"]) expect(p).toContain(w);
+  });
+});
+
+describe("fingers and toes", () => {
+  it("has 30 finger bones and toes, parents before children", () => {
+    expect(BONES.filter((b) => /(Thumb|Index|Middle|Ring|Little)/.test(b))).toHaveLength(30);
+    expect(BONES).toContain("leftToes");
+    BONES.forEach((b, i) => {
+      const parent = RIG[b].parent;
+      if (parent) expect(BONES.indexOf(parent)).toBeLessThan(i);
+    });
+  });
+
+  it("a fist curls the fingertips toward the palm (-X for the left hand, +X for the right)", () => {
+    const rest = solveRig(restPose());
+    const left = solveRig(applyLayer(restPose(), handLayer("fist", "left"), 1));
+    const right = solveRig(applyLayer(restPose(), handLayer("fist", "right"), 1));
+    expect(left.leftIndexDistal.pos[0]).toBeLessThan(rest.leftIndexDistal.pos[0] - 0.02);
+    expect(left.leftIndexDistal.pos[1]).toBeGreaterThan(rest.leftIndexDistal.pos[1] + 0.03); // tip comes up
+    expect(right.rightIndexDistal.pos[0]).toBeGreaterThan(rest.rightIndexDistal.pos[0] + 0.02);
+    expect(left.rightIndexDistal.pos).toEqual(rest.rightIndexDistal.pos); // the other hand is untouched
+  });
+
+  it("pointing keeps the index finger straight while the others curl", () => {
+    const sk = solveRig(applyLayer(restPose(), handLayer("point", "right"), 1));
+    const rest = solveRig(restPose());
+    expect(sk.rightIndexDistal.pos).toEqual(rest.rightIndexDistal.pos);
+    expect(sk.rightMiddleDistal.pos[0]).toBeGreaterThan(rest.rightMiddleDistal.pos[0] + 0.02);
+  });
+
+  it("every actor has relaxed hands by default and a handShape action overrides them", () => {
+    const spec = parse({ specVersion: "0.1", actors: [{ id: "a" }], actions: [{ type: "handShape", actor: "a", shape: "fist", hand: "left", start: 1, duration: 2 }] });
+    const c = compile(spec);
+    const idle = evaluate(c, 0).actors.a!.rig.rot.leftIndexProximal![2];
+    const fist = evaluate(c, 2).actors.a!.rig.rot.leftIndexProximal![2];
+    expect(idle).toBeCloseTo(-0.25, 5);
+    expect(fist).toBeCloseTo(-1.4, 5);
+    expect(evaluate(c, 2).actors.a!.rig.rot.rightIndexProximal![2]).toBeCloseTo(0.25, 5); // right hand unchanged
+    expect(evaluate(c, 3.5).actors.a!.rig.rot.leftIndexProximal![2]).toBeCloseTo(-0.25, 5);
+  });
+
+  it("walking flexes the ankles and rolls the trailing foot onto its toes", () => {
+    const w = basePose("walk", 0.28);
+    expect(w.rot.leftFoot![0]).not.toBe(0);
+    const trailing = (w.rot.leftUpperLeg![0] > 0 ? "left" : "right") as "left" | "right";
+    expect(w.rot[`${trailing}Toes`]![0]).toBeLessThan(0);
+    expect(basePose("stand", 0).rot.leftToes).toBeUndefined();
   });
 });

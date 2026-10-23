@@ -1,6 +1,6 @@
 "use client";
 
-import { GESTURES, LENS_PRESETS, POSES, SEATS, addGesture, addReach, addSitDown, addStandUp, keyTimes, kindOf, movesOf, patchMoveAt, removeActionAt, type Gesture, type Pose } from "@blockshot/core";
+import { GESTURES, HAND_SHAPES, LENS_PRESETS, POSES, SEATS, addGesture, addHandShape, addReach, addSitDown, addStandUp, describeAction, labeledActions, patchActionAt, keyTimes, kindOf, movesOf, patchMoveAt, removeActionAt, type Gesture, type HandShape, type Pose } from "@blockshot/core";
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { hasModel, importGlb } from "@/lib/models";
@@ -324,6 +324,8 @@ const GESTURE_LABEL: Record<Gesture, string> = {
   handsOnHips: "허리에 손", think: "생각", bow: "인사(숙임)", lookAround: "두리번", cheer: "환호",
 };
 
+const HAND_LABEL: Record<HandShape, string> = { open: "펼침", relaxed: "편하게", fist: "주먹", point: "가리키기", pinch: "집기", grip: "쥐기" };
+
 /** Acting: body-language gestures and IK hand reaches, added at the current time. */
 function ActingControls({ actorId }: { actorId: string }) {
   const spec = useStudio((s) => s.spec);
@@ -331,12 +333,12 @@ function ActingControls({ actorId }: { actorId: string }) {
   const [gesture, setGesture] = useState<Gesture>("wave");
   const [target, setTarget] = useState("");
   const [hand, setHand] = useState<"left" | "right">("right");
+  const [shape, setShape] = useState<HandShape>("fist");
   const targets = [
     ...spec.props.map((p) => ({ value: p.id, label: `${p.type} · ${p.id}` })),
     ...spec.actors.filter((a) => a.id !== actorId).flatMap((a) => [{ value: `${a.id}.hand_r`, label: `${a.name ?? a.id} 오른손` }, { value: `${a.id}.hand_l`, label: `${a.name ?? a.id} 왼손` }, { value: `${a.id}.head`, label: `${a.name ?? a.id} 머리` }]),
   ];
   const chosen = targets.find((t) => t.value === target)?.value ?? targets[0]?.value ?? "";
-  const count = spec.actions.filter((a) => (a.type === "gesture" || a.type === "reach") && a.actor === actorId).length;
   return (
     <div className="mt-1 flex flex-col gap-1.5 border-t border-white/10 pt-2">
       <span className="text-[11px] font-medium text-zinc-300">연기 (현재 시간)</span>
@@ -346,6 +348,14 @@ function ActingControls({ actorId }: { actorId: string }) {
         </div>
         <button className="whitespace-nowrap rounded bg-violet-500/80 px-2 py-1 text-[11px] text-white hover:bg-violet-400" onClick={() => edit((s) => addGesture(s, actorId, gesture, { start: useStudio.getState().time }))}>
           🎭 연기
+        </button>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <div className="min-w-0 flex-1">
+          <SelectField value={shape} options={HAND_SHAPES.map((h) => ({ value: h, label: HAND_LABEL[h] }))} onCommit={setShape} />
+        </div>
+        <button className="whitespace-nowrap rounded bg-white/10 px-2 py-1 text-[11px] hover:bg-white/20" title="현재 시간부터 양손 손가락 모양을 바꿉니다" onClick={() => edit((s) => addHandShape(s, actorId, shape, { start: useStudio.getState().time }))}>
+          ✊ 손 모양
         </button>
       </div>
       {targets.length > 0 ? (
@@ -361,7 +371,37 @@ function ActingControls({ actorId }: { actorId: string }) {
           </button>
         </div>
       ) : null}
-      {count > 0 ? <p className="text-[10px] text-zinc-600">연기 {count}개 등록됨</p> : null}
+      <ActionList ownerId={actorId} />
+    </div>
+  );
+}
+
+/** The actor's non-movement actions with their labels (act3 …): edit timing or delete one without touching the rest. */
+function ActionList({ ownerId }: { ownerId: string }) {
+  const spec = useStudio((s) => s.spec);
+  const edit = useStudio((s) => s.edit);
+  const rows = labeledActions(spec).filter(({ action }) => "actor" in action && action.actor === ownerId && action.type !== "walkTo" && action.type !== "runTo");
+  if (rows.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1 pt-1">
+      <span className="text-[10px] text-zinc-500">동작 목록 — AI에게 “act3 수정해줘”처럼 id로 지목할 수 있어요</span>
+      {rows.map(({ label, index, action }) => (
+        <div key={index} className="flex items-center gap-1.5 text-[11px] text-zinc-400">
+          <span className="w-10 shrink-0 truncate font-mono text-[10px] text-zinc-500" title={label}>{label}</span>
+          <span className="min-w-0 flex-1 truncate" title={describeAction(action)}>{describeAction(action).replace(/ @.*$/, "")}</span>
+          <div className="w-14" title="시작(초)">
+            <NumField value={action.start} min={0} step={0.1} onCommit={(v) => edit((s) => patchActionAt(s, index, { start: v }))} />
+          </div>
+          {"duration" in action && action.duration !== undefined ? (
+            <div className="w-12" title="길이(초)">
+              <NumField value={action.duration} min={0.1} step={0.1} onCommit={(v) => edit((s) => patchActionAt(s, index, { duration: v }))} />
+            </div>
+          ) : null}
+          <button className="text-red-300 hover:underline" onClick={() => edit((s) => removeActionAt(s, index))}>
+            삭제
+          </button>
+        </div>
+      ))}
     </div>
   );
 }
