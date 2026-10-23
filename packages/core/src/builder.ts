@@ -233,8 +233,25 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
       camCursor.set(id, { pos, aim: o.lookAt ?? null, rotation: o.rotation ?? [0, 0, 0] });
       return makeCamera(id);
     },
-    shot(id: string, o: { camera: CameraHandle | string; start: number; end: number; name?: string; description?: string; prompt?: string }) {
-      spec.shots.push({ id, name: o.name, camera: typeof o.camera === "string" ? o.camera : o.camera.id, start: o.start, end: o.end, description: o.description, prompt: o.prompt });
+    shot(id: string, o: { camera: CameraHandle | string; start: number; end: number; name?: string; description?: string; prompt?: string; after?: string }) {
+      const shot = { id, name: o.name, camera: typeof o.camera === "string" ? o.camera : o.camera.id, start: o.start, end: o.end, description: o.description, prompt: o.prompt };
+      const at = o.after === undefined ? -1 : spec.shots.findIndex((s) => s.id === o.after);
+      if (o.after !== undefined && at < 0) throw new Error(`scene.shot("${id}"): no shot "${o.after}" to insert after. Available: ${spec.shots.map((s) => s.id).join(", ") || "none"}`);
+      if (at < 0) spec.shots.push(shot);
+      else spec.shots.splice(at + 1, 0, shot);
+    },
+    /** Changes fields of an existing shot (camera, start, end, name, description, prompt); everything else stays. */
+    patchShot(id: string, o: { camera?: CameraHandle | string; start?: number; end?: number; name?: string; description?: string; prompt?: string }) {
+      const shot = spec.shots.find((s) => s.id === id);
+      if (!shot) throw new Error(`scene.patchShot("${id}"): no such shot. Available: ${spec.shots.map((s) => s.id).join(", ") || "none"}`);
+      const { camera, ...rest } = o;
+      Object.assign(shot, Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)));
+      if (camera !== undefined) shot.camera = typeof camera === "string" ? camera : camera.id;
+    },
+    /** Deletes a shot by id. */
+    removeShot(id: string) {
+      if (!spec.shots.some((s) => s.id === id)) throw new Error(`scene.removeShot("${id}"): no such shot. Available: ${spec.shots.map((s) => s.id).join(", ") || "none"}`);
+      spec.shots = spec.shots.filter((s) => s.id !== id);
     },
     key(target: string, property: TrackProperty, t: number, value: Vec3 | number | Pose, ease?: Ease) {
       const existing = spec.tracks.find((tr) => tr.target === target && tr.property === property);

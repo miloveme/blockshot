@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { addonFromSpec, applyAddon, buildAnimatePrompt, buildFixPrompt, buildLayoutFixPrompt, buildPrompt, detectPasted, lintLayout, parseAddon, validateSpec, type Issue, type PromptMode } from "@blockshot/core";
+import { addonFromSpec, addonIssues, applyAddon, buildAnimatePrompt, buildFixPrompt, buildLayoutFixPrompt, buildPrompt, detectPasted, lintLayout, parseAddon, validateSpec, type Issue, type PromptMode } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
 import { runScriptInWorker } from "@/lib/run-script";
 
@@ -60,6 +60,11 @@ export function ImportPanel({ onClose }: { onClose: () => void }) {
         const parsed = full?.ok ? { ok: true as const, addon: addonFromSpec(full.spec, base) } : parseAddon(input);
         if (!parsed.ok) {
           setErrors(parsed.errors);
+          return;
+        }
+        const problems = addonIssues(base, parsed.addon); // e.g. patching a shot id that does not exist
+        if (problems.length) {
+          setErrors(problems);
           return;
         }
         input = applyAddon(base, parsed.addon);

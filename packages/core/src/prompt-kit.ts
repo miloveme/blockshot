@@ -227,7 +227,11 @@ export function describeScene(spec: BlockshotSpec): string {
   }
 
   lines.push(`Existing actions (${spec.actions.length}): ${spec.actions.length ? JSON.stringify(spec.actions) : "none"}`);
-  lines.push(`Existing shots in edit order (${spec.shots.length}): ${spec.shots.length ? JSON.stringify(spec.shots.map(({ id, camera, start, end }) => ({ id, camera, start, end }))) : "none"}`);
+  lines.push(
+    `Existing shots in edit order (${spec.shots.length}): ${
+      spec.shots.length ? JSON.stringify(spec.shots.map(({ id, camera, start, end, description, prompt }) => ({ id, camera, start, end, ...(description ? { description } : {}), ...(prompt ? { hasPrompt: true } : {}) }))) : "none"
+    }`,
+  );
   return lines.join("\n");
 }
 
@@ -250,12 +254,15 @@ export function buildAnimatePrompt(opts: { request: string; spec: BlockshotSpec;
       ? `Output exactly ONE \`\`\`json code block with ONLY the new things:
 { "actions": [ ... ],            // NEW actions, appended to the existing ones
   "cameras": [ ... ],            // optional: NEW cameras only (new ids)
-  "shots": [ ... ],              // optional: the COMPLETE shot list in edit order; replaces the existing list
+  "addShots": [ ... ],           // optional: NEW shots; appended, or { ..., "after": "<shotId>" } to insert after that shot
+  "patchShots": [ ... ],         // optional: changes to EXISTING shots by id, e.g. { "id": "S1", "end": 5, "camera": "cam2" }; other fields stay
+  "removeShots": [ "S2" ],       // optional: delete shots by id
+  "shots": [ ... ],              // optional, rarely needed: the COMPLETE shot list; replaces everything (existing descriptions/prompts are lost unless you repeat them)
   "duration": seconds,           // optional: project length
   "clearActions": true }         // optional: drop the existing actions first, to re-animate from scratch
 Action shapes:
 ${ACTION_LINES}
-Cameras: { "id", "name"?, "position": [x,y,z], "lookAt"?: [x,y,z] | ref, "focalLength"? mm }. Shots: { "id", "camera", "start", "end", "description"?, "prompt"? }.
+Cameras: { "id", "name"?, "position": [x,y,z], "lookAt"?: [x,y,z] | ref, "focalLength"? mm }. Shots: { "id", "camera", "start", "end", "description"?, "prompt"? } — change the cut with addShots / patchShots / removeShots; leave shots you do not mention alone.
 Refs: "actorId", "actorId.part" (parts: ${BODY_PARTS.join(", ")}), "actorId.part@mirrorId" (reflection). Poses: ${POSES.join(", ")}. Ease: linear, easeIn, easeOut, easeInOut, step.`
       : `Output exactly ONE \`\`\`js code block (Blockshot Script; globals: scene, vec, rand). The scene already exists: get handles with scene.use("<id>") and do NOT call scene.room/ground/street/actor/prop.
 const a = scene.use("<actorId>");   // actor handle (or camera handle for a camera id)
@@ -263,7 +270,7 @@ a.walkTo([x,0,z] | [[x,0,z],...], { start, duration?, speed? }); a.runTo(...); a
 const c = scene.camera("<new id>", { lens, at: [x,y,z], lookAt: a.chest }); // new camera; existing ones: scene.use("<cameraId>")
 c.moveTo(pos, { start, duration, ease }); c.dolly(m, {...}); c.truck(m, {...}); c.pedestal(m, {...}); c.orbit(target, { degrees, start, duration }); c.zoom(mm, {...}); c.lookAt(target, { start });
 scene.reflect(a.chest, mirrorId) -> a reference to where that point appears inside a mirror (aim cameras at reflections with it).
-scene.clearActions(idOrHandle?) removes existing actions (of one object, or all); scene.clearShots() empties the shot list; scene.shot(id, { camera, start, end, description }) adds a shot; scene.settings({ duration }).
+scene.clearActions(idOrHandle?) removes existing actions (of one object, or all). Shots: scene.shot(id, { camera, start, end, description, after? }) adds one (appended, or after the shot id in "after"); scene.patchShot(id, { camera?, start?, end?, description? }) edits an existing one; scene.removeShot(id) deletes one; scene.clearShots() empties the list (rarely needed). scene.settings({ duration }).
 Poses: ${POSES.join(", ")}.`;
   return [
     "You are a previsualization animator for film. A user has already placed actors, props and cameras in a 3D scene. Animate it according to the request below.",
