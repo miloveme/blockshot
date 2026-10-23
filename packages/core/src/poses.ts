@@ -13,6 +13,10 @@ const set = (pose: RigPose, bone: BoneName, x = 0, y = 0, z = 0) => {
   pose.rot[bone] = [x, y, z];
 };
 
+/** Seated pelvis height above the floor (m) and how far the thighs slope down from horizontal (rad). */
+export const SIT_HIPS_Y = 0.58;
+const SIT_THIGH_DROP = 0.19;
+
 /** The built-in poses as bone data. `t` = seconds since the pose started (drives the cycles). */
 export function basePose(name: Pose, t: number): RigPose {
   const p = restPose();
@@ -42,11 +46,13 @@ export function basePose(name: Pose, t: number): RigPose {
       return p;
     }
     case "sit":
-      p.hips = [0, 0.47 - RIG.hips.offset[1], 0];
-      set(p, "leftUpperLeg", -Math.PI / 2);
-      set(p, "rightUpperLeg", -Math.PI / 2);
-      set(p, "leftLowerLeg", Math.PI / 2);
-      set(p, "rightLowerLeg", Math.PI / 2);
+      // pelvis rests on the seat (seat top ≈ 0.45 m, the pelvis ball is 0.13 m), thighs slope slightly down so the shins
+      // stand vertical with the feet on the floor
+      p.hips = [0, SIT_HIPS_Y - RIG.hips.offset[1], 0];
+      set(p, "leftUpperLeg", -Math.PI / 2 + SIT_THIGH_DROP);
+      set(p, "rightUpperLeg", -Math.PI / 2 + SIT_THIGH_DROP);
+      set(p, "leftLowerLeg", Math.PI / 2 - SIT_THIGH_DROP);
+      set(p, "rightLowerLeg", Math.PI / 2 - SIT_THIGH_DROP);
       set(p, "leftUpperArm", -0.3);
       set(p, "rightUpperArm", -0.3);
       set(p, "leftLowerArm", -0.9);

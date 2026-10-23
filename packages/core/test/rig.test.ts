@@ -56,12 +56,14 @@ describe("skeleton / forward kinematics", () => {
     expect(sk.leftLowerLeg.pos[1]).toBeCloseTo(0.87, 5);
   });
 
-  it("sit pose: pelvis 0.47 m up, knees forward, feet back on the floor", () => {
+  it("sit pose: pelvis sits on a 0.45 m seat, knees forward, shins vertical, feet near the floor", () => {
     const sk = solveRig(basePose("sit", 0));
-    expect(sk.hips.pos[1]).toBeCloseTo(0.47, 5);
-    expect(sk.leftLowerLeg.pos[2]).toBeCloseTo(0.44, 4);
-    expect(sk.leftFoot.pos[1]).toBeCloseTo(0.02, 3); // thigh horizontal, shin vertical
-    expect(sk.leftFoot.pos[2]).toBeCloseTo(0.44, 3);
+    expect(sk.hips.pos[1]).toBeCloseTo(0.58, 5);
+    expect(sk.hips.pos[1] - 0.13).toBeGreaterThan(0.45 - 0.08); // the pelvis ball barely dips into the seat
+    expect(sk.leftLowerLeg.pos[2]).toBeCloseTo(0.44 * Math.cos(0.19), 3);
+    expect(sk.leftFoot.pos[1]).toBeLessThan(0.07); // shin vertical, sole within a few cm of the floor
+    expect(sk.leftFoot.pos[1]).toBeGreaterThan(0.01);
+    expect(sk.leftFoot.pos[2]).toBeCloseTo(sk.leftLowerLeg.pos[2], 3);
   });
 
   it("actor space ↔ world follows the Spec's yaw convention", () => {
@@ -82,8 +84,8 @@ describe("pose library", () => {
   it("is deterministic and blends joint by joint", () => {
     expect(basePose("talk", 1.3)).toEqual(basePose("talk", 1.3));
     const half = blendPoses(basePose("stand", 0), basePose("sit", 0), 0.5);
-    expect(half.hips[1]).toBeCloseTo(-0.22, 5);
-    expect(half.rot.leftUpperLeg![0]).toBeCloseTo(-Math.PI / 4, 5);
+    expect(half.hips[1]).toBeCloseTo((0.58 - 0.91) / 2, 5);
+    expect(half.rot.leftUpperLeg![0]).toBeCloseTo((-Math.PI / 2 + 0.19) / 2, 5);
   });
 
   it("layers override only their bones, by weight", () => {
@@ -201,9 +203,9 @@ describe("evaluate integration", () => {
   it("every actor carries a rig pose that matches its named pose", () => {
     const s = base([{ type: "pose", actor: "a", pose: "sit", start: 1 }]);
     expect(at(s, 0).rig.hips[1]).toBeCloseTo(0);
-    expect(at(s, 3).rig.hips[1]).toBeCloseTo(-0.44, 5);
+    expect(at(s, 3).rig.hips[1]).toBeCloseTo(0.58 - 0.91, 5);
     const mid = at(s, 1.175).rig.hips[1]; // halfway through the 0.35 s blend
-    expect(mid).toBeGreaterThan(-0.44);
+    expect(mid).toBeGreaterThan(0.58 - 0.91);
     expect(mid).toBeLessThan(0);
   });
 

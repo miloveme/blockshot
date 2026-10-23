@@ -48,7 +48,7 @@ export function propSize(prop: Pick<Prop, "type" | "asset">, assets: BlockshotSp
 
 /**
  * Where a seated actor's pelvis goes on a seat prop, in the prop's local frame (+Z = the way it faces).
- * Matches the seat of the viewport models and the `sit` pose (pelvis 0.47 m above the actor's origin).
+ * Matches the seat of the viewport models and the `sit` pose (pelvis 0.58 m above the actor's origin, resting on a ≈0.45 m seat).
  */
 export const SEATS: Partial<Record<PropType, { z: number }>> = {
   chair: { z: 0 },
