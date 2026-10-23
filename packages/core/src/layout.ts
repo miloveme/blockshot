@@ -117,7 +117,7 @@ export function lintLayout(spec: BlockshotSpec): Issue[] {
   for (const { a, index } of moves) {
     const points: Vec3[] = Array.isArray(a.to[0]) ? (a.to as Vec3[]) : [a.to as Vec3];
     if (scene.unreachable.has(a)) {
-      issues.push({ path: `actions[${index}]`, message: `"${a.actor}" has no walkable route to its destination (walled off or outside the room) — move the target or open a door` });
+      issues.push({ path: `actions[${index}]`, message: `"${a.actor}" has no walkable route to its destination (walled off, outside the room, a ledge higher than a step with no ramp/stairs, or too low to duck under) — move the target, add stairs/a ramp, or open a door` });
     }
     let from = pos.get(a.actor);
     if (!from) continue;

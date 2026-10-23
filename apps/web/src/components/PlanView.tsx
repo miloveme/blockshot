@@ -54,7 +54,7 @@ export function PlanView({ className = "" }: { className?: string }) {
   const [navOn, setNavOn] = useState(false);
   // the scene compiled once per edit: gives the routes actors really walk (after path-finding)
   const compiled = useMemo(() => compile(spec), [spec]);
-  const nav = useMemo(() => (navOn ? bakeNav(spec, { radius: 0.22 }) : null), [navOn, spec]);
+  const nav = useMemo(() => (navOn ? bakeNav(spec, { radius: 0.22, height: 1.72 }) : null), [navOn, spec]);
   const still = useMemo(() => new Set(staticActors(spec)), [spec]);
 
   useEffect(() => {
@@ -444,17 +444,32 @@ function Handle({ x, z, onDown }: { x: number; z: number; onDown: (e: React.Poin
   return <circle cx={x} cy={z} r={0.13} fill={ACCENT} stroke="#0b0d10" strokeWidth={1.5} vectorEffect="non-scaling-stroke" onPointerDown={onDown} style={{ cursor: "grab" }} />;
 }
 
-/** Blocked cells of the baked navigation grid: one path per row of merged runs. */
+/** The baked navigation grid: blocked cells (red props, gray walls), crouch-only cells (amber) and the height of every walkable surface. */
 function NavOverlay({ grid }: { grid: NavGrid }) {
   const paths = useMemo(() => {
-    const out = { 1: [] as string[], 2: [] as string[] };
+    const n = grid.w * grid.h;
+    const out: Record<number, string[]> = { 1: [], 2: [], 3: [] };
     for (let iz = 0; iz < grid.h; iz++) {
       let run = -1;
       let kind = 0;
       for (let ix = 0; ix <= grid.w; ix++) {
-        const v = ix < grid.w ? grid.cells[iz * grid.w + ix]! : 0;
+        let v = 0;
+        if (ix < grid.w) {
+          // a column is only "blocked" when no floor in it can be walked: crouch-only beats blocked beats nothing
+          let free = false;
+          let crouch = false;
+          let worst = 0;
+          for (let l = 0; l < grid.layers; l++) {
+            const k = grid.kind[l * n + iz * grid.w + ix]!;
+            if (Number.isNaN(grid.elev[l * n + iz * grid.w + ix]!)) continue;
+            if (k === 0) free = true;
+            else if (k === 1) crouch = true;
+            else worst = Math.max(worst, k);
+          }
+          v = free ? 0 : crouch ? 1 : worst === 3 ? 3 : 2;
+        }
         if (run >= 0 && v !== kind) {
-          out[kind as 1 | 2].push(`M${grid.x0 + run * grid.cell} ${grid.z0 + iz * grid.cell}h${(ix - run) * grid.cell}v${grid.cell}h${-(ix - run) * grid.cell}z`);
+          out[kind]!.push(`M${grid.x0 + run * grid.cell} ${grid.z0 + iz * grid.cell}h${(ix - run) * grid.cell}v${grid.cell}h${-(ix - run) * grid.cell}z`);
           run = -1;
         }
         if (v !== 0 && run < 0) {
@@ -463,12 +478,23 @@ function NavOverlay({ grid }: { grid: NavGrid }) {
         }
       }
     }
-    return { prop: out[1].join(""), wall: out[2].join("") };
+    return { crouch: out[1]!.join(""), prop: out[2]!.join(""), wall: out[3]!.join("") };
   }, [grid]);
   return (
     <g pointerEvents="none">
       <path d={paths.wall} fill="#94a3b8" fillOpacity={0.12} />
       <path d={paths.prop} fill="#ef4444" fillOpacity={0.3} />
+      <path d={paths.crouch} fill="#f59e0b" fillOpacity={0.35} />
+      {grid.sources
+        .filter((s) => s.kind === "surface")
+        .map((s) => (
+          <g key={s.id}>
+            <polygon points={s.corners.map((c) => c.join(",")).join(" ")} fill="none" stroke="#34d399" strokeWidth={1.5} strokeDasharray="3 2" vectorEffect="non-scaling-stroke" />
+            <text x={s.corners.reduce((t, c) => t + c[0], 0) / 4} y={s.corners.reduce((t, c) => t + c[1], 0) / 4 + 0.35} fontSize={0.22} textAnchor="middle" fill="#34d399">
+              ↑ {s.top?.toFixed(2)} m
+            </text>
+          </g>
+        ))}
     </g>
   );
 }

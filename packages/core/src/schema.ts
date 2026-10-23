@@ -27,7 +27,7 @@ export type Target = z.infer<typeof Target>;
 export const Ease = z.enum(["linear", "easeIn", "easeOut", "easeInOut", "step"]);
 export type Ease = z.infer<typeof Ease>;
 
-export const POSES = ["stand", "idle", "walk", "run", "sit", "point", "talk"] as const;
+export const POSES = ["stand", "idle", "walk", "run", "sit", "point", "talk", "crouch"] as const;
 export const Pose = z.enum(POSES);
 export type Pose = z.infer<typeof Pose>;
 
@@ -93,6 +93,7 @@ export type Actor = z.infer<typeof Actor>;
 export const PROP_TYPES = [
   "box", "cylinder", "sphere", "plane",
   "chair", "table", "sofa", "bed", "door", "window", "car", "lamp", "cup", "phone", "mirror",
+  "platform", "ramp", "stairs",
   "model",
 ] as const;
 export const PropType = z.enum(PROP_TYPES);

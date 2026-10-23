@@ -289,7 +289,8 @@
               "run",
               "sit",
               "point",
-              "talk"
+              "talk",
+              "crouch"
             ]
           }
         },
@@ -326,6 +327,9 @@
               "cup",
               "phone",
               "mirror",
+              "platform",
+              "ramp",
+              "stairs",
               "model"
             ]
           },
@@ -782,7 +786,8 @@
                   "run",
                   "sit",
                   "point",
-                  "talk"
+                  "talk",
+                  "crouch"
                 ]
               },
               "start": {
@@ -1417,7 +1422,8 @@
                         "run",
                         "sit",
                         "point",
-                        "talk"
+                        "talk",
+                        "crouch"
                       ]
                     }
                   ]

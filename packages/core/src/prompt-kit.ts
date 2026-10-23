@@ -215,7 +215,12 @@ export function describeScene(spec: BlockshotSpec): string {
     const yaw = (p.rotation[1] * Math.PI) / 180;
     const ex = (Math.abs(Math.cos(yaw)) * w * Math.abs(p.scale[0]) + Math.abs(Math.sin(yaw)) * d * Math.abs(p.scale[2])) / 2;
     const ez = (Math.abs(Math.sin(yaw)) * w * Math.abs(p.scale[0]) + Math.abs(Math.cos(yaw)) * d * Math.abs(p.scale[2])) / 2;
-    const kind = info.passable ? "decor" : info.sittable ? (SEATS[p.type] ? "seat (use sitDown with this id)" : "seat (actors may sit on it)") : "obstacle";
+    const rise = r1(h * Math.abs(p.scale[1]));
+    const surfaceKind =
+      p.type === "platform" ? `WALKABLE platform: its top is a floor at y ${r1(p.position[1] + rise)} m (reach it by ramp/stairs; things on it use that y)`
+      : p.type === "ramp" ? `WALKABLE ramp rising toward ${facingWord(p.rotation[1])} from y ${r1(p.position[1])} to ${r1(p.position[1] + rise)} m`
+      : `WALKABLE stairs rising toward ${facingWord(p.rotation[1])} from y ${r1(p.position[1])} to ${r1(p.position[1] + rise)} m`;
+    const kind = info.surface ? surfaceKind : info.passable ? "decor" : info.sittable ? (SEATS[p.type] ? "seat (use sitDown with this id)" : "seat (actors may sit on it)") : "obstacle";
     const name = p.type === "model" ? `model "${spec.assets.find((x) => x.id === p.asset)?.name ?? p.asset}"` : p.type;
     let extra = "";
     if (p.type === "mirror") {
@@ -283,7 +288,7 @@ export function mentionedIn(request: string, spec: BlockshotSpec): Mentionable[]
 const ANIMATE_RULES = `Hard rules:
 - The scene is ALREADY BUILT and must not change. Do NOT add, delete, rename, move or recolor actors or props, and do not change "space". Actors start exactly where they are listed.
 - Use the exact ids listed below. Add ONLY animation: movement (walkTo/runTo/turnTo), poses, looks, camera moves/zooms/orbits, and — only if the request needs them — new cameras and the shot list.
-- Walking is path-finded by the engine: give walkTo / runTo the DESTINATION (or a few meaningful stops) and it walks round furniture, walls and standing people by itself (only add "direct": true to deliberately cut straight). A destination inside a prop (e.g. the table's center) ends beside it. Doors are walkable openings; walls are not.
+- Walking is path-finded by the engine: give walkTo / runTo the DESTINATION (or a few meaningful stops) and it walks round furniture, walls and standing people by itself, climbs ramps and stairs and goes up onto platforms, ducks under low beams / lintels, and steps round or waits for other people who are walking (earlier-starting actions have priority). Only add "direct": true to deliberately cut straight. A destination inside a prop (e.g. the table's center) ends beside it; a destination on a platform just needs its x,z. Doors are walkable openings; walls are not.
 - To seat someone use a sitDown action on the chair/sofa id (it walks them onto the seat, turns them and lowers them; "offset" slides along a sofa's width so several people can sit); use standUp to rise. It aligns position, facing and height with the seat and walks round to its open side, so never hand-place walkTo points or poses to sit. Do not fake sitting with only a "sit" pose at a standing position.
 - Direct the acting like a director: give people body language with "gesture" (wave, nod, shakeHead, shrug, clap, crossArms, handsOnHips, think, bow, lookAround, cheer) and use "reach" to put a hand on or toward an object / another person's body part (picking up, touching, pointing, handing over). Use "handShape" for the fingers (fist, point, pinch, grip …). Combine them with lookAt so people look at what they react to.
 - When asked to change part of the existing animation, edit ONLY the actions concerned (patchActions / removeActions by id) and leave the rest alone; use clearActions only to re-animate everything.

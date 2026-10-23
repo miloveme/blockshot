@@ -73,6 +73,25 @@ export function basePose(name: Pose, t: number): RigPose {
     case "idle":
       set(p, "spine", Math.sin(t * 1.3) * 0.015);
       return p;
+    case "crouch": {
+      // ducking under something: deep knee bend, torso and head down, a small shuffling step cycle
+      const sw = Math.sin(t * Math.PI * 2 * 1.1) * 0.22;
+      p.hips = [0, -0.34, -0.1];
+      set(p, "leftUpperLeg", -1.0 + sw);
+      set(p, "rightUpperLeg", -1.0 - sw);
+      set(p, "leftLowerLeg", 1.85);
+      set(p, "rightLowerLeg", 1.85);
+      set(p, "leftFoot", -0.85 - sw);
+      set(p, "rightFoot", -0.85 + sw);
+      set(p, "spine", 0.5);
+      set(p, "chest", 0.1);
+      set(p, "head", -0.35);
+      set(p, "leftUpperArm", -0.45 - sw);
+      set(p, "rightUpperArm", -0.45 + sw);
+      set(p, "leftLowerArm", -0.8);
+      set(p, "rightLowerArm", -0.8);
+      return p;
+    }
     case "stand":
       return p;
   }

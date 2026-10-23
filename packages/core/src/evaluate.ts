@@ -3,7 +3,8 @@ import { applyEase, DEG, unwrapYaw, vec, yawTowards } from "./math";
 import { verticalFov } from "./camera";
 import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
 import { seatPose } from "./catalog";
-import { bakeNav, navRadiusOf, routeLegs, staticActors, type Circle, type NavGrid } from "./nav";
+import { planAroundMovers, type Mover } from "./nav-time";
+import { bakeNav, crouchSpans, navRadiusOf, routeLegs, staticActors, type Circle, type NavGrid } from "./nav";
 import { REST_HEIGHT, applyLayer, blendPoses, smoothstep, solveRig, toLocal, toWorld, type BoneName, type RigPose, type Skeleton } from "./rig";
 import { Q } from "./quat";
 import { basePose, envelope, GESTURE_DEFS, handShapeLayer, lookLayer, RELAXED_HANDS, sampleGesture, solveArm } from "./poses";
@@ -45,8 +46,10 @@ export interface CompiledScene {
   routes: Map<Action, Vec3[]>;
   /** walk / run actions with a leg no route exists for (walled off) */
   unreachable: Set<Action>;
+  /** actions compiled so far (the walk planner only knows those) */
+  compiled: Set<Action>;
   /** baked navigation grids by body radius */
-  navCache: Map<number, NavGrid>;
+  navCache: Map<string, NavGrid>;
 }
 
 /** A timed body layer on top of the actor's base pose. */
@@ -126,12 +129,23 @@ export function sampleKeys(keys: ReadonlyArray<CKey>, t: number): KeyValue {
 }
 
 /** Turns high-level actions + manual tracks into flat key lists. Pure. */
+const compileCache = new WeakMap<BlockshotSpec, CompiledScene>();
+
+/** Compiles a spec (memoized per spec object — specs are treated as immutable, an edit makes a new one). */
 export function compile(spec: BlockshotSpec): CompiledScene {
+  const hit = compileCache.get(spec);
+  if (hit) return hit;
+  const scene = compileUncached(spec);
+  compileCache.set(spec, scene);
+  return scene;
+}
+
+function compileUncached(spec: BlockshotSpec): CompiledScene {
   const tracks = new Map<string, CKey[]>();
   const looks = new Map<string, Segment[]>();
   const aims = new Map<string, Segment[]>();
   const acts = new Map<string, ActLayer[]>();
-  const scene: CompiledScene = { spec, tracks, looks, aims, acts, routes: new Map(), unreachable: new Set(), navCache: new Map() };
+  const scene: CompiledScene = { spec, tracks, looks, aims, acts, routes: new Map(), unreachable: new Set(), compiled: new Set(), navCache: new Map() };
 
   const track = (id: string, prop: TrackProperty, initial: KeyValue): CKey[] => {
     const k = trackKey(id, prop);
@@ -158,7 +172,10 @@ export function compile(spec: BlockshotSpec): CompiledScene {
   // Actor actions first (camera actions may reference actor positions), then by start time.
   const ordered = [...spec.actions].sort((x, y) => Number("camera" in x) - Number("camera" in y) || x.start - y.start);
 
-  for (const action of ordered) compileAction(scene, action, track);
+  for (const action of ordered) {
+    compileAction(scene, action, track);
+    scene.compiled.add(action);
+  }
 
   // Manual tracks override generated ones for the same target/property.
   for (const t of spec.tracks) {
@@ -194,21 +211,46 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       const speed = a.speed ?? (a.type === "runTo" ? RUN_SPEED : WALK_SPEED);
       const duration = a.duration ?? total / speed;
 
+      // time every point at a constant pace along the route
+      let timed: TimedPoint[] = [{ p: points[0]!, t: a.start }];
+      lengths.forEach((len, i) => timed.push({ p: points[i + 1]!, t: timed[i]!.t + (len / total) * duration }));
+
+      const gait: Pose = a.type === "runTo" ? "run" : "walk";
+      const nav = a.direct ? null : navFor(scene, a.actor, a.start);
+      if (nav) {
+        // people who started walking earlier have priority: step round / wait for anyone this walk would run into
+        const movers = moversFor(scene, a.actor);
+        const planned = planAroundMovers(nav.grid, timed, movers, nav.avoid, nav.grid.radius, total / duration);
+        timed = planned.path;
+        if (planned.adjusted) scene.routes.set(a, timed.map((tp) => tp.p));
+      }
       insertKey(pos, { t: a.start, value: startPos, ease: "linear" });
       insertKey(rot, { t: a.start, value: startRot, ease: "linear" });
-      let time = a.start;
+      // where along the walk the body has to duck (under a beam, a low lintel …)
+      const ducks = nav ? crouchSpans(nav.grid, timed.map((tp) => tp.p)) : [];
       let yaw = startRot[1];
-      lengths.forEach((len, i) => {
-        const segDur = (len / total) * duration;
-        yaw = unwrapYaw(yaw, yawTowards(points[i]!, points[i + 1]!));
-        insertKey(rot, { t: time + Math.min(TURN_TIME, segDur / 2), value: [startRot[0], yaw, startRot[2]], ease: "easeInOut" });
-        time += segDur;
-        // hold that heading to the end of the leg, so the next turn happens at the start of the next leg
-        insertKey(rot, { t: time, value: [startRot[0], yaw, startRot[2]], ease: "linear" });
-        insertKey(pos, { t: time, value: points[i + 1]!, ease: "linear" });
+      let along = 0;
+      let lastPose: Pose | null = null;
+      timed.slice(1).forEach((tp, i) => {
+        const from = timed[i]!;
+        const dist = Math.hypot(tp.p[0] - from.p[0], tp.p[2] - from.p[2]);
+        const moving = dist > 1e-6;
+        const segDur = tp.t - from.t;
+        if (moving) {
+          yaw = unwrapYaw(yaw, yawTowards(from.p, tp.p));
+          insertKey(rot, { t: from.t + Math.min(TURN_TIME, segDur / 2), value: [startRot[0], yaw, startRot[2]], ease: "easeInOut" });
+        }
+        // hold the heading to the end of the leg, so the next turn happens at the start of the next leg
+        insertKey(rot, { t: tp.t, value: [startRot[0], yaw, startRot[2]], ease: "linear" });
+        insertKey(pos, { t: tp.t, value: tp.p, ease: "linear" });
+        const mid = along + dist / 2;
+        const want: Pose = !moving ? "stand" : ducks.some(([f, t]) => mid >= f && mid <= t) ? "crouch" : gait;
+        if (want !== lastPose) insertKey(pose, { t: from.t, value: want, ease: "step" });
+        lastPose = want;
+        along += dist;
       });
-      insertKey(pose, { t: a.start, value: a.type === "runTo" ? "run" : "walk", ease: "step" });
-      insertKey(pose, { t: a.start + duration, value: prevPose === "walk" || prevPose === "run" ? "stand" : prevPose, ease: "step" });
+      const endT = timed[timed.length - 1]!.t;
+      insertKey(pose, { t: endT, value: prevPose === "walk" || prevPose === "run" || prevPose === "crouch" ? "stand" : prevPose, ease: "step" });
       break;
     }
     case "turnTo": {
@@ -505,17 +547,35 @@ function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnTyp
   return { pose, skeleton: solveRig(pose, scale) };
 }
 
+type TimedPoint = import("./nav-time").TimedPoint;
+
+/** Everyone else who moves (they are known up to the actions compiled so far), as moving obstacles for the path planner. */
+function moversFor(scene: CompiledScene, actorId: string): Mover[] {
+  const still = new Set(staticActors(scene.spec));
+  return scene.spec.actors
+    .filter((o) => o.id !== actorId && !still.has(o.id))
+    .map((o) => {
+      const manual = scene.spec.tracks.find((t) => t.target === o.id && t.property === "position");
+      const keys = manual ? [...manual.keys].sort((p, q) => p.t - q.t).map((k): CKey => ({ t: k.t, value: k.value as KeyValue, ease: k.ease })) : (scene.tracks.get(trackKey(o.id, "position")) ?? []);
+      // what they will do after their next, not yet compiled, move is not known: that is for THEM to plan round us
+      const next = scene.spec.actions.filter((x) => "actor" in x && x.actor === o.id && (x.type === "walkTo" || x.type === "runTo" || x.type === "sitDown" || x.type === "standUp") && !scene.compiled.has(x)).reduce((m, x) => Math.min(m, x.start), Infinity);
+      return { r: navRadiusOf(o), at: (t: number) => (t >= next ? null : (sampleKeys(keys, t) as Vec3)) };
+    });
+}
+
 /** The baked navigation grid for an actor's body, plus the still-standing actors it must go round (everyone else but itself). */
 function navFor(scene: CompiledScene, actorId: string, _t: number): { grid: NavGrid; avoid: Circle[] } {
   const actor = scene.spec.actors.find((x) => x.id === actorId)!;
   const radius = navRadiusOf(actor);
-  let grid = scene.navCache.get(radius);
+  const height = Math.round(actor.height * 10) / 10;
+  const key = `${radius}/${height}`;
+  let grid = scene.navCache.get(key);
   if (!grid) {
-    grid = bakeNav(scene.spec, { radius });
-    scene.navCache.set(radius, grid);
+    grid = bakeNav(scene.spec, { radius, height });
+    scene.navCache.set(key, grid);
   }
   const still = new Set(staticActors(scene.spec));
-  const avoid = scene.spec.actors.filter((o) => o.id !== actorId && still.has(o.id)).map((o) => ({ x: o.position[0], z: o.position[2], r: navRadiusOf(o) * 0.8 }));
+  const avoid = scene.spec.actors.filter((o) => o.id !== actorId && still.has(o.id)).map((o) => ({ x: o.position[0], z: o.position[2], r: navRadiusOf(o) * 0.8, y: o.position[1] }));
   return { grid, avoid };
 }
 

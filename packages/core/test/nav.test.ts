@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compile, evaluate, bakeNav, findPath, isBlocked, lineClear, nearestFree, routeLegs, staticActors, validateSpec, type BlockshotSpec, type Vec3 } from "../src";
+import { compile, evaluate, floorHeight, needsCrouch, surfaceHeightAt, bakeNav, findPath, isBlocked, lineClear, nearestFree, routeLegs, staticActors, validateSpec, type BlockshotSpec, type Vec3 } from "../src";
 
 const parse = (input: unknown): BlockshotSpec => {
   const r = validateSpec(input);
@@ -193,5 +193,202 @@ describe("navigation inside compile()", () => {
     const end = evaluate(compile(spec), 20).actors.a!.position;
     expect(Math.abs(end[0]!) > 0.5 || Math.abs(end[2]!) > 0.5).toBe(true);
     expect(Math.hypot(end[0]!, end[2]!)).toBeLessThan(1.4);
+  });
+});
+
+describe("platforms, ramps and stairs", () => {
+  const ground = (props: unknown[], extra: Record<string, unknown> = {}) =>
+    parse({ specVersion: "0.1", space: { type: "ground", size: 40 }, actors: [{ id: "a", position: [0, 0, -4] }], props, ...extra });
+
+  it("surface tops: flat platform, linear ramp (rising toward +Z), quantized stairs", () => {
+    const spec = ground([
+      { id: "pf", type: "platform", position: [-6, 0, 0], scale: [1, 1, 1] },
+      { id: "rp", type: "ramp", position: [0, 0, 0] },
+      { id: "st", type: "stairs", position: [6, 0, 0] },
+    ]);
+    expect(surfaceHeightAt(spec, -6, 0)).toBeCloseTo(0.4, 5);
+    expect(surfaceHeightAt(spec, 0, -1.4)).toBeCloseTo(0.6 * (0.1 / 3), 3);
+    expect(surfaceHeightAt(spec, 0, 1.4)).toBeCloseTo(0.6 * (2.9 / 3), 3);
+    expect(surfaceHeightAt(spec, 0, 2)).toBe(0); // beyond the ramp
+    const tops = new Set([-1.1, -0.5, 0.1, 0.7, 1.1].map((z) => Number(surfaceHeightAt(spec, 6, z).toFixed(3))));
+    expect(tops.size).toBe(5);
+    expect([...tops].sort((p, q) => p - q)[4]).toBeCloseTo(1.2, 5); // 7 risers of ~0.171 m
+  });
+
+  it("a platform is not an obstacle: its top is a floor and the ground under it is gone", () => {
+    const g = bakeNav(ground([{ id: "pf", type: "platform", position: [0, 0, 0] }]), { radius: 0.2 });
+    expect(floorHeight(g, 0, 0, 0)).toBeCloseTo(0.4, 5);
+    expect(floorHeight(g, 0, 0, 5)).toBeCloseTo(0.4, 5);
+    expect(floorHeight(g, 3, 3, 0)).toBe(0);
+  });
+
+  it("cannot climb a ledge higher than a step, but a ramp or stairs gets you up", () => {
+    const ledge = bakeNav(ground([{ id: "pf", type: "platform", position: [0, 0, 0] }]), { radius: 0.2 });
+    expect(findPath(ledge, [0, 0, -4], [0, 0, 0])).toBeNull();
+
+    for (const type of ["ramp", "stairs"]) {
+      // the prop rises toward +Z: low end at z = -L/2; put a platform at its high end
+      const len = type === "ramp" ? 3 : 2.4;
+      const rise = type === "ramp" ? 0.6 : 1.2;
+      const spec = ground([
+        { id: "lift", type, position: [0, 0, 0] },
+        { id: "deck", type: "platform", position: [0, rise - 0.4, len / 2 + 1], scale: [1, 0.4 / 0.4, 1] },
+      ]);
+      const g = bakeNav(spec, { radius: 0.2 });
+      const r = findPath(g, [0, 0, -4], [0, 0, len / 2 + 1])!;
+      expect(r, type).not.toBeNull();
+      expect(r.points.at(-1)![1]).toBeCloseTo(rise, 1);
+      // height never drops while heading up
+      const ys = r.points.map((p) => p[1]);
+      expect(ys).toEqual([...ys].sort((p, q) => p - q));
+    }
+  });
+
+  it("refuses a ramp that is too steep", () => {
+    const g = bakeNav(ground([{ id: "steep", type: "ramp", position: [0, 0, 0], scale: [1, 4, 1] }, { id: "deck", type: "platform", position: [0, 2, 2.5] }]), { radius: 0.2 }); // rise 2.4 over 3 m
+    expect(findPath(g, [0, 0, -4], [0, 2.4, 2.5])).toBeNull();
+    const ok = bakeNav(ground([{ id: "fine", type: "ramp", position: [0, 0, 0], scale: [1, 2, 1] }, { id: "deck", type: "platform", position: [0, 0.8, 2.5] }]), { radius: 0.2 }); // rise 1.2 over 3 m = 0.4
+    expect(findPath(ok, [0, 0, -4], [0, 1.2, 2.5])).not.toBeNull();
+  });
+
+  it("an actor walks up stairs: the evaluated y follows the steps", () => {
+    const spec = ground(
+      [{ id: "st", type: "stairs", position: [0, 0, 0] }, { id: "deck", type: "platform", position: [0, 0.8, 2.2] }],
+      { actions: [{ type: "walkTo", actor: "a", to: [0, 0, 2.2], start: 0 }] },
+    );
+    const c = compile(spec);
+    const ys = Array.from({ length: 41 }, (_, i) => evaluate(c, i * 0.25).actors.a!.position[1]);
+    expect(ys[0]).toBe(0);
+    expect(ys.at(-1)).toBeCloseTo(1.2, 1);
+    expect(ys).toEqual([...ys].sort((p, q) => p - q));
+  });
+
+  it("two floors in one column: walk under a bridge, or up onto it", () => {
+    const spec = ground([
+      { id: "bridge", type: "platform", position: [0, 2.6, 0], scale: [1, 0.5, 5] }, // underside 2.6, top 2.8 (thickness 0.2)
+    ]);
+    const g = bakeNav(spec, { radius: 0.2 });
+    expect(g.layers).toBe(2);
+    expect(floorHeight(g, 0, 0, 0)).toBe(0); // under it
+    expect(floorHeight(g, 0, 0, 2.8)).toBeCloseTo(2.8, 4); // on top
+    expect(findPath(g, [-4, 0, 0], [4, 0, 0])!.points.at(-1)![1]).toBe(0);
+  });
+});
+
+describe("head-room: ducking under things", () => {
+  const beam = (y: number) =>
+    parse({
+      specVersion: "0.1",
+      space: { type: "ground", size: 30 },
+      actors: [{ id: "a", position: [-4, 0, 0] }],
+      // a wall of posts around a gap spanned by a horizontal beam at height y — the only way through is under the beam
+      props: [
+        { id: "l", type: "box", position: [0, 0, -8.6], scale: [0.6, 2.5, 16] },
+        { id: "r", type: "box", position: [0, 0, 8.6], scale: [0.6, 2.5, 16] },
+        { id: "beam", type: "box", position: [0, y, 0], scale: [0.6, 0.2, 1.4] },
+      ],
+      actions: [{ type: "walkTo", actor: "a", to: [4, 0, 0], start: 0 }],
+    });
+
+  it("passes under a beam that is higher than a crouch but lower than a stand, ducking", () => {
+    const g = bakeNav(beam(1.4), { radius: 0.22, height: 1.72 });
+    expect(needsCrouch(g, 0, 0)).toBe(true);
+    const c = compile(beam(1.4));
+    const poses = Array.from({ length: 80 }, (_, i) => evaluate(c, i * 0.1).actors.a!);
+    expect(poses.some((s) => s.pose === "crouch")).toBe(true);
+    expect(evaluate(c, 20).actors.a!.position[0]).toBeCloseTo(4, 2); // got through
+    expect(evaluate(c, 20).actors.a!.pose).toBe("stand");
+  });
+
+  it("a short actor walks under it upright; a beam too low blocks everyone", () => {
+    const short = parse({ ...beam(1.4), actors: [{ id: "a", position: [-4, 0, 0], height: 1.2 }] });
+    expect(needsCrouch(bakeNav(short, { radius: 0.15, height: 1.2 }), 0, 0)).toBe(false);
+    expect(findPath(bakeNav(beam(0.7), { radius: 0.22, height: 1.72 }), [-4, 0, 0], [4, 0, 0])).toBeNull();
+    expect(needsCrouch(bakeNav(beam(2.3), { radius: 0.22, height: 1.72 }), 0, 0)).toBe(false); // high enough to stand under
+  });
+
+  it("a low doorway makes the actor duck, a very low one stops him", () => {
+    const door = (height: number) =>
+      parse({ specVersion: "0.1", space: { type: "room", width: 6, depth: 6, openings: [{ kind: "door", wall: "north", offset: 0, width: 1.2, height }] }, actors: [{ id: "a", position: [0, 0, 0] }], actions: [{ type: "walkTo", actor: "a", to: [0, 0, -5], start: 0 }] });
+    const c = compile(door(1.5));
+    expect(Array.from({ length: 80 }, (_, i) => evaluate(c, i * 0.1).actors.a!.pose).includes("crouch")).toBe(true);
+    expect(compile(door(2.1)).unreachable.size).toBe(0);
+    expect([...compile(door(2.1)).routes.values()][0]!.length).toBe(2);
+    expect(compile(door(0.9)).unreachable.size).toBe(1);
+  });
+});
+
+describe("moving people avoid each other (prioritized space-time planning)", () => {
+  const world = (props: unknown[], actions: unknown[]) =>
+    parse({
+      specVersion: "0.1",
+      space: { type: "ground", size: 40 },
+      actors: [{ id: "a", position: [-6, 0, 0] }, { id: "b", position: [6, 0, 0] }],
+      props,
+      actions,
+    });
+  const minGap = (spec: BlockshotSpec) => {
+    const c = compile(spec);
+    let gap = Infinity;
+    let end = 0;
+    for (let t = 0; t <= 40; t += 0.05) {
+      const s = evaluate(c, t);
+      gap = Math.min(gap, Math.hypot(s.actors.a!.position[0] - s.actors.b!.position[0], s.actors.a!.position[2] - s.actors.b!.position[2]));
+      if (s.actors.b!.position[0] < 5.9 || t < 0.1) end = t;
+    }
+    return { c, gap, end };
+  };
+  const walk = (actor: string, to: Vec3, start = 0) => ({ type: "walkTo", actor, to, start });
+
+  it("head-on in the open: the later walker steps aside (a body width stays between them)", () => {
+    const { c, gap } = minGap(world([], [walk("a", [6, 0, 0]), walk("b", [-6, 0, 0], 0.2)]));
+    expect(gap).toBeGreaterThan(0.44); // radii 0.22 + 0.22
+    const routeB = [...c.routes.values()][1]!;
+    expect(routeB.length).toBeGreaterThan(2); // went round
+    expect(evaluate(c, 40).actors.b!.position[0]).toBeCloseTo(-6, 2); // and still got there
+    expect(evaluate(c, 40).actors.a!.position[0]).toBeCloseTo(6, 2);
+  });
+
+  it("without avoidance they would walk through each other (the check is real)", () => {
+    const { gap } = minGap(world([], [{ ...walk("a", [6, 0, 0]), direct: true }, { ...walk("b", [-6, 0, 0], 0.2), direct: true }]));
+    expect(gap).toBeLessThan(0.3);
+  });
+
+  it("crossing paths: nobody collides and both arrive", () => {
+    const spec = parse({ specVersion: "0.1", space: { type: "ground", size: 40 }, actors: [{ id: "a", position: [-5, 0, 0] }, { id: "b", position: [0, 0, -5] }], actions: [walk("a", [5, 0, 0]), walk("b", [0, 0, 5])] });
+    const c = compile(spec);
+    let gap = Infinity;
+    for (let t = 0; t <= 30; t += 0.05) {
+      const s = evaluate(c, t);
+      gap = Math.min(gap, Math.hypot(s.actors.a!.position[0] - s.actors.b!.position[0], s.actors.a!.position[2] - s.actors.b!.position[2]));
+    }
+    expect(gap).toBeGreaterThan(0.44);
+    expect(evaluate(c, 30).actors.b!.position[2]).toBeCloseTo(5, 2);
+  });
+
+  it("a corridor only one can use: the other waits (stands still) until it is free", () => {
+    const walls = [
+      { id: "n", type: "box", position: [0, 0, -2.5], scale: [6, 2.5, 4] }, // corridor 1.0 m wide: z ∈ (-0.5, 0.5)
+      { id: "s", type: "box", position: [0, 0, 2.5], scale: [6, 2.5, 4] },
+    ];
+    const spec = world(walls, [walk("a", [6, 0, 0]), walk("b", [-6, 0, 0], 0.2)]);
+    const { c, gap } = minGap(spec);
+    expect(gap).toBeGreaterThan(0.44);
+    const standing = Array.from({ length: 400 }, (_, i) => evaluate(c, i * 0.1).actors.b!).filter((s, i, all) => i > 0 && s.position[0] === all[i - 1]!.position[0] && s.pose === "stand" && Math.abs(s.position[0]) > 3.4);
+    expect(standing.length).toBeGreaterThan(3); // b held back before the corridor
+    expect(evaluate(c, 40).actors.b!.position[0]).toBeCloseTo(-6, 2);
+  });
+
+  it("leaves a walk alone when nobody is in the way (same keys as before)", () => {
+    const spec = world([], [walk("a", [6, 0, 4]), walk("b", [-6, 0, -4], 0)]);
+    const c = compile(spec);
+    expect([...c.routes.values()][0]).toEqual([[-6, 0, 0], [6, 0, 4]]);
+    const t1 = evaluate(c, 3).actors.a!.position;
+    expect(t1[0]).toBeCloseTo(-6 + (12 / Math.hypot(12, 4)) * 1.3 * 3, 3);
+  });
+
+  it("is deterministic", () => {
+    const spec = world([], [walk("a", [6, 0, 0]), walk("b", [-6, 0, 0], 0.2)]);
+    expect(evaluate(compile(spec), 7.3)).toEqual(evaluate(compile(spec), 7.3));
   });
 });

@@ -10,6 +10,8 @@ export interface PropInfo {
   size: readonly [number, number, number];
   /** an actor may stand/sit inside its footprint */
   sittable?: boolean;
+  /** a walkable surface (platform / ramp / stairs): its top is a floor; the navigation grid treats it as ground, not as an obstacle */
+  surface?: boolean;
   /** not a solid obstacle: flat decal, wall decor, or small tabletop item */
   passable?: boolean;
   note: string;
@@ -32,6 +34,9 @@ export const PROP_CATALOG: Record<PropType, PropInfo> = {
   lamp: { size: [0.44, 1.68, 0.44], note: "floor lamp" },
   cup: { size: [0.08, 0.1, 0.08], passable: true, note: "tabletop item — set position y to the surface height" },
   mirror: { wall: "mounted", size: [0.9, 1.8, 0.04], passable: true, note: "REAL reflective mirror (shows actors/props/room); stand or hang it against a wall, reflecting toward +Z; position y = bottom edge (hang: set y); aim cameras at reflections with \"actorId.chest@mirrorId\"" },
+  platform: { size: [2, 0.4, 2], surface: true, note: "walkable raised slab (stage, deck, mezzanine floor): its top is a floor actors can stand and walk on. position y = underside; height = thickness (scale y). Reach it with a ramp or stairs (a step higher than 0.2 m is not climbable)" },
+  ramp: { size: [1.2, 0.6, 3], surface: true, note: "walkable slope rising toward +Z (low end at -Z, high end at +Z); scale y = total rise. Gentler than ~30° is walkable" },
+  stairs: { size: [1.2, 1.2, 2.4], surface: true, note: "walkable staircase rising toward +Z (low step at -Z), steps ≈ 0.18 m; scale y = total rise" },
   model: { size: [1, 1, 1], note: "imported 3D model (GLB) — size comes from its asset" },
   phone: { size: [0.075, 0.01, 0.155], passable: true, note: "tabletop item — set position y to the surface height" },
 };
