@@ -39,6 +39,10 @@ export interface ActorHandle {
   walkTo(to: Vec3 | Vec3[], opts: { start: number; duration?: number; speed?: number }): ActorHandle;
   runTo(to: Vec3 | Vec3[], opts: { start: number; duration?: number; speed?: number }): ActorHandle;
   turnTo(target: Target | number, opts: { start: number; duration?: number }): ActorHandle;
+  /** Walk onto a chair/sofa, turn to face the way it faces and lower into the seat. `offset` slides along a sofa's width (m). */
+  sitDown(seat: { id: string } | string, opts: { start: number; duration?: number; offset?: number }): ActorHandle;
+  /** Rise from the seat and step forward (or to `to`). */
+  standUp(opts: { start: number; duration?: number; to?: Vec3 }): ActorHandle;
   pose(name: Pose, opts: { start: number }): ActorHandle;
   lookAt(target: Target, opts: { start: number; end?: number }): ActorHandle;
 }
@@ -80,7 +84,7 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
     const taken = [...spec.actors, ...spec.props, ...spec.cameras].some((o) => o.id === id);
     if (taken) throw new Error(`Duplicate id "${id}"`);
   };
-  const action = (a: Action | Record<string, unknown>) => spec.actions.push(a as Action);
+  const action = (a: Record<string, unknown>) => spec.actions.push(a as Action);
 
   const resolveRough = (target: Target): Vec3 => {
     if (typeof target !== "string") return target;
@@ -122,6 +126,8 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
       runTo: (to, o) => (action({ type: "runTo", actor: id, to, ...o }), handle),
       turnTo: (target, o) => (action({ type: "turnTo", actor: id, target, ...o }), handle),
       pose: (pose, o) => (action({ type: "pose", actor: id, pose, ...o }), handle),
+      sitDown: (seat, o) => (action({ type: "sitDown", actor: id, on: typeof seat === "string" ? seat : seat.id, ...o }), handle),
+      standUp: (o) => (action({ type: "standUp", actor: id, ...o }), handle),
       lookAt: (target, o) => (action({ type: "lookAt", actor: id, target, ...o }), handle),
     };
     return handle;

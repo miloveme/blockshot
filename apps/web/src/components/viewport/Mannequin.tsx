@@ -126,19 +126,52 @@ export function Mannequin({ id }: { id: string }) {
 }
 
 /** Procedural pose presets. Negative X rotation swings a hanging limb forward (+Z). */
+const POSE_JOINTS: JointName[] = ["spine", "head", "shoulderL", "shoulderR", "elbowL", "elbowR", "hipL", "hipR", "kneeL", "kneeR"];
+type Snapshot = { pelvisY: number; rot: Partial<Record<JointName, [number, number, number]>> };
+
+/** Poses the skeleton for `pose` at `t` seconds into it and reads the result back. */
+function snapshotOf(j: Partial<Record<JointName, THREE.Group>>, pose: ActorState["pose"], t: number): Snapshot {
+  poseJoints(j, pose, t);
+  const rot: Snapshot["rot"] = {};
+  for (const n of POSE_JOINTS) {
+    const r = j[n]?.rotation;
+    if (r) rot[n] = [r.x, r.y, r.z];
+  }
+  return { pelvisY: j.pelvis?.position.y ?? HIP_Y, rot };
+}
+
+/**
+ * Applies the actor's pose. For BLEND_TIME after a pose change the previous pose fades into the new one joint by joint,
+ * so sitting down, standing up and every other pose switch are smooth instead of snapping.
+ */
 function applyPose(j: Partial<Record<JointName, THREE.Group>>, a: ActorState) {
-  const all: JointName[] = ["spine", "head", "shoulderL", "shoulderR", "elbowL", "elbowR", "hipL", "hipR", "kneeL", "kneeR"];
-  for (const n of all) j[n]?.rotation.set(0, 0, 0);
+  if (a.blend < 1 && a.prevPose !== a.pose) {
+    const from = snapshotOf(j, a.prevPose, a.prevPoseTime);
+    const to = snapshotOf(j, a.pose, a.poseTime);
+    const k = a.blend * a.blend * (3 - 2 * a.blend); // smoothstep
+    for (const n of POSE_JOINTS) {
+      const f = from.rot[n];
+      const t = to.rot[n];
+      if (f && t) j[n]!.rotation.set(f[0] + (t[0] - f[0]) * k, f[1] + (t[1] - f[1]) * k, f[2] + (t[2] - f[2]) * k);
+    }
+    if (j.pelvis) j.pelvis.position.y = from.pelvisY + (to.pelvisY - from.pelvisY) * k;
+  } else {
+    poseJoints(j, a.pose, a.poseTime);
+  }
+  lookAtTarget(j, a);
+}
+
+function poseJoints(j: Partial<Record<JointName, THREE.Group>>, pose: ActorState["pose"], t: number) {
+  for (const n of POSE_JOINTS) j[n]?.rotation.set(0, 0, 0);
   const pelvis = j.pelvis;
   if (!pelvis) return;
   pelvis.position.y = HIP_Y;
   pelvis.rotation.set(0, 0, 0);
-  const t = a.poseTime;
 
-  switch (a.pose) {
+  switch (pose) {
     case "walk":
     case "run": {
-      const run = a.pose === "run";
+      const run = pose === "run";
       const phase = t * Math.PI * 2 * (run ? 1.4 : 0.9);
       const amp = run ? 0.9 : 0.45;
       const sw = Math.sin(phase);
@@ -180,7 +213,10 @@ function applyPose(j: Partial<Record<JointName, THREE.Group>>, a: ActorState) {
       break;
   }
 
-  // Head look-at, clamped relative to body yaw.
+}
+
+/** Head look-at, clamped relative to body yaw. */
+function lookAtTarget(j: Partial<Record<JointName, THREE.Group>>, a: ActorState) {
   if (a.lookTarget && j.head) {
     const headY = a.position[1] + (a.pose === "sit" ? 0.7 : 0.93) * a.height;
     const dx = a.lookTarget[0] - a.position[0];

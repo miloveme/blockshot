@@ -127,7 +127,9 @@ LLM과 사람이 가장 많이 쓰는 레이어. 로드 시 `compile()`이 `trac
 | `walkTo` | `actor, to: Vec3 \| Vec3[], start, duration?, speed?` | 위치 이동 + 진행 방향으로 회전 + `walk` 포즈. `duration` 없으면 `speed`(기본 1.3 m/s)로 계산 |
 | `runTo` | 위와 동일 (기본 speed 3.5) | `run` 포즈 |
 | `turnTo` | `actor, target: Vec3 \| ref \| yaw(number), start, duration?` | 제자리 회전 |
-| `pose` | `actor, pose, start` | 포즈 전환(0.3초 블렌드) |
+| `pose` | `actor, pose, start` | 포즈 전환 — 이전 포즈에서 0.35초 동안 관절별로 부드럽게 섞인다(`ActorState.blend`) |
+| `sitDown` | `actor, on: 의자/소파 소품 id, start, duration?(1), offset?(0)` | 좌석까지 걸어가(이동 키) 좌석이 향한 방향으로 돌고 마지막 0.35초에 `sit`으로 내려앉는다. 소파는 `offset`(m, 소파 폭 방향)으로 여러 명이 나눠 앉는다. `on`은 `chair`/`sofa`여야 한다(검증 오류) |
+| `standUp` | `actor, start, duration?(0.8), to?` | `stand`로 일어나 바라보는 방향으로 0.6 m(또는 `to`) 걸어 나온다 |
 | `lookAt` | `actor, target, start, end?` | 머리 방향 |
 | `cameraMove` | `camera, to: Vec3, start, duration, ease?` | 카메라 이동 |
 | `cameraLookAt` | `camera, target, start` | 카메라 조준 대상 변경 |

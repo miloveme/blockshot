@@ -27,7 +27,7 @@ describe("scene description for the LLM", () => {
     const text = describeScene(handPlaced());
     expect(text).toContain('id "actor1"');
     expect(text).toContain('id "sofa1" (sofa)');
-    expect(text).toContain("seat (actors may sit on it)");
+    expect(text).toContain("seat (use sitDown with this id)");
     expect(text).toContain("obstacle"); // the table
     expect(text).toContain("covers x");
     expect(text).toContain("Existing actions (0): none");

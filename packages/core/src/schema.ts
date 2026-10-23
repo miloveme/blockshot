@@ -139,6 +139,10 @@ export const Action = z.discriminatedUnion("type", [
   z.object({ type: z.literal("runTo"), actor: Id, to: z.union([Vec3, z.array(Vec3).min(1)]), duration: z.number().positive().optional(), speed: z.number().positive().optional(), ...timed }),
   z.object({ type: z.literal("turnTo"), actor: Id, target: z.union([Target, z.number()]), duration: z.number().positive().default(0.6), ...timed }),
   z.object({ type: z.literal("pose"), actor: Id, pose: Pose, ...timed }),
+  /** walk onto a chair / sofa, turn to face the way it faces and lower into the seat */
+  z.object({ type: z.literal("sitDown"), actor: Id, on: Id, duration: z.number().positive().default(1), offset: z.number().default(0), ...timed }),
+  /** rise from the seat and step forward (or to `to`) */
+  z.object({ type: z.literal("standUp"), actor: Id, duration: z.number().positive().default(0.8), to: Vec3.optional(), ...timed }),
   z.object({ type: z.literal("lookAt"), actor: Id, target: Target, end: z.number().optional(), ...timed }),
   z.object({ type: z.literal("cameraMove"), camera: Id, to: Vec3, duration: z.number().positive(), ease: Ease.default("easeInOut"), ...timed }),
   z.object({ type: z.literal("cameraLookAt"), camera: Id, target: Target, ...timed }),

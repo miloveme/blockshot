@@ -1,5 +1,6 @@
 import { BlockshotSpec, type Target } from "./schema";
 import { parseRef } from "./mirror";
+import { SEATS } from "./catalog";
 
 export interface Issue {
   path: string;
@@ -91,6 +92,11 @@ export function validateSpec(input: unknown): ValidationResult {
   spec.actions.forEach((a, i) => {
     const p = `actions[${i}]`;
     if ("actor" in a) checkActor(a.actor, `${p}.actor`);
+    if (a.type === "sitDown") {
+      const seat = spec.props.find((x) => x.id === a.on);
+      if (!seat) errors.push({ path: `${p}.on`, message: `Unknown prop id "${a.on}". Seats: ${spec.props.filter((x) => SEATS[x.type]).map((x) => x.id).join(", ") || "(none — add a chair or sofa)"}` });
+      else if (!SEATS[seat.type]) errors.push({ path: `${p}.on`, message: `"${a.on}" is a ${seat.type}; sitDown needs a chair or sofa. Seats: ${spec.props.filter((x) => SEATS[x.type]).map((x) => x.id).join(", ") || "none"}` });
+    }
     if ("camera" in a) checkCamera(a.camera, `${p}.camera`);
     if ("target" in a) checkTarget(a.target, `${p}.target`);
     if (a.type === "orbit") checkTarget(a.around, `${p}.around`);

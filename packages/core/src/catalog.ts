@@ -45,3 +45,24 @@ export function propSize(prop: Pick<Prop, "type" | "asset">, assets: BlockshotSp
   const [w, h, d] = PROP_CATALOG[prop.type].size;
   return [w, h, d];
 }
+
+/**
+ * Where a seated actor's pelvis goes on a seat prop, in the prop's local frame (+Z = the way it faces).
+ * Matches the seat of the viewport models and the `sit` pose (pelvis 0.47 m above the actor's origin).
+ */
+export const SEATS: Partial<Record<PropType, { z: number }>> = {
+  chair: { z: 0 },
+  sofa: { z: 0.05 },
+};
+
+/** World position and facing (yaw°) for sitting on `prop`; `offset` slides along the seat's width (sofas seat several people). */
+export function seatPose(prop: Pick<Prop, "type" | "position" | "rotation" | "scale">, offset = 0): { position: Vec3; yaw: number } {
+  const seat = SEATS[prop.type] ?? { z: 0 };
+  const yaw = (prop.rotation[1] * Math.PI) / 180;
+  const lx = offset * prop.scale[0];
+  const lz = seat.z * prop.scale[2];
+  return {
+    position: [prop.position[0] + lx * Math.cos(yaw) + lz * Math.sin(yaw), prop.position[1], prop.position[2] - lx * Math.sin(yaw) + lz * Math.cos(yaw)],
+    yaw: prop.rotation[1],
+  };
+}

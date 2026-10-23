@@ -72,7 +72,9 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 | `.walkTo(to, { start, duration?, speed? })` | `to`는 Vec3 또는 경유점 배열 |
 | `.runTo(to, { start, duration?, speed? })` | |
 | `.turnTo(target, { start, duration? })` | target: Vec3 · 참조 · yaw(도) |
-| `.pose(name, { start })` | `stand` `walk` `run` `sit` `point` `talk` `idle` |
+| `.pose(name, { start })` | `stand` `walk` `run` `sit` `point` `talk` `idle` — 이전 포즈에서 0.35초 블렌드 |
+| `.sitDown(seat, { start, duration?, offset? })` | 의자/소파(핸들·id)로 걸어가 앉기. 소파는 `offset`(m)으로 자리를 나눈다 |
+| `.standUp({ start, duration?, to? })` | 일어나 앞으로 한 걸음(또는 `to`) |
 | `.lookAt(target, { start, end? })` | 머리 방향 |
 | `.head` `.chest` `.pelvis` `.handL` `.handR` | 참조 문자열 (`"minsu.head"`) |
 | `.id` | |

@@ -15,6 +15,7 @@ import { PropObject } from "./Props";
 import { SpaceObject } from "./Space";
 import { Recorder } from "./Recorder";
 import { PathOverlay, PlacementController } from "./Placement";
+import { toolUsedJustNow } from "@/lib/placement";
 import { EDITOR_LAYER, PIP_MARGIN, PIP_SCALE, aimCamera, markEditor, pipCameraId, viewedCameraId } from "./util";
 
 const RAD = 1 / DEG;
@@ -362,7 +363,7 @@ export default function Viewport() {
       onCreated={({ raycaster }) => raycaster.layers.enableAll()}
       onPointerMissed={() => {
         // clicks on the floor belong to an armed tool (placing / drawing a path), not to deselecting
-        if (!useStudio.getState().tool) useStudio.getState().select(null);
+        if (!useStudio.getState().tool && !toolUsedJustNow()) useStudio.getState().select(null);
       }}
     >
       <Scene key={revision} />

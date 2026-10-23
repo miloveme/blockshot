@@ -784,6 +784,86 @@
             "properties": {
               "type": {
                 "type": "string",
+                "const": "sitDown"
+              },
+              "actor": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              },
+              "on": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              },
+              "duration": {
+                "default": 1,
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "offset": {
+                "default": 0,
+                "type": "number"
+              },
+              "start": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "type",
+              "actor",
+              "on",
+              "start"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "standUp"
+              },
+              "actor": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              },
+              "duration": {
+                "default": 0.8,
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "to": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "items": false,
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "start": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "type",
+              "actor",
+              "start"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
                 "const": "lookAt"
               },
               "actor": {

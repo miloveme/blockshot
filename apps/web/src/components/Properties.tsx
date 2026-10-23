@@ -1,6 +1,6 @@
 "use client";
 
-import { LENS_PRESETS, POSES, keyTimes, kindOf, movesOf, patchMoveAt, removeActionAt, type Pose } from "@blockshot/core";
+import { LENS_PRESETS, POSES, SEATS, addSitDown, addStandUp, keyTimes, kindOf, movesOf, patchMoveAt, removeActionAt, type Pose } from "@blockshot/core";
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { hasModel, importGlb } from "@/lib/models";
@@ -271,6 +271,49 @@ function MovePaths({ actorId }: { actorId: string }) {
         );
       })}
       {moves.length === 0 ? <p className="text-[10px] text-zinc-600">경로가 없습니다. “경로 찍기”를 누르고 바닥을 클릭하세요 (현재 시간에 시작).</p> : null}
+      <SitControls actorId={actorId} />
+    </div>
+  );
+}
+
+/** Sit the actor on a chair / sofa at the current time (walk onto the seat, turn, lower) or have them stand up. */
+function SitControls({ actorId }: { actorId: string }) {
+  const spec = useStudio((s) => s.spec);
+  const edit = useStudio((s) => s.edit);
+  const seats = spec.props.filter((p) => SEATS[p.type]);
+  const [picked, setPicked] = useState<string>("");
+  const seat = seats.find((p) => p.id === picked)?.id ?? seats[0]?.id ?? "";
+  const sitting = spec.actions.filter((a) => a.type === "sitDown" && a.actor === actorId).length;
+  return (
+    <div className="mt-1 flex flex-col gap-1.5 border-t border-white/10 pt-2">
+      <span className="text-[11px] font-medium text-zinc-300">앉기 / 일어서기 (현재 시간)</span>
+      {seats.length === 0 ? (
+        <p className="text-[10px] text-zinc-600">의자나 소파를 먼저 배치하세요.</p>
+      ) : (
+        <div className="flex items-center gap-1.5">
+          <div className="min-w-0 flex-1">
+            <SelectField value={seat} options={seats.map((p) => ({ value: p.id, label: `${p.type} · ${p.id}` }))} onCommit={setPicked} />
+          </div>
+          <button
+            className="whitespace-nowrap rounded bg-sky-500/80 px-2 py-1 text-[11px] text-white hover:bg-sky-400"
+            title="걸어가 의자/소파에 앉습니다 (소파는 위치를 나눠 여러 명이 앉을 수 있어요)"
+            onClick={() => {
+              const t = useStudio.getState().time;
+              // a sofa seats several people: spread the next sitter along its width
+              const others = spec.actions.filter((a) => a.type === "sitDown" && a.on === seat).length;
+              const wide = spec.props.find((p) => p.id === seat)?.type === "sofa";
+              const offset = wide ? [0, -0.55, 0.55, -1.0, 1.0][others % 5]! * (spec.props.find((p) => p.id === seat)?.scale[0] ?? 1) : 0;
+              edit((s) => addSitDown(s, actorId, seat, { start: t, offset }));
+            }}
+          >
+            🪑 앉기
+          </button>
+        </div>
+      )}
+      <button className="self-start rounded bg-white/10 px-2 py-1 text-[11px] hover:bg-white/20" onClick={() => edit((s) => addStandUp(s, actorId, { start: useStudio.getState().time }))}>
+        🧍 일어서기
+      </button>
+      {sitting > 0 ? <p className="text-[10px] text-zinc-600">앉기 {sitting}회 등록됨 — 위치와 자세는 액션이 계산합니다</p> : null}
     </div>
   );
 }

@@ -2,11 +2,15 @@ import type { Action, BodyPart, Key, Pose, BlockshotSpec, Prop, Target, TrackPro
 import { applyEase, DEG, unwrapYaw, vec, yawTowards } from "./math";
 import { verticalFov } from "./camera";
 import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
+import { seatPose } from "./catalog";
 
 const WALK_SPEED = 1.3;
 const RUN_SPEED = 3.5;
 const TURN_TIME = 0.3;
 const ORBIT_SAMPLES_PER_SEC = 12;
+/** seconds to blend from the previous pose into a new one */
+export const POSE_BLEND = 0.35;
+const STAND_STEP = 0.6;
 
 type KeyValue = Key["value"];
 interface CKey {
@@ -41,6 +45,12 @@ export interface ActorState {
   pose: Pose;
   /** seconds since the current pose started — drives walk/run cycles */
   poseTime: number;
+  /** pose before the current one, still fading out while `blend` < 1 */
+  prevPose: Pose;
+  /** seconds the previous pose has been running (so its cycle keeps going while it fades) */
+  prevPoseTime: number;
+  /** 0 → 1 over POSE_BLEND seconds after a pose change; 1 when settled */
+  blend: number;
   lookTarget: Vec3 | null;
 }
 
@@ -186,6 +196,36 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       insertKey(track(a.actor, "pose", actor.pose), { t: a.start, value: a.pose, ease: "step" });
       break;
     }
+    case "sitDown": {
+      const actor = spec.actors.find((x) => x.id === a.actor)!;
+      const seat = seatPose(spec.props.find((p) => p.id === a.on)!, a.offset);
+      const pos = track(a.actor, "position", actor.position);
+      const rot = track(a.actor, "rotation", actor.rotation);
+      const pose = track(a.actor, "pose", actor.pose);
+      const from = sampleKeys(pos, a.start) as Vec3;
+      const fromRot = sampleKeys(rot, a.start) as Vec3;
+      const end = a.start + a.duration;
+      insertKey(pos, { t: a.start, value: from, ease: "linear" });
+      insertKey(pos, { t: end, value: seat.position, ease: "easeInOut" });
+      insertKey(rot, { t: a.start, value: fromRot, ease: "linear" });
+      insertKey(rot, { t: end, value: [fromRot[0], unwrapYaw(fromRot[1], seat.yaw), fromRot[2]], ease: "easeInOut" });
+      // lower into the seat while arriving
+      insertKey(pose, { t: Math.max(a.start, end - POSE_BLEND), value: "sit", ease: "step" });
+      break;
+    }
+    case "standUp": {
+      const actor = spec.actors.find((x) => x.id === a.actor)!;
+      const pos = track(a.actor, "position", actor.position);
+      const rot = track(a.actor, "rotation", actor.rotation);
+      const pose = track(a.actor, "pose", actor.pose);
+      const from = sampleKeys(pos, a.start) as Vec3;
+      const yaw = (sampleKeys(rot, a.start) as Vec3)[1] * DEG;
+      const to: Vec3 = a.to ?? [from[0] + Math.sin(yaw) * STAND_STEP, from[1], from[2] + Math.cos(yaw) * STAND_STEP];
+      insertKey(pos, { t: a.start, value: from, ease: "linear" });
+      insertKey(pos, { t: a.start + a.duration, value: to, ease: "easeOut" });
+      insertKey(pose, { t: a.start, value: "stand", ease: "step" });
+      break;
+    }
     case "lookAt": {
       const list = scene.looks.get(a.actor) ?? [];
       list.push({ start: a.start, end: a.end ?? Infinity, target: a.target });
@@ -269,12 +309,22 @@ function actorCore(scene: CompiledScene, id: string, t: number) {
   const poseKeys = scene.tracks.get(trackKey(id, "pose"))!;
   let poseStart = 0;
   let pose = poseKeys[0]!.value as Pose;
+  let prevPose = pose;
+  let prevStart = 0;
+  let changed = false;
   for (const k of poseKeys) {
     if (k.t > t) break;
-    if (k.value !== pose || k === poseKeys[0]) poseStart = k.t;
+    if (k.value !== pose) {
+      prevPose = pose;
+      prevStart = poseStart;
+      poseStart = k.t;
+      changed = true;
+    } else if (k === poseKeys[0]) poseStart = k.t;
     pose = k.value as Pose;
   }
-  return { actor, position, rotation, pose, poseTime: Math.max(0, t - poseStart) };
+  const poseTime = Math.max(0, t - poseStart);
+  const blend = changed ? Math.min(1, poseTime / POSE_BLEND) : 1;
+  return { actor, position, rotation, pose, poseTime, prevPose, prevPoseTime: Math.max(0, t - prevStart), blend };
 }
 
 /** Resolve a Vec3 or "id[.part]" reference to a world point at time t. */
@@ -318,6 +368,9 @@ export function evaluate(scene: CompiledScene, t: number): SceneState {
       rotation: core.rotation,
       pose: core.pose,
       poseTime: core.poseTime,
+      prevPose: core.prevPose,
+      prevPoseTime: core.prevPoseTime,
+      blend: core.blend,
       lookTarget: look ? resolveTarget(scene, look.target, t) : null,
     };
   }

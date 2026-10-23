@@ -1,6 +1,7 @@
 import type { Actor, BlockshotSpec, Camera, Key, Prop, PropType, Shot, TrackProperty, Vec3 } from "./schema";
 import { compile, evaluate } from "./evaluate";
 import { parseRef } from "./mirror";
+import { SEATS } from "./catalog";
 
 /**
  * Pure editing operations for UI tools. Every function returns a NEW spec (inputs are never mutated),
@@ -111,6 +112,7 @@ export function removeEntity(spec: BlockshotSpec, id: string): BlockshotSpec {
     actions: spec.actions.filter((a) => {
       if ("actor" in a && a.actor === id) return false;
       if ("camera" in a && a.camera === id) return false;
+      if (a.type === "sitDown" && a.on === id) return false;
       if ("target" in a && refersTo(a.target, id)) return false;
       if (a.type === "orbit" && refersTo(a.around, id)) return false;
       return true;
@@ -345,4 +347,29 @@ export function removeAsset(spec: BlockshotSpec, assetId: string): BlockshotSpec
   const users = spec.props.filter((p) => p.asset === assetId).map((p) => p.id);
   const base = users.reduce((s, id) => removeEntity(s, id), spec);
   return { ...base, assets: base.assets.filter((a) => a.id !== assetId) };
+}
+
+// ---- sitting ---------------------------------------------------------------------------------------
+
+/** Adds a sitDown (walk onto the seat, turn, lower) for the actor at time `start`. */
+export function addSitDown(spec: BlockshotSpec, actorId: string, seatId: string, opts: { start: number; duration?: number; offset?: number }): BlockshotSpec {
+  const seat = spec.props.find((p) => p.id === seatId);
+  if (!seat || !SEATS[seat.type] || !spec.actors.some((a) => a.id === actorId)) return spec;
+  const action = { type: "sitDown" as const, actor: actorId, on: seatId, start: roundT(Math.max(0, opts.start)), duration: opts.duration ?? 1, offset: opts.offset ?? 0 };
+  return extendDuration({ ...spec, actions: [...spec.actions, action] });
+}
+
+/** Adds a standUp at time `start`. */
+export function addStandUp(spec: BlockshotSpec, actorId: string, opts: { start: number; duration?: number; to?: Vec3 }): BlockshotSpec {
+  if (!spec.actors.some((a) => a.id === actorId)) return spec;
+  const action = { type: "standUp" as const, actor: actorId, start: roundT(Math.max(0, opts.start)), duration: opts.duration ?? 0.8, ...(opts.to ? { to: opts.to } : {}) };
+  return extendDuration({ ...spec, actions: [...spec.actions, action] });
+}
+
+/** Grows the project so the last generated key still fits. */
+function extendDuration(spec: BlockshotSpec): BlockshotSpec {
+  let end = spec.settings.duration;
+  for (const keys of compile(spec).tracks.values()) end = Math.max(end, keys[keys.length - 1]?.t ?? 0);
+  const duration = Math.ceil(end * 10) / 10;
+  return duration > spec.settings.duration ? { ...spec, settings: { ...spec.settings, duration } } : spec;
 }
