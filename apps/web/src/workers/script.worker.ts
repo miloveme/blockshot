@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { runScript } from "@blockshot/core";
+import { runScript, type BlockshotSpecInput } from "@blockshot/core";
 
 // Remove network / storage / code-loading capabilities before any user code runs.
 const scope = self as unknown as Record<string, unknown>;
@@ -11,9 +11,9 @@ for (const key of ["fetch", "XMLHttpRequest", "WebSocket", "EventSource", "impor
   }
 }
 
-self.onmessage = (e: MessageEvent<{ source: string }>) => {
+self.onmessage = (e: MessageEvent<{ source: string; base?: BlockshotSpecInput }>) => {
   try {
-    const spec = runScript(e.data.source);
+    const spec = runScript(e.data.source, e.data.base);
     self.postMessage({ ok: true, spec });
   } catch (err) {
     const error = err as Error;

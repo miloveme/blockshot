@@ -15,3 +15,4 @@ export * from "./layout";
 export * from "./mirror";
 export * from "./placement";
 export * from "./plan";
+export * from "./addon";
