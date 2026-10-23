@@ -59,7 +59,8 @@ describe("sitDown / standUp", () => {
 
   it("lowers into the seat only in the last moments (pose switches near arrival)", () => {
     const spec = addSitDown(scene(), "actor1", "chair1", { start: 0, duration: 2 });
-    expect(at(spec, 1).pose).toBe("stand");
+    expect(at(spec, 0.5).pose).toBe("walk"); // walks to the seat instead of gliding
+    expect(at(spec, 1.9 - POSE_BLEND).pose).not.toBe("sit");
     expect(at(spec, 2 - POSE_BLEND + 0.01).pose).toBe("sit");
   });
 
@@ -166,9 +167,9 @@ describe("approaching a seat from behind", () => {
     if (!r.ok) throw new Error("invalid");
     const c = compile(r.spec);
     const behind = evaluate(c, 1.3).actors.a!.position; // 65% of the way
-    expect(behind[2]).toBeCloseTo(0.6, 1); // chair faces +Z, so its open side is z = +0.6
+    expect(behind[2]).toBeCloseTo(0.5, 1); // chair faces +Z, so its open side is z = +0.5
     expect(evaluate(c, 2).actors.a!.position[2]).toBeCloseTo(0, 5);
-    expect(evaluate(c, 0.7).actors.a!.position[2]).toBeLessThan(0.6); // still on the way round
+    expect(evaluate(c, 0.7).actors.a!.position[2]).toBeLessThan(0.5); // still on the way round
     // an actor who starts in front goes straight in
     expect(evaluate(c, 1).actors.b!.position[2]).toBeLessThan(2);
     expect(evaluate(c, 1.3).actors.b!.position[2]).toBeGreaterThan(0);

@@ -14,7 +14,7 @@ const ORBIT_SAMPLES_PER_SEC = 12;
 /** seconds to blend from the previous pose into a new one */
 export const POSE_BLEND = 0.35;
 /** how far in front of a seat the actor lines up before stepping in (m) */
-const SEAT_APPROACH = 0.6;
+const SEAT_APPROACH = 0.5;
 const STAND_STEP = 0.6;
 
 type KeyValue = Key["value"];
@@ -229,17 +229,28 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       const toFront = Math.hypot(from[0] - front[0], from[2] - front[2]);
       const around = toSeat > 0.3 && toFront > 0.3 && !isInFront(from, seat.position, yawR);
       const turn = unwrapYaw(fromRot[1], seat.yaw);
+      const goal: Vec3 = around ? front : seat.position;
+      const travel = unwrapYaw(fromRot[1], yawTowards(from, goal));
+      const tFront = around ? a.start + (end - a.start) * 0.65 : end;
+      const walking = toSeat > 0.1;
       insertKey(pos, { t: a.start, value: from, ease: "linear" });
-      if (around) {
-        const tFront = a.start + (end - a.start) * 0.65;
-        insertKey(pos, { t: tFront, value: front, ease: "easeInOut" });
-        insertKey(rot, { t: tFront, value: [fromRot[0], turn, fromRot[2]], ease: "easeInOut" });
-      }
-      insertKey(pos, { t: end, value: seat.position, ease: around ? "easeOut" : "easeInOut" });
       insertKey(rot, { t: a.start, value: fromRot, ease: "linear" });
+      if (walking) {
+        // walk (face where you are going), then turn into the seat's direction and step in
+        const turnIn = Math.min(TURN_TIME, (tFront - a.start) / 2);
+        insertKey(rot, { t: a.start + turnIn, value: [fromRot[0], travel, fromRot[2]], ease: "easeInOut" });
+        insertKey(pose, { t: a.start, value: "walk", ease: "step" });
+        if (around) {
+          insertKey(pos, { t: tFront, value: front, ease: "linear" });
+          insertKey(rot, { t: tFront, value: [fromRot[0], travel, fromRot[2]], ease: "linear" });
+          insertKey(pose, { t: tFront, value: "stand", ease: "step" });
+        }
+      }
+      insertKey(pos, { t: end, value: seat.position, ease: "linear" });
       insertKey(rot, { t: end, value: [fromRot[0], turn, fromRot[2]], ease: "easeInOut" });
       // lower into the seat while arriving
-      insertKey(pose, { t: Math.max(a.start, end - POSE_BLEND), value: "sit", ease: "step" });
+      // (when coming round, he turns and backs in: start lowering as soon as he is above the seat)
+      insertKey(pose, { t: Math.max(a.start, around ? Math.min(end - POSE_BLEND, tFront + (end - tFront) * 0.25) : end - POSE_BLEND), value: "sit", ease: "step" });
       break;
     }
     case "standUp": {
