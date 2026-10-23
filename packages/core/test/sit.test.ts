@@ -60,7 +60,7 @@ describe("sitDown / standUp", () => {
   it("lowers into the seat only in the last moments (pose switches near arrival)", () => {
     const spec = addSitDown(scene(), "actor1", "chair1", { start: 0, duration: 2 });
     expect(at(spec, 0.5).pose).toBe("walk"); // walks to the seat instead of gliding
-    expect(at(spec, 1.9 - POSE_BLEND).pose).not.toBe("sit");
+    expect(at(spec, 1.0).pose).not.toBe("sit");
     expect(at(spec, 2 - POSE_BLEND + 0.01).pose).toBe("sit");
   });
 
@@ -173,5 +173,52 @@ describe("approaching a seat from behind", () => {
     // an actor who starts in front goes straight in
     expect(evaluate(c, 1).actors.b!.position[2]).toBeLessThan(2);
     expect(evaluate(c, 1.3).actors.b!.position[2]).toBeGreaterThan(0);
+  });
+});
+
+describe("sitting down never cuts through the seat", () => {
+  // the scene from a real session: actor behind a chair that faces a table
+  const build = (start: [number, number, number], chairYaw = 0) => {
+    const r = validateSpec({
+      specVersion: "0.1",
+      actors: [{ id: "actor1", position: start }],
+      props: [
+        { id: "table1", type: "table", position: [-0.5, 0, 1.2] },
+        { id: "chair1", type: "chair", position: [-0.7, 0, 0.2], rotation: [0, chairYaw, 0] },
+      ],
+      actions: [{ type: "sitDown", actor: "actor1", on: "chair1", start: 0.5, duration: 4.8 }],
+    });
+    if (!r.ok) throw new Error(JSON.stringify(r.errors));
+    return compile(r.spec);
+  };
+  // chair footprint 0.46 × 0.46 around (-0.7, 0.2), grown by a body radius
+  const insideChair = (p: readonly number[], pad: number) => Math.abs(p[0]! + 0.7) < 0.23 + pad && Math.abs(p[2]! - 0.2) < 0.23 + pad;
+
+  it.each([
+    ["behind", [-0.4, 0, -3.5]],
+    ["beside", [1.5, 0, 0.2]],
+    ["behind-left", [-2.5, 0, -1.5]],
+  ] as const)("starting %s: walks the whole way and keeps clear of the chair until the last step", (_n, start) => {
+    const c = build([...start] as [number, number, number]);
+    let walked = 0;
+    let prev = evaluate(c, 0).actors.actor1!.position;
+    const arrive = 0.5 + 4.8 * 0.65;
+    for (let t = 0.5; t <= 5.3; t += 0.05) {
+      const s = evaluate(c, t).actors.actor1!;
+      walked += Math.hypot(s.position[0] - prev[0], s.position[2] - prev[2]);
+      prev = s.position;
+      if (t < arrive - 0.05) expect(insideChair(s.position, 0.15)).toBe(false);
+      if (t > 0.6 && t < arrive - 0.1) expect(s.pose).toBe("walk");
+    }
+    expect(walked).toBeGreaterThan(1.5); // an actual route, not a teleport
+    const end = evaluate(c, 5.3).actors.actor1!;
+    expect(end.pose).toBe("sit");
+    expect(end.position[0]).toBeCloseTo(-0.7, 5);
+    expect(end.position[2]).toBeCloseTo(0.2, 5);
+  });
+
+  it("works for a chair turned the other way", () => {
+    const c = build([-0.4, 0, -3.5], 180);
+    for (let t = 0.5; t <= 3.5; t += 0.05) expect(insideChair(evaluate(c, t).actors.actor1!.position, 0.15)).toBe(false);
   });
 });

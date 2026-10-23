@@ -2,7 +2,7 @@ import type { Action, BodyPart, Gesture, HandShape, Key, Pose, BlockshotSpec, Pr
 import { applyEase, DEG, unwrapYaw, vec, yawTowards } from "./math";
 import { verticalFov } from "./camera";
 import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
-import { seatPose } from "./catalog";
+import { PROP_CATALOG, seatPose } from "./catalog";
 import { REST_HEIGHT, applyLayer, blendPoses, smoothstep, solveRig, toLocal, toWorld, type BoneName, type RigPose, type Skeleton } from "./rig";
 import { Q } from "./quat";
 import { basePose, envelope, GESTURE_DEFS, handShapeLayer, lookLayer, RELAXED_HANDS, sampleGesture, solveArm } from "./poses";
@@ -15,6 +15,8 @@ const ORBIT_SAMPLES_PER_SEC = 12;
 export const POSE_BLEND = 0.35;
 /** how far in front of a seat the actor lines up before stepping in (m) */
 const SEAT_APPROACH = 0.5;
+/** gap between the end of a seat and the route that passes it (m) */
+const SEAT_CLEARANCE = 0.45;
 const STAND_STEP = 0.6;
 
 type KeyValue = Key["value"];
@@ -187,6 +189,8 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
         yaw = unwrapYaw(yaw, yawTowards(points[i]!, points[i + 1]!));
         insertKey(rot, { t: time + Math.min(TURN_TIME, segDur / 2), value: [startRot[0], yaw, startRot[2]], ease: "easeInOut" });
         time += segDur;
+        // hold that heading to the end of the leg, so the next turn happens at the start of the next leg
+        insertKey(rot, { t: time, value: [startRot[0], yaw, startRot[2]], ease: "linear" });
         insertKey(pos, { t: time, value: points[i + 1]!, ease: "linear" });
       });
       insertKey(pose, { t: a.start, value: a.type === "runTo" ? "run" : "walk", ease: "step" });
@@ -221,29 +225,56 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       const from = sampleKeys(pos, a.start) as Vec3;
       const fromRot = sampleKeys(rot, a.start) as Vec3;
       const end = a.start + a.duration;
-      // come around to the open side first: the seat faces +Z of the prop, so aim for a point in front of it and only then
-      // step in and sit — a straight line from behind / the side would cut through the backrest
+      // Come round to the open side first: the seat faces +Z of the prop, so line up in front of it and only then back
+      // in. From behind or beside, first sidestep out past the end of the seat so the route never cuts through it.
+      const prop = spec.props.find((p) => p.id === a.on)!;
       const yawR = seat.yaw * DEG;
-      const front: Vec3 = [seat.position[0] + Math.sin(yawR) * SEAT_APPROACH, seat.position[1], seat.position[2] + Math.cos(yawR) * SEAT_APPROACH];
+      const [sx, sz] = [Math.sin(yawR), Math.cos(yawR)]; // seat forward
+      const [rx, rz] = [Math.cos(yawR), -Math.sin(yawR)]; // seat right (+X at yaw 0)
+      const toWorldXZ = (lx: number, lz: number): Vec3 => [prop.position[0] + rx * lx + sx * lz, seat.position[1], prop.position[2] + rz * lx + sz * lz];
+      const rel: [number, number] = [from[0] - prop.position[0], from[2] - prop.position[2]];
+      const lx = rel[0] * rx + rel[1] * rz; // actor in the seat's frame
+      const lz = rel[0] * sx + rel[1] * sz;
+      const half = (PROP_CATALOG[prop.type].size[0] * Math.abs(prop.scale[0])) / 2;
+      const lane = half + SEAT_CLEARANCE; // how far out to the side the sidestep runs
+      const front: Vec3 = toWorldXZ(0, SEAT_APPROACH);
       const toSeat = Math.hypot(from[0] - seat.position[0], from[2] - seat.position[2]);
-      const toFront = Math.hypot(from[0] - front[0], from[2] - front[2]);
-      const around = toSeat > 0.3 && toFront > 0.3 && !isInFront(from, seat.position, yawR);
+      const inFront = lz > 0.25 && Math.abs(lx) < lane;
+      const route: Vec3[] = [];
+      if (toSeat > 0.3) {
+        if (!inFront) {
+          const side = lx >= 0 ? 1 : -1;
+          if (Math.abs(lx) < lane) route.push(toWorldXZ(side * lane, Math.min(lz, 0))); // out past the end of the seat…
+          route.push(toWorldXZ(side * Math.max(Math.abs(lx), lane), SEAT_APPROACH)); // …up alongside it…
+        }
+        route.push(front); // …and round to the front
+      }
+      const around = route.length > 0;
       const turn = unwrapYaw(fromRot[1], seat.yaw);
-      const goal: Vec3 = around ? front : seat.position;
-      const travel = unwrapYaw(fromRot[1], yawTowards(from, goal));
       const tFront = around ? a.start + (end - a.start) * 0.65 : end;
       const walking = toSeat > 0.1;
       insertKey(pos, { t: a.start, value: from, ease: "linear" });
       insertKey(rot, { t: a.start, value: fromRot, ease: "linear" });
       if (walking) {
-        // walk (face where you are going), then turn into the seat's direction and step in
-        const turnIn = Math.min(TURN_TIME, (tFront - a.start) / 2);
-        insertKey(rot, { t: a.start + turnIn, value: [fromRot[0], travel, fromRot[2]], ease: "easeInOut" });
+        // walk the route (facing where each leg goes, like walkTo), then turn into the seat's direction and step in
+        const points = [from, ...(around ? route : [seat.position])];
+        const lengths = points.slice(1).map((p, i) => vec.distance(points[i]!, p));
+        const total = lengths.reduce((s, l) => s + l, 0) || 1e-6;
+        const walkEnd = around ? tFront : end;
+        let time = a.start;
+        let yaw = fromRot[1];
+        lengths.forEach((len, i) => {
+          const segDur = (len / total) * (walkEnd - a.start);
+          yaw = unwrapYaw(yaw, yawTowards(points[i]!, points[i + 1]!));
+          insertKey(rot, { t: time + Math.min(TURN_TIME, segDur / 2), value: [fromRot[0], yaw, fromRot[2]], ease: "easeInOut" });
+          time += segDur;
+          insertKey(rot, { t: time, value: [fromRot[0], yaw, fromRot[2]], ease: "linear" });
+          if (around) insertKey(pos, { t: time, value: points[i + 1]!, ease: "linear" });
+        });
         insertKey(pose, { t: a.start, value: "walk", ease: "step" });
         if (around) {
-          insertKey(pos, { t: tFront, value: front, ease: "linear" });
-          insertKey(rot, { t: tFront, value: [fromRot[0], travel, fromRot[2]], ease: "linear" });
           insertKey(pose, { t: tFront, value: "stand", ease: "step" });
+          insertKey(rot, { t: tFront, value: [fromRot[0], yaw, fromRot[2]], ease: "linear" });
         }
       }
       insertKey(pos, { t: end, value: seat.position, ease: "linear" });
@@ -536,9 +567,4 @@ export function evaluate(scene: CompiledScene, t: number): SceneState {
     activeCameraId,
     activeShotId,
   };
-}
-
-/** True when `p` is already on the open side of a seat at `seatPos` facing yaw `yawR` (radians) — within its forward half-plane. */
-function isInFront(p: Vec3, seatPos: Vec3, yawR: number): boolean {
-  return (p[0] - seatPos[0]) * Math.sin(yawR) + (p[2] - seatPos[2]) * Math.cos(yawR) > 0.25;
 }
