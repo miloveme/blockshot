@@ -107,7 +107,8 @@ export function lintLayout(spec: BlockshotSpec): Issue[] {
     if (hit) issues.push({ path: `actors[${i}].position`, message: `"${actor.id}" starts inside "${hit.p.id}" (${hit.p.type})` });
   }
 
-  // walking paths: follow each actor's walkTo/runTo chain in time order
+  // walking paths: legs are re-pathed around obstacles automatically unless the action says "direct": check what's left
+  const scene = compile(spec);
   const pos = new Map(spec.actors.map((a) => [a.id, a.position as Vec3]));
   const moves = spec.actions
     .map((a, index) => ({ a, index }))
@@ -115,15 +116,20 @@ export function lintLayout(spec: BlockshotSpec): Issue[] {
     .sort((m, n) => m.a.start - n.a.start);
   for (const { a, index } of moves) {
     const points: Vec3[] = Array.isArray(a.to[0]) ? (a.to as Vec3[]) : [a.to as Vec3];
+    if (scene.unreachable.has(a)) {
+      issues.push({ path: `actions[${index}]`, message: `"${a.actor}" has no walkable route to its destination (walled off or outside the room) — move the target or open a door` });
+    }
     let from = pos.get(a.actor);
     if (!from) continue;
-    for (const to of points) {
-      const blocker = obstacles.find((o) => segmentHitsBox(from!, to, o.box));
-      if (blocker) {
-        issues.push({ path: `actions[${index}]`, message: `"${a.actor}" walks through "${blocker.p.id}" (${blocker.p.type}) — route around it with extra waypoints` });
-        break;
+    if (a.direct) {
+      for (const to of points) {
+        const blocker = obstacles.find((o) => segmentHitsBox(from!, to, o.box));
+        if (blocker) {
+          issues.push({ path: `actions[${index}]`, message: `"${a.actor}" walks straight through "${blocker.p.id}" (${blocker.p.type}) (direct: true) — remove "direct" to let it find a way round` });
+          break;
+        }
+        from = to;
       }
-      from = to;
     }
     pos.set(a.actor, points.at(-1)!);
   }

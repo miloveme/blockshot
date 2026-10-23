@@ -126,7 +126,7 @@ LLM과 사람이 가장 많이 쓰는 레이어. 로드 시 `compile()`이 `trac
 
 | type | 필드 | 효과 |
 | --- | --- | --- |
-| `walkTo` | `actor, to: Vec3 \| Vec3[], start, duration?, speed?` | 위치 이동 + 진행 방향으로 회전 + `walk` 포즈. `duration` 없으면 `speed`(기본 1.3 m/s)로 계산 |
+| `walkTo` | `actor, to: Vec3 \| Vec3[], start, duration?, speed?, direct?` | 위치 이동 + 진행 방향으로 회전 + `walk` 포즈. `duration` 없으면 `speed`(기본 1.3 m/s)로 계산. **자동 길찾기**: 가구·벽·서 있는 인물에 막힌 구간만 우회 경로로 바뀐다(`direct: true`면 직선 그대로). 소품 안쪽 목적지는 그 옆에서 멈춘다 — [NAVIGATION.md](NAVIGATION.md) |
 | `runTo` | 위와 동일 (기본 speed 3.5) | `run` 포즈 |
 | `turnTo` | `actor, target: Vec3 \| ref \| yaw(number), start, duration?` | 제자리 회전 |
 | `pose` | `actor, pose, start` | 포즈 전환 — 이전 포즈에서 0.35초 동안 관절별로 부드럽게 섞인다(`ActorState.blend`) |

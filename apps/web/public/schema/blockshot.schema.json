@@ -599,6 +599,9 @@
                 "type": "number",
                 "exclusiveMinimum": 0
               },
+              "direct": {
+                "type": "boolean"
+              },
               "start": {
                 "type": "number",
                 "minimum": 0
@@ -675,6 +678,9 @@
               "speed": {
                 "type": "number",
                 "exclusiveMinimum": 0
+              },
+              "direct": {
+                "type": "boolean"
               },
               "start": {
                 "type": "number",

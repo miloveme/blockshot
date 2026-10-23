@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  DEG, cameraForward2D, movesOf, planBounds, propSize, sideOfLine, wedgePoints, yawFacing,
-  type ActorState, type BlockshotSpec, type CameraState, type Prop, type Vec3,
+  DEG, bakeNav, cameraForward2D, compile, navRadiusOf, planBounds, staticActors, propSize, sideOfLine, wedgePoints, yawFacing,
+  type ActorState, type BlockshotSpec, type CameraState, type NavGrid, type Prop, type Vec3,
 } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
 import { transformed, yawed } from "@/lib/actions";
@@ -51,6 +51,11 @@ export function PlanView({ className = "" }: { className?: string }) {
   const [view, setView] = useState({ dx: 0, dz: 0, zoom: 1 });
   const [hover, setHover] = useState<Pt | null>(null);
   const [axis, setAxis] = useState(false);
+  const [navOn, setNavOn] = useState(false);
+  // the scene compiled once per edit: gives the routes actors really walk (after path-finding)
+  const compiled = useMemo(() => compile(spec), [spec]);
+  const nav = useMemo(() => (navOn ? bakeNav(spec, { radius: 0.22 }) : null), [navOn, spec]);
+  const still = useMemo(() => new Set(staticActors(spec)), [spec]);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -227,22 +232,45 @@ export function PlanView({ className = "" }: { className?: string }) {
           <PropShape key={p.id} prop={p} assets={spec.assets} selected={selection === p.id} onDown={(e) => beginDrag(e, p.id, "move")} />
         ))}
 
-        {/* movement paths of every actor (dashed), brighter for the selected one */}
+        {nav ? <NavOverlay grid={nav} /> : null}
+
+        {/* movement paths of every actor (dashed), brighter for the selected one; the drawn line is the route after path-finding */}
         {actors.map((a) =>
-          movesOf(spec, a.id).map(({ index, action }) => {
-            const pts: Vec3[] = Array.isArray(action.to[0]) ? (action.to as Vec3[]) : [action.to as Vec3];
-            const start = spec.actors.find((x) => x.id === a.id)!.position;
+          spec.actions.flatMap((action, index) => {
+            if (action.type !== "walkTo" && action.type !== "runTo" && action.type !== "sitDown") return [];
+            if (action.actor !== a.id) return [];
+            const route = compiled.routes.get(action);
+            if (!route) return [];
             const sel = selection === a.id;
-            return (
+            const written = action.type === "sitDown" ? null : ((Array.isArray(action.to[0]) ? action.to : [action.to]) as Vec3[]).length + 1;
+            const detour = written !== null && route.length > written;
+            return [
               <g key={`${a.id}-${index}`} opacity={sel ? 1 : 0.45} pointerEvents="none">
-                <polyline points={[start, ...pts].map((q) => `${q[0]},${q[2]}`).join(" ")} fill="none" stroke={PATH} strokeWidth={sel ? 2 : 1.2} strokeDasharray="6 4" vectorEffect="non-scaling-stroke" />
-                {pts.map((q, i) => (
-                  <circle key={i} cx={q[0]} cy={q[2]} r={0.07} fill={PATH} />
+                <polyline points={route.map((q) => `${q[0]},${q[2]}`).join(" ")} fill="none" stroke={detour ? "#a3e635" : PATH} strokeWidth={sel ? 2 : 1.2} strokeDasharray="6 4" vectorEffect="non-scaling-stroke" />
+                {route.slice(1).map((q, i) => (
+                  <circle key={i} cx={q[0]} cy={q[2]} r={0.07} fill={detour ? "#a3e635" : PATH} />
                 ))}
-              </g>
-            );
+              </g>,
+            ];
           }),
         )}
+
+        {nav
+          ? actors.map((a) => (
+              <circle
+                key={`nav-${a.id}`}
+                cx={a.position[0]}
+                cy={a.position[2]}
+                r={navRadiusOf(spec.actors.find((x) => x.id === a.id)!)}
+                fill="none"
+                stroke={still.has(a.id) ? "#f87171" : "#38bdf8"}
+                strokeWidth={1.5}
+                strokeDasharray={still.has(a.id) ? undefined : "4 3"}
+                vectorEffect="non-scaling-stroke"
+                pointerEvents="none"
+              />
+            ))
+          : null}
 
         {axis && A && B ? <AxisLine a={A} b={B} extent={Math.max(bw, bh) * 2} /> : null}
 
@@ -292,6 +320,13 @@ export function PlanView({ className = "" }: { className?: string }) {
           title="180도 규칙: 두 인물을 잇는 축선. 카메라가 같은 쪽이면 초록, 반대쪽이면 빨강"
         >
           축선 {actors.length < 2 ? "(인물 2명 필요)" : ""}
+        </button>
+        <button
+          className={`rounded px-2 py-1 ${navOn ? "bg-amber-400 text-black" : "bg-black/60 text-zinc-200 hover:bg-black/80"}`}
+          onClick={() => setNavOn((v) => !v)}
+          title="내비게이션 베이크: 걸어 다닐 수 없는 곳(가구·벽 + 몸 반경)을 붉게, 가만히 서 있는 인물(장애물)은 빨간 원, 움직이는 인물은 파란 점선 원으로 표시. 걷기 경로는 이 격자 위에서 자동으로 길을 찾습니다"
+        >
+          내비 베이크
         </button>
       </div>
       <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/50 px-2 py-0.5 text-[10px] text-zinc-400">
@@ -407,6 +442,35 @@ function CameraShape({ cam, active, selected, tint, name, onDown, onRotateDown }
 
 function Handle({ x, z, onDown }: { x: number; z: number; onDown: (e: React.PointerEvent) => void }) {
   return <circle cx={x} cy={z} r={0.13} fill={ACCENT} stroke="#0b0d10" strokeWidth={1.5} vectorEffect="non-scaling-stroke" onPointerDown={onDown} style={{ cursor: "grab" }} />;
+}
+
+/** Blocked cells of the baked navigation grid: one path per row of merged runs. */
+function NavOverlay({ grid }: { grid: NavGrid }) {
+  const paths = useMemo(() => {
+    const out = { 1: [] as string[], 2: [] as string[] };
+    for (let iz = 0; iz < grid.h; iz++) {
+      let run = -1;
+      let kind = 0;
+      for (let ix = 0; ix <= grid.w; ix++) {
+        const v = ix < grid.w ? grid.cells[iz * grid.w + ix]! : 0;
+        if (run >= 0 && v !== kind) {
+          out[kind as 1 | 2].push(`M${grid.x0 + run * grid.cell} ${grid.z0 + iz * grid.cell}h${(ix - run) * grid.cell}v${grid.cell}h${-(ix - run) * grid.cell}z`);
+          run = -1;
+        }
+        if (v !== 0 && run < 0) {
+          run = ix;
+          kind = v;
+        }
+      }
+    }
+    return { prop: out[1].join(""), wall: out[2].join("") };
+  }, [grid]);
+  return (
+    <g pointerEvents="none">
+      <path d={paths.wall} fill="#94a3b8" fillOpacity={0.12} />
+      <path d={paths.prop} fill="#ef4444" fillOpacity={0.3} />
+    </g>
+  );
 }
 
 function AxisLine({ a, b, extent }: { a: Pt; b: Pt; extent: number }) {

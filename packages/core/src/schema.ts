@@ -146,8 +146,8 @@ export type Camera = z.infer<typeof Camera>;
 const timed = { start: z.number().min(0), id: Id.optional() };
 
 export const Action = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("walkTo"), actor: Id, to: z.union([Vec3, z.array(Vec3).min(1)]), duration: z.number().positive().optional(), speed: z.number().positive().optional(), ...timed }),
-  z.object({ type: z.literal("runTo"), actor: Id, to: z.union([Vec3, z.array(Vec3).min(1)]), duration: z.number().positive().optional(), speed: z.number().positive().optional(), ...timed }),
+  z.object({ type: z.literal("walkTo"), actor: Id, to: z.union([Vec3, z.array(Vec3).min(1)]), duration: z.number().positive().optional(), speed: z.number().positive().optional(), direct: z.boolean().optional(), ...timed }),
+  z.object({ type: z.literal("runTo"), actor: Id, to: z.union([Vec3, z.array(Vec3).min(1)]), duration: z.number().positive().optional(), speed: z.number().positive().optional(), direct: z.boolean().optional(), ...timed }),
   z.object({ type: z.literal("turnTo"), actor: Id, target: z.union([Target, z.number()]), duration: z.number().positive().default(0.6), ...timed }),
   z.object({ type: z.literal("pose"), actor: Id, pose: Pose, ...timed }),
   /** a piece of body language: wave, nod, shrug … `side` picks the hand of one-handed ones; `intensity` scales it */

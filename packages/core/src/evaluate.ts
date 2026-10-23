@@ -2,7 +2,8 @@ import type { Action, BodyPart, Gesture, HandShape, Key, Pose, BlockshotSpec, Pr
 import { applyEase, DEG, unwrapYaw, vec, yawTowards } from "./math";
 import { verticalFov } from "./camera";
 import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
-import { PROP_CATALOG, seatPose } from "./catalog";
+import { seatPose } from "./catalog";
+import { bakeNav, navRadiusOf, routeLegs, staticActors, type Circle, type NavGrid } from "./nav";
 import { REST_HEIGHT, applyLayer, blendPoses, smoothstep, solveRig, toLocal, toWorld, type BoneName, type RigPose, type Skeleton } from "./rig";
 import { Q } from "./quat";
 import { basePose, envelope, GESTURE_DEFS, handShapeLayer, lookLayer, RELAXED_HANDS, sampleGesture, solveArm } from "./poses";
@@ -15,8 +16,7 @@ const ORBIT_SAMPLES_PER_SEC = 12;
 export const POSE_BLEND = 0.35;
 /** how far in front of a seat the actor lines up before stepping in (m) */
 const SEAT_APPROACH = 0.5;
-/** gap between the end of a seat and the route that passes it (m) */
-const SEAT_CLEARANCE = 0.45;
+
 const STAND_STEP = 0.6;
 
 type KeyValue = Key["value"];
@@ -41,6 +41,12 @@ export interface CompiledScene {
   aims: Map<string, Segment[]>;
   /** actor id → timed body layers (gestures, reaches) */
   acts: Map<string, ActLayer[]>;
+  /** walk / run / sit actions → the points the actor really walks (after navigation), for drawing */
+  routes: Map<Action, Vec3[]>;
+  /** walk / run actions with a leg no route exists for (walled off) */
+  unreachable: Set<Action>;
+  /** baked navigation grids by body radius */
+  navCache: Map<number, NavGrid>;
 }
 
 /** A timed body layer on top of the actor's base pose. */
@@ -125,7 +131,7 @@ export function compile(spec: BlockshotSpec): CompiledScene {
   const looks = new Map<string, Segment[]>();
   const aims = new Map<string, Segment[]>();
   const acts = new Map<string, ActLayer[]>();
-  const scene: CompiledScene = { spec, tracks, looks, aims, acts };
+  const scene: CompiledScene = { spec, tracks, looks, aims, acts, routes: new Map(), unreachable: new Set(), navCache: new Map() };
 
   const track = (id: string, prop: TrackProperty, initial: KeyValue): CKey[] => {
     const k = trackKey(id, prop);
@@ -174,7 +180,15 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       const startRot = sampleKeys(rot, a.start) as Vec3;
       const prevPose = sampleKeys(pose, a.start) as Pose;
       const waypoints: Vec3[] = Array.isArray(a.to[0]) ? (a.to as Vec3[]) : [a.to as Vec3];
-      const points = [startPos, ...waypoints];
+      let points = [startPos, ...waypoints];
+      if (!a.direct) {
+        // hand-made legs stay as written; any leg that would cut through furniture / a wall / a standing actor is re-pathed
+        const nav = navFor(scene, a.actor, a.start);
+        const routed = routeLegs(nav.grid, points, nav.avoid);
+        points = routed.points;
+        if (routed.failed) scene.unreachable.add(a);
+      }
+      scene.routes.set(a, points);
       const lengths = points.slice(1).map((p, i) => vec.distance(points[i]!, p));
       const total = lengths.reduce((s, l) => s + l, 0) || 1e-6;
       const speed = a.speed ?? (a.type === "runTo" ? RUN_SPEED : WALK_SPEED);
@@ -225,30 +239,18 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       const from = sampleKeys(pos, a.start) as Vec3;
       const fromRot = sampleKeys(rot, a.start) as Vec3;
       const end = a.start + a.duration;
-      // Come round to the open side first: the seat faces +Z of the prop, so line up in front of it and only then back
-      // in. From behind or beside, first sidestep out past the end of the seat so the route never cuts through it.
-      const prop = spec.props.find((p) => p.id === a.on)!;
+      // Come round to the open side first: the seat faces +Z of the prop, so path to a spot in front of it (the navigation
+      // grid routes round the seat and the other furniture) and only then back in.
       const yawR = seat.yaw * DEG;
-      const [sx, sz] = [Math.sin(yawR), Math.cos(yawR)]; // seat forward
-      const [rx, rz] = [Math.cos(yawR), -Math.sin(yawR)]; // seat right (+X at yaw 0)
-      const toWorldXZ = (lx: number, lz: number): Vec3 => [prop.position[0] + rx * lx + sx * lz, seat.position[1], prop.position[2] + rz * lx + sz * lz];
-      const rel: [number, number] = [from[0] - prop.position[0], from[2] - prop.position[2]];
-      const lx = rel[0] * rx + rel[1] * rz; // actor in the seat's frame
-      const lz = rel[0] * sx + rel[1] * sz;
-      const half = (PROP_CATALOG[prop.type].size[0] * Math.abs(prop.scale[0])) / 2;
-      const lane = half + SEAT_CLEARANCE; // how far out to the side the sidestep runs
-      const front: Vec3 = toWorldXZ(0, SEAT_APPROACH);
+      const front: Vec3 = [seat.position[0] + Math.sin(yawR) * SEAT_APPROACH, seat.position[1], seat.position[2] + Math.cos(yawR) * SEAT_APPROACH];
       const toSeat = Math.hypot(from[0] - seat.position[0], from[2] - seat.position[2]);
-      const inFront = lz > 0.25 && Math.abs(lx) < lane;
-      const route: Vec3[] = [];
+      let route: Vec3[] = [];
       if (toSeat > 0.3) {
-        if (!inFront) {
-          const side = lx >= 0 ? 1 : -1;
-          if (Math.abs(lx) < lane) route.push(toWorldXZ(side * lane, Math.min(lz, 0))); // out past the end of the seat…
-          route.push(toWorldXZ(side * Math.max(Math.abs(lx), lane), SEAT_APPROACH)); // …up alongside it…
-        }
-        route.push(front); // …and round to the front
+        const nav = navFor(scene, a.actor, a.start);
+        const r = routeLegs(nav.grid, [from, front], nav.avoid);
+        route = r.failed ? [front] : r.points.slice(1);
       }
+      scene.routes.set(a, [from, ...route, seat.position]);
       const around = route.length > 0;
       const turn = unwrapYaw(fromRot[1], seat.yaw);
       const tFront = around ? a.start + (end - a.start) * 0.65 : end;
@@ -501,6 +503,20 @@ function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnTyp
     }
   }
   return { pose, skeleton: solveRig(pose, scale) };
+}
+
+/** The baked navigation grid for an actor's body, plus the still-standing actors it must go round (everyone else but itself). */
+function navFor(scene: CompiledScene, actorId: string, _t: number): { grid: NavGrid; avoid: Circle[] } {
+  const actor = scene.spec.actors.find((x) => x.id === actorId)!;
+  const radius = navRadiusOf(actor);
+  let grid = scene.navCache.get(radius);
+  if (!grid) {
+    grid = bakeNav(scene.spec, { radius });
+    scene.navCache.set(radius, grid);
+  }
+  const still = new Set(staticActors(scene.spec));
+  const avoid = scene.spec.actors.filter((o) => o.id !== actorId && still.has(o.id)).map((o) => ({ x: o.position[0], z: o.position[2], r: navRadiusOf(o) * 0.8 }));
+  return { grid, avoid };
 }
 
 /** Deterministic scene state at time t (seconds). Pure. */

@@ -126,8 +126,10 @@ describe("add-on merge", () => {
   });
 
   it("walking through the table is caught by the layout lint after merging", () => {
-    const merged = applyAddon(spec(), { actions: [{ type: "walkTo", actor: "actor1", to: [0, 0, -1.2], start: 0 }] }); // straight into the table
-    expect(lintLayout(merged).some((i) => i.message.includes("walks through"))).toBe(true);
+    const straight = { type: "walkTo" as const, actor: "actor1", to: [0, 0, -1.2] as [number, number, number], start: 0 }; // straight into the table
+    expect(lintLayout(applyAddon(spec(), { actions: [{ ...straight, direct: true }] })).some((i) => i.message.includes("walks straight through"))).toBe(true);
+    // by default the walk is re-pathed round the table, so there is nothing to complain about
+    expect(lintLayout(applyAddon(spec(), { actions: [straight] })).some((i) => i.message.includes("walks"))).toBe(false);
   });
 
   it("keeps only the animation of a full spec the LLM returned anyway", () => {
