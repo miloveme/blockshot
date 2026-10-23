@@ -22,7 +22,7 @@ const RULES = `Conventions:
 - "shots" in ARRAY ORDER is the edit: each shows scene time [start, end) through its camera. Shots may overlap or repeat
   scene time to cut the same performance between cameras (coverage).`;
 
-const ACTION_LINES = `    { "type": "walkTo"|"runTo", "actor", "to": [x,0,z] | [[x,0,z], ...], "start", "duration"?, "speed"? },
+const ACTION_LINES = `    { "type": "walkTo"|"runTo", "actor", "to": [x,0,z] | [[x,0,z], ...], "start", "duration"?, "speed"?, "direct"? },
     { "type": "turnTo", "actor", "target": ref | [x,y,z] | yawDegrees, "start", "duration"? },
     { "type": "pose", "actor", "pose", "start" },
     { "type": "sitDown", "actor", "on": chairOrSofaPropId, "start", "duration"?, "offset"? },
@@ -81,7 +81,7 @@ ${catalogTable()}
   north wall (z = -depth/2) → yaw 0 · south wall (z = +depth/2) → yaw 180 · west wall (x = -width/2) → yaw 90 · east wall (x = +width/2) → yaw -90.
   Keep each footprint inside the walls (center at least half its size away from every wall).
 - Seat chairs/sofas toward what people look at (a table, a TV, each other). Seat people with sitDown actions on the chair/sofa id (a seated actor at the start may use pose "sit" placed on the seat). Put cups/phones ON surfaces: set position y to the surface height (table top = 0.76 × scale y).
-- No two props may overlap on the floor (stacked items excepted). Keep walking paths ≥ 0.8 m wide and never route an actor through furniture: add waypoints around it.
+- No two props may overlap on the floor (stacked items excepted). Keep walking paths ≥ 0.8 m wide (the engine paths round furniture automatically, but a gap narrower than a body is a dead end).
 - Place actors on free floor, standing near what they interact with; seated actors (pose "sit") go on a sofa/chair footprint. Keep doors and windows unblocked.
 - Put the cameras where the audience would stand; keep every shot's subject inside the frame.
 - ${MIRROR_NOTES}`;
@@ -215,7 +215,12 @@ export function describeScene(spec: BlockshotSpec): string {
     const yaw = (p.rotation[1] * Math.PI) / 180;
     const ex = (Math.abs(Math.cos(yaw)) * w * Math.abs(p.scale[0]) + Math.abs(Math.sin(yaw)) * d * Math.abs(p.scale[2])) / 2;
     const ez = (Math.abs(Math.sin(yaw)) * w * Math.abs(p.scale[0]) + Math.abs(Math.cos(yaw)) * d * Math.abs(p.scale[2])) / 2;
-    const kind = info.passable ? "decor" : info.sittable ? (SEATS[p.type] ? "seat (use sitDown with this id)" : "seat (actors may sit on it)") : "obstacle";
+    const rise = r1(h * Math.abs(p.scale[1]));
+    const surfaceKind =
+      p.type === "platform" ? `WALKABLE platform: its top is a floor at y ${r1(p.position[1] + rise)} m (reach it by ramp/stairs; things on it use that y)`
+      : p.type === "ramp" ? `WALKABLE ramp rising toward ${facingWord(p.rotation[1])} from y ${r1(p.position[1])} to ${r1(p.position[1] + rise)} m`
+      : `WALKABLE stairs rising toward ${facingWord(p.rotation[1])} from y ${r1(p.position[1])} to ${r1(p.position[1] + rise)} m`;
+    const kind = info.surface ? surfaceKind : info.passable ? "decor" : info.sittable ? (SEATS[p.type] ? "seat (use sitDown with this id)" : "seat (actors may sit on it)") : "obstacle";
     const name = p.type === "model" ? `model "${spec.assets.find((x) => x.id === p.asset)?.name ?? p.asset}"` : p.type;
     let extra = "";
     if (p.type === "mirror") {
@@ -283,7 +288,7 @@ export function mentionedIn(request: string, spec: BlockshotSpec): Mentionable[]
 const ANIMATE_RULES = `Hard rules:
 - The scene is ALREADY BUILT and must not change. Do NOT add, delete, rename, move or recolor actors or props, and do not change "space". Actors start exactly where they are listed.
 - Use the exact ids listed below. Add ONLY animation: movement (walkTo/runTo/turnTo), poses, looks, camera moves/zooms/orbits, and — only if the request needs them — new cameras and the shot list.
-- Walk around obstacles (add waypoints); never route an actor through an obstacle or a wall.
+- Walking is path-finded by the engine: give walkTo / runTo the DESTINATION (or a few meaningful stops) and it walks round furniture, walls and standing people by itself, climbs ramps and stairs and goes up onto platforms, ducks under low beams / lintels, and steps round or waits for other people who are walking (earlier-starting actions have priority). Only add "direct": true to deliberately cut straight. A destination inside a prop (e.g. the table's center) ends beside it; a destination on a platform just needs its x,z. Doors are walkable openings; walls are not.
 - To seat someone use a sitDown action on the chair/sofa id (it walks them onto the seat, turns them and lowers them; "offset" slides along a sofa's width so several people can sit); use standUp to rise. It aligns position, facing and height with the seat and walks round to its open side, so never hand-place walkTo points or poses to sit. Do not fake sitting with only a "sit" pose at a standing position.
 - Direct the acting like a director: give people body language with "gesture" (wave, nod, shakeHead, shrug, clap, crossArms, handsOnHips, think, bow, lookAround, cheer) and use "reach" to put a hand on or toward an object / another person's body part (picking up, touching, pointing, handing over). Use "handShape" for the fingers (fist, point, pinch, grip …). Combine them with lookAt so people look at what they react to.
 - When asked to change part of the existing animation, edit ONLY the actions concerned (patchActions / removeActions by id) and leave the rest alone; use clearActions only to re-animate everything.
@@ -316,7 +321,7 @@ Existing actions are listed with ids (act1, act2 …). To adjust one, use patchA
 Refs: "actorId", "actorId.part" (parts: ${BODY_PARTS.join(", ")}), "actorId.part@mirrorId" (reflection). Poses: ${POSES.join(", ")}. Ease: linear, easeIn, easeOut, easeInOut, step.`
       : `Output exactly ONE \`\`\`js code block (Blockshot Script; globals: scene, vec, rand). The scene already exists: get handles with scene.use("<id>") and do NOT call scene.room/ground/street/actor/prop.
 const a = scene.use("<actorId>");   // actor handle (or camera handle for a camera id)
-a.walkTo([x,0,z] | [[x,0,z],...], { start, duration?, speed? }); a.runTo(...); a.turnTo(target, { start }); a.pose(name, { start }); a.sitDown(seatId, { start, duration?, offset? }); a.standUp({ start, to? }); a.gesture(name, { start, duration?, side?, intensity? }); a.reach(target, { start, hand?, duration? }); a.handShape(shape, { start, hand?, duration? }); a.lookAt(b.head, { start });
+a.walkTo([x,0,z] | [[x,0,z],...], { start, duration?, speed?, direct? }); a.runTo(...); a.turnTo(target, { start }); a.pose(name, { start }); a.sitDown(seatId, { start, duration?, offset? }); a.standUp({ start, to? }); a.gesture(name, { start, duration?, side?, intensity? }); a.reach(target, { start, hand?, duration? }); a.handShape(shape, { start, hand?, duration? }); a.lookAt(b.head, { start });
 const c = scene.camera("<new id>", { lens, at: [x,y,z], lookAt: a.chest }); // new camera; existing ones: scene.use("<cameraId>")
 c.moveTo(pos, { start, duration, ease }); c.dolly(m, {...}); c.truck(m, {...}); c.pedestal(m, {...}); c.orbit(target, { degrees, start, duration }); c.zoom(mm, {...}); c.lookAt(target, { start });
 scene.reflect(a.chest, mirrorId) -> a reference to where that point appears inside a mirror (aim cameras at reflections with it).

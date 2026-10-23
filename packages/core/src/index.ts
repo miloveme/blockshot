@@ -20,3 +20,6 @@ export * from "./quat";
 export * from "./rig";
 export * from "./poses";
 export * from "./actions";
+export * from "./nav";
+export * from "./surfaces";
+export * from "./nav-time";

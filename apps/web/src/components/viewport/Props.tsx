@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Text } from "@react-three/drei";
 import * as THREE from "three";
 import { Reflector } from "three/examples/jsm/objects/Reflector.js";
-import { DEG, propSize, type Prop } from "@blockshot/core";
+import { DEG, STAIR_RISER, propSize, type Prop } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
 import { instantiate, loadModel } from "@/lib/models";
 
@@ -57,7 +57,41 @@ function Mirror({ color }: { color: string }) {
   );
 }
 
-function PropMesh({ type, color }: { type: Prop["type"]; color: string }): ReactNode {
+/** Ramp: a wedge rising toward +Z (low end at -Z), 1.2 m wide, 3 m long, 0.6 m high at scale 1. */
+function Ramp({ color }: { color: string }) {
+  const geometry = useMemo(() => {
+    const shape = new THREE.Shape();
+    shape.moveTo(-1.5, 0);
+    shape.lineTo(1.5, 0);
+    shape.lineTo(1.5, 0.6);
+    shape.closePath();
+    const g = new THREE.ExtrudeGeometry(shape, { depth: 1.2, bevelEnabled: false });
+    g.translate(0, 0, -0.6);
+    g.rotateY(-Math.PI / 2); // shape x → world z, extrusion → world x
+    return g;
+  }, []);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  return (
+    <mesh geometry={geometry} castShadow receiveShadow>
+      <meshStandardMaterial color={color} roughness={0.9} />
+    </mesh>
+  );
+}
+
+/** Stairs: as many risers as core's navigation uses for this prop's (scaled) rise, so what you see is what is walked. */
+function Stairs({ color, rise }: { color: string; rise: number }) {
+  const steps = Math.max(1, Math.ceil(rise / STAIR_RISER - 1e-6));
+  return (
+    <>
+      {Array.from({ length: steps }, (_, i) => {
+        const h = ((i + 1) / steps) * 1.2;
+        return <Box key={i} size={[1.2, h, 2.4 / steps]} at={[0, h / 2, -1.2 + (i + 0.5) * (2.4 / steps)]} color={color} />;
+      })}
+    </>
+  );
+}
+
+function PropMesh({ type, color, scaleY = 1 }: { type: Prop["type"]; color: string; scaleY?: number }): ReactNode {
   const dark = "#3a3f48";
   switch (type) {
     case "box":
@@ -141,6 +175,12 @@ function PropMesh({ type, color }: { type: Prop["type"]; color: string }): React
           </mesh>
         </>
       );
+    case "platform":
+      return <Box size={[2, 0.4, 2]} at={[0, 0.2, 0]} color={color} />;
+    case "ramp":
+      return <Ramp color={color} />;
+    case "stairs":
+      return <Stairs color={color} rise={1.2 * Math.abs(scaleY)} />;
     case "cup":
       return <Cyl r={0.04} h={0.1} at={[0, 0.05, 0]} color={color} />;
     case "mirror":
@@ -200,7 +240,7 @@ export function PropObject({ prop }: { prop: Prop }) {
       rotation={[prop.rotation[0] * DEG, prop.rotation[1] * DEG, prop.rotation[2] * DEG, "YXZ"]}
       scale={prop.scale}
     >
-      {prop.type === "model" ? <ModelProp prop={prop} /> : <PropMesh type={prop.type} color={prop.color} />}
+      {prop.type === "model" ? <ModelProp prop={prop} /> : <PropMesh type={prop.type} color={prop.color} scaleY={prop.scale[1]} />}
     </group>
   );
 }

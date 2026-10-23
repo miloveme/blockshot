@@ -27,7 +27,7 @@ export type Target = z.infer<typeof Target>;
 export const Ease = z.enum(["linear", "easeIn", "easeOut", "easeInOut", "step"]);
 export type Ease = z.infer<typeof Ease>;
 
-export const POSES = ["stand", "idle", "walk", "run", "sit", "point", "talk"] as const;
+export const POSES = ["stand", "idle", "walk", "run", "sit", "point", "talk", "crouch"] as const;
 export const Pose = z.enum(POSES);
 export type Pose = z.infer<typeof Pose>;
 
@@ -93,6 +93,7 @@ export type Actor = z.infer<typeof Actor>;
 export const PROP_TYPES = [
   "box", "cylinder", "sphere", "plane",
   "chair", "table", "sofa", "bed", "door", "window", "car", "lamp", "cup", "phone", "mirror",
+  "platform", "ramp", "stairs",
   "model",
 ] as const;
 export const PropType = z.enum(PROP_TYPES);
@@ -146,8 +147,8 @@ export type Camera = z.infer<typeof Camera>;
 const timed = { start: z.number().min(0), id: Id.optional() };
 
 export const Action = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("walkTo"), actor: Id, to: z.union([Vec3, z.array(Vec3).min(1)]), duration: z.number().positive().optional(), speed: z.number().positive().optional(), ...timed }),
-  z.object({ type: z.literal("runTo"), actor: Id, to: z.union([Vec3, z.array(Vec3).min(1)]), duration: z.number().positive().optional(), speed: z.number().positive().optional(), ...timed }),
+  z.object({ type: z.literal("walkTo"), actor: Id, to: z.union([Vec3, z.array(Vec3).min(1)]), duration: z.number().positive().optional(), speed: z.number().positive().optional(), direct: z.boolean().optional(), ...timed }),
+  z.object({ type: z.literal("runTo"), actor: Id, to: z.union([Vec3, z.array(Vec3).min(1)]), duration: z.number().positive().optional(), speed: z.number().positive().optional(), direct: z.boolean().optional(), ...timed }),
   z.object({ type: z.literal("turnTo"), actor: Id, target: z.union([Target, z.number()]), duration: z.number().positive().default(0.6), ...timed }),
   z.object({ type: z.literal("pose"), actor: Id, pose: Pose, ...timed }),
   /** a piece of body language: wave, nod, shrug … `side` picks the hand of one-handed ones; `intensity` scales it */

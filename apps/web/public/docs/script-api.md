@@ -71,7 +71,7 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 
 | 메서드 | 설명 |
 | --- | --- |
-| `.walkTo(to, { start, duration?, speed? })` | `to`는 Vec3 또는 경유점 배열 |
+| `.walkTo(to, { start, duration?, speed?, direct? })` | `to`는 Vec3 또는 경유점 배열. 막힌 구간은 엔진이 알아서 우회(`direct: true`면 직선) |
 | `.runTo(to, { start, duration?, speed? })` | |
 | `.turnTo(target, { start, duration? })` | target: Vec3 · 참조 · yaw(도) |
 | `.pose(name, { start })` | `stand` `walk` `run` `sit` `point` `talk` `idle` — 이전 포즈에서 0.35초 블렌드 |

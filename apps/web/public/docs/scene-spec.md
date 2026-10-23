@@ -85,7 +85,9 @@ Blockshot Spec은 프로젝트의 **유일한 진실 원천** 이다. UI 편집,
   "scale": [1, 1, 1], "color": "#7a869a" }
 ```
 
-`type`: `box`, `cylinder`, `sphere`, `plane`, `chair`, `table`, `sofa`, `bed`, `door`, `window`, `car`, `lamp`, `cup`, `phone`, `mirror`, `model`
+`type`: `box`, `cylinder`, `sphere`, `plane`, `chair`, `table`, `sofa`, `bed`, `door`, `window`, `car`, `lamp`, `cup`, `phone`, `mirror`, `platform`, `ramp`, `stairs`, `model`
+
+`platform`/`ramp`/`stairs`는 **걸어 다닐 수 있는 바닥**이다(윗면이 바닥). `ramp`·`stairs`는 소품의 +Z 방향으로 올라가고 `scale.y`가 총 높이, `position.y`가 밑면 높이다. 인물/소품을 그 위에 놓으면 윗면 높이에 얹힌다. 자세한 이동 규칙: [NAVIGATION.md](NAVIGATION.md). 포즈에 `crouch`(숙이기)가 있다 — 낮은 보·문틀 아래를 지날 때 자동으로 쓰인다.
 
 `mirror`는 **실제 반사 거울**이다(평면 반사, 모든 카메라·녹화에 적용). 기본 0.9×1.8 m, `rotation.y = 0`이면 +Z 방향을 비춘다(가구와 같은 규칙). `color`는 프레임 색, `position.y`는 거울 아래 모서리 높이. 비춰진 모습은 직접 모델링하지 않는다 — 카메라를 거울 앞에서 거울 면을 향하게 둔다. 예: `examples/mirror-reveal.json`.
 
@@ -126,7 +128,7 @@ LLM과 사람이 가장 많이 쓰는 레이어. 로드 시 `compile()`이 `trac
 
 | type | 필드 | 효과 |
 | --- | --- | --- |
-| `walkTo` | `actor, to: Vec3 \| Vec3[], start, duration?, speed?` | 위치 이동 + 진행 방향으로 회전 + `walk` 포즈. `duration` 없으면 `speed`(기본 1.3 m/s)로 계산 |
+| `walkTo` | `actor, to: Vec3 \| Vec3[], start, duration?, speed?, direct?` | 위치 이동 + 진행 방향으로 회전 + `walk` 포즈. `duration` 없으면 `speed`(기본 1.3 m/s)로 계산. **자동 길찾기**: 가구·벽·서 있는 인물에 막힌 구간만 우회 경로로 바뀐다(`direct: true`면 직선 그대로). 소품 안쪽 목적지는 그 옆에서 멈춘다 — [NAVIGATION.md](NAVIGATION.md) |
 | `runTo` | 위와 동일 (기본 speed 3.5) | `run` 포즈 |
 | `turnTo` | `actor, target: Vec3 \| ref \| yaw(number), start, duration?` | 제자리 회전 |
 | `pose` | `actor, pose, start` | 포즈 전환 — 이전 포즈에서 0.35초 동안 관절별로 부드럽게 섞인다(`ActorState.blend`) |

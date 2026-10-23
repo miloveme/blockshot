@@ -39,8 +39,8 @@ export interface ActorHandle {
   readonly pelvis: string;
   readonly handL: string;
   readonly handR: string;
-  walkTo(to: Vec3 | Vec3[], opts: { start: number; duration?: number; speed?: number }): ActorHandle;
-  runTo(to: Vec3 | Vec3[], opts: { start: number; duration?: number; speed?: number }): ActorHandle;
+  walkTo(to: Vec3 | Vec3[], opts: { start: number; duration?: number; speed?: number; direct?: boolean }): ActorHandle;
+  runTo(to: Vec3 | Vec3[], opts: { start: number; duration?: number; speed?: number; direct?: boolean }): ActorHandle;
   turnTo(target: Target | number, opts: { start: number; duration?: number }): ActorHandle;
   /** Walk onto a chair/sofa, turn to face the way it faces and lower into the seat. `offset` slides along a sofa's width (m). */
   sitDown(seat: { id: string } | string, opts: { start: number; duration?: number; offset?: number }): ActorHandle;

@@ -1,6 +1,7 @@
 import type { BlockshotSpec, Camera, Vec3 } from "./schema";
 import { PROP_CATALOG, propSize } from "./catalog";
 import { yawTowards } from "./math";
+import { surfaceHeightAt } from "./surfaces";
 import { partPosition, evaluate, compile } from "./evaluate";
 import { addActor, addCamera, addProp, snap, patchEntity } from "./edit";
 
@@ -66,7 +67,9 @@ export function placeProp(spec: BlockshotSpec, prop: { type: Parameters<typeof p
     }
   }
   const r = (n: number) => Math.round(n * 1e4) / 1e4;
-  return { position: [r(x), 0, r(z)], rotation: [0, yaw, 0] };
+  // standing on a platform / ramp / stairs under the point? sit on top of it
+  const y = prop.type === "mirror" || mode === "mounted" ? 0 : surfaceHeightAt(spec, x, z);
+  return { position: [r(x), r(y), r(z)], rotation: [0, yaw, 0] };
 }
 
 export function addPropAt(spec: BlockshotSpec, type: Parameters<typeof addProp>[1], point: [number, number], opts: { step?: number; asset?: string; color?: string } = {}): { spec: BlockshotSpec; id: string } {
@@ -96,7 +99,7 @@ export function addActorAt(spec: BlockshotSpec, point: [number, number], step = 
   const look: Vec3 = near ? near.p : [0, 0, 0];
   const yaw = Math.hypot(look[0] - x, look[2] - z) > 0.6 ? yawTowards([x, 0, z], look) : 0;
   const r = (n: number) => Math.round(n * 1e4) / 1e4;
-  return { spec: patchEntity(base.spec, base.id, { position: [r(x), 0, r(z)], rotation: [0, r(yaw), 0] }), id: base.id };
+  return { spec: patchEntity(base.spec, base.id, { position: [r(x), r(surfaceHeightAt(spec, x, z)), r(z)], rotation: [0, r(yaw), 0] }), id: base.id };
 }
 
 /** Camera at eye height above the clicked point, aimed at the nearest actor (or the scene center). */

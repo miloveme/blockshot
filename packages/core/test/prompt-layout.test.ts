@@ -97,9 +97,11 @@ describe("lintLayout", () => {
       props: [{ id: "tbl", type: "table", position: [0, 0, 0] }],
       actors: [{ id: "a", position: [-2, 0, 0] }],
     };
-    const through = parse({ ...base, actions: [{ type: "walkTo", actor: "a", to: [2, 0, 0], start: 0 }] });
+    const through = parse({ ...base, actions: [{ type: "walkTo", actor: "a", to: [2, 0, 0], start: 0, direct: true }] });
+    const routed = parse({ ...base, actions: [{ type: "walkTo", actor: "a", to: [2, 0, 0], start: 0 }] });
+    expect(lintLayout(routed)).toEqual([]); // the engine finds the way round by itself
     const around = parse({ ...base, actions: [{ type: "walkTo", actor: "a", to: [[-2, 0, 1.5], [2, 0, 1.5]], start: 0 }] });
-    expect(lintLayout(through).some((i) => i.message.includes("walks through"))).toBe(true);
+    expect(lintLayout(through).some((i) => i.message.includes("walks straight through"))).toBe(true);
     expect(lintLayout(around)).toEqual([]);
   });
 
