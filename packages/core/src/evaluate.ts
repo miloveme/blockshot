@@ -13,6 +13,8 @@ const TURN_TIME = 0.3;
 const ORBIT_SAMPLES_PER_SEC = 12;
 /** seconds to blend from the previous pose into a new one */
 export const POSE_BLEND = 0.35;
+/** how far in front of a seat the actor lines up before stepping in (m) */
+const SEAT_APPROACH = 0.6;
 const STAND_STEP = 0.6;
 
 type KeyValue = Key["value"];
@@ -219,10 +221,23 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       const from = sampleKeys(pos, a.start) as Vec3;
       const fromRot = sampleKeys(rot, a.start) as Vec3;
       const end = a.start + a.duration;
+      // come around to the open side first: the seat faces +Z of the prop, so aim for a point in front of it and only then
+      // step in and sit — a straight line from behind / the side would cut through the backrest
+      const yawR = seat.yaw * DEG;
+      const front: Vec3 = [seat.position[0] + Math.sin(yawR) * SEAT_APPROACH, seat.position[1], seat.position[2] + Math.cos(yawR) * SEAT_APPROACH];
+      const toSeat = Math.hypot(from[0] - seat.position[0], from[2] - seat.position[2]);
+      const toFront = Math.hypot(from[0] - front[0], from[2] - front[2]);
+      const around = toSeat > 0.3 && toFront > 0.3 && !isInFront(from, seat.position, yawR);
+      const turn = unwrapYaw(fromRot[1], seat.yaw);
       insertKey(pos, { t: a.start, value: from, ease: "linear" });
-      insertKey(pos, { t: end, value: seat.position, ease: "easeInOut" });
+      if (around) {
+        const tFront = a.start + (end - a.start) * 0.65;
+        insertKey(pos, { t: tFront, value: front, ease: "easeInOut" });
+        insertKey(rot, { t: tFront, value: [fromRot[0], turn, fromRot[2]], ease: "easeInOut" });
+      }
+      insertKey(pos, { t: end, value: seat.position, ease: around ? "easeOut" : "easeInOut" });
       insertKey(rot, { t: a.start, value: fromRot, ease: "linear" });
-      insertKey(rot, { t: end, value: [fromRot[0], unwrapYaw(fromRot[1], seat.yaw), fromRot[2]], ease: "easeInOut" });
+      insertKey(rot, { t: end, value: [fromRot[0], turn, fromRot[2]], ease: "easeInOut" });
       // lower into the seat while arriving
       insertKey(pose, { t: Math.max(a.start, end - POSE_BLEND), value: "sit", ease: "step" });
       break;
@@ -510,4 +525,9 @@ export function evaluate(scene: CompiledScene, t: number): SceneState {
     activeCameraId,
     activeShotId,
   };
+}
+
+/** True when `p` is already on the open side of a seat at `seatPos` facing yaw `yawR` (radians) — within its forward half-plane. */
+function isInFront(p: Vec3, seatPos: Vec3, yawR: number): boolean {
+  return (p[0] - seatPos[0]) * Math.sin(yawR) + (p[2] - seatPos[2]) * Math.cos(yawR) > 0.25;
 }
