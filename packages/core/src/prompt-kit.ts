@@ -1,7 +1,7 @@
 import { PROP_TYPES, POSES, BODY_PARTS, SPEC_VERSION, type BlockshotSpec, type Space } from "./schema";
 import { PROP_CATALOG, SEATS, propSize } from "./catalog";
 import { mirrorPlane } from "./mirror";
-import { actionLabels } from "./actions";
+import { actionLabels, describeAction } from "./actions";
 
 /** Imported models need a user-owned asset, so they are never offered to an LLM. */
 const LLM_PROP_TYPES = PROP_TYPES.filter((t) => t !== "model");
@@ -246,6 +246,40 @@ export function describeScene(spec: BlockshotSpec): string {
   return lines.join("\n");
 }
 
+/** Something a request can point at with "@id": a placed actor / prop / camera or an existing action. */
+export interface Mentionable {
+  id: string;
+  kind: "actor" | "prop" | "camera" | "action";
+  /** short human label, e.g. the actor's name or the prop type */
+  label: string;
+}
+
+/** Everything in the scene that can be @-mentioned in an animation request. */
+export function mentionables(spec: BlockshotSpec): Mentionable[] {
+  const labels = actionLabels(spec.actions);
+  return [
+    ...spec.actors.map((a): Mentionable => ({ id: a.id, kind: "actor", label: a.name ?? "인물" })),
+    ...spec.props.map((p): Mentionable => ({ id: p.id, kind: "prop", label: p.type === "model" ? (spec.assets.find((x) => x.id === p.asset)?.name ?? "model") : p.type })),
+    ...spec.cameras.map((c): Mentionable => ({ id: c.id, kind: "camera", label: c.name ?? "카메라" })),
+    ...spec.actions.map((a, i): Mentionable => ({ id: labels[i]!, kind: "action", label: describeAction(a) })),
+  ];
+}
+
+/** The "@id" tokens of a request that name something in the scene, in order of first appearance. */
+export function mentionedIn(request: string, spec: BlockshotSpec): Mentionable[] {
+  const all = mentionables(spec);
+  const seen = new Set<string>();
+  const out: Mentionable[] = [];
+  for (const m of request.matchAll(/@([a-zA-Z][a-zA-Z0-9_-]*)/g)) {
+    const hit = all.find((x) => x.id === m[1]);
+    if (hit && !seen.has(hit.kind + hit.id)) {
+      seen.add(hit.kind + hit.id);
+      out.push(hit);
+    }
+  }
+  return out;
+}
+
 const ANIMATE_RULES = `Hard rules:
 - The scene is ALREADY BUILT and must not change. Do NOT add, delete, rename, move or recolor actors or props, and do not change "space". Actors start exactly where they are listed.
 - Use the exact ids listed below. Add ONLY animation: movement (walkTo/runTo/turnTo), poses, looks, camera moves/zooms/orbits, and — only if the request needs them — new cameras and the shot list.
@@ -295,8 +329,17 @@ Poses: ${POSES.join(", ")}.`;
     hasMirror ? MIRROR_NOTES : "",
     format,
     `The scene as placed:\n${describeScene(opts.spec)}`,
+    mentionBlock(opts.request, opts.spec),
     `Request:\n${opts.request.trim()}`,
   ]
     .filter(Boolean)
     .join("\n\n");
+}
+
+/** Explains the "@id" references of a request so the model uses exactly those objects / actions. */
+function mentionBlock(request: string, spec: BlockshotSpec): string {
+  const hits = mentionedIn(request, spec);
+  if (hits.length === 0) return "";
+  const labels = hits.map((m) => `- @${m.id} = ${m.kind === "action" ? `existing action "${m.id}" (${m.label}) — change it with patchActions / removeActions` : `${m.kind} with id "${m.id}"${m.label ? ` (${m.label})` : ""}`}`);
+  return `The request marks exact objects with "@id". Use precisely these ids (not similar-looking ones):\n${labels.join("\n")}`;
 }

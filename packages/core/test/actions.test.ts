@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionLabels, applyAddon, addonIssues, buildAnimatePrompt, createSceneBuilder, describeScene, parseAddon, patchActionAt, runScript, validateSpec, type BlockshotSpec } from "../src";
+import { mentionables, mentionedIn, actionLabels, applyAddon, addonIssues, buildAnimatePrompt, createSceneBuilder, describeScene, parseAddon, patchActionAt, runScript, validateSpec, type BlockshotSpec } from "../src";
 
 const base = (): BlockshotSpec =>
   parse({
@@ -116,5 +116,17 @@ describe("editor op and prompt", () => {
       const p = buildAnimatePrompt({ request: "x", spec: base(), mode });
       expect(p).toContain(mode === "json" ? "patchActions" : "scene.patchAction");
     }
+  });
+});
+
+describe("@mentions", () => {
+  it("lists actors, props, cameras and actions; finds the ones a request marks", () => {
+    const s = parse({ specVersion: "0.1", actors: [{ id: "man", name: "남자" }], props: [{ id: "sofa1", type: "sofa" }], cameras: [{ id: "cam" }], actions: [{ type: "walkTo", actor: "man", to: [0, 0, 2], start: 0 }] });
+    expect(mentionables(s).map((m) => `${m.kind}:${m.id}`)).toEqual(["actor:man", "prop:sofa1", "camera:cam", "action:act1"]);
+    expect(mentionedIn("@man sits on @sofa1, then @act1 is slower. @nobody @man", s).map((m) => m.id)).toEqual(["man", "sofa1", "act1"]);
+    const p = buildAnimatePrompt({ request: "@man sits on @sofa1", spec: s });
+    expect(p).toContain('@man = actor with id "man" (남자)');
+    expect(p).toContain('@sofa1 = prop with id "sofa1" (sofa)');
+    expect(buildAnimatePrompt({ request: "no mentions", spec: s })).not.toContain('marks exact objects');
   });
 });
