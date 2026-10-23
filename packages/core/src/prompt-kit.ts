@@ -1,5 +1,6 @@
 import { PROP_TYPES, POSES, BODY_PARTS, SPEC_VERSION, type BlockshotSpec, type Space } from "./schema";
-import { PROP_CATALOG } from "./catalog";
+import { PROP_CATALOG, propSize } from "./catalog";
+import { mirrorPlane } from "./mirror";
 
 /** Imported models need a user-owned asset, so they are never offered to an LLM. */
 const LLM_PROP_TYPES = PROP_TYPES.filter((t) => t !== "model");
@@ -20,6 +21,15 @@ const RULES = `Conventions:
 - "shots" in ARRAY ORDER is the edit: each shows scene time [start, end) through its camera. Shots may overlap or repeat
   scene time to cut the same performance between cameras (coverage).`;
 
+const ACTION_LINES = `    { "type": "walkTo"|"runTo", "actor", "to": [x,0,z] | [[x,0,z], ...], "start", "duration"?, "speed"? },
+    { "type": "turnTo", "actor", "target": ref | [x,y,z] | yawDegrees, "start", "duration"? },
+    { "type": "pose", "actor", "pose", "start" },
+    { "type": "lookAt", "actor", "target", "start", "end"? },
+    { "type": "cameraMove", "camera", "to": [x,y,z], "start", "duration", "ease"? },
+    { "type": "cameraLookAt", "camera", "target", "start" },
+    { "type": "zoom", "camera", "focalLength", "start", "duration", "ease"? },
+    { "type": "orbit", "camera", "around", "degrees", "start", "duration", "ease"? }`;
+
 const SPEC_SUMMARY = `Blockshot Spec v${SPEC_VERSION} fields:
 { "specVersion": "${SPEC_VERSION}",
   "meta": { "title", "description"? },
@@ -30,14 +40,7 @@ const SPEC_SUMMARY = `Blockshot Spec v${SPEC_VERSION} fields:
   "props": [{ "id", "type", "position", "rotation"?, "scale"?, "color"? }],
   "cameras": [{ "id", "name"?, "position", "lookAt"?: [x,y,z] | ref, "focalLength"? mm }],
   "actions": [
-    { "type": "walkTo"|"runTo", "actor", "to": [x,0,z] | [[x,0,z], ...], "start", "duration"? },
-    { "type": "turnTo", "actor", "target": ref | [x,y,z] | yawDegrees, "start", "duration"? },
-    { "type": "pose", "actor", "pose", "start" },
-    { "type": "lookAt", "actor", "target", "start", "end"? },
-    { "type": "cameraMove", "camera", "to": [x,y,z], "start", "duration", "ease"? },
-    { "type": "cameraLookAt", "camera", "target", "start" },
-    { "type": "zoom", "camera", "focalLength", "start", "duration", "ease"? },
-    { "type": "orbit", "camera", "around", "degrees", "start", "duration", "ease"? } ],
+${ACTION_LINES} ],
   "shots": [{ "id", "camera", "start", "end", "description"?, "prompt"? }] }
 Poses: ${POSES.join(", ")}. Prop types: ${LLM_PROP_TYPES.join(", ")}. Ease: linear, easeIn, easeOut, easeInOut, step.`;
 
@@ -59,6 +62,11 @@ const catalogTable = () =>
     return `- ${t}: ${size[0]} × ${size[1]} × ${size[2]} m (x × y × z) — ${note}`;
   }).join("\n");
 
+const MIRROR_NOTES = `Mirrors: prop type "mirror" is a REAL reflective mirror (0.9 × 1.8 m at scale 1, "color" = frame, position y = bottom edge). It reflects what is in front of it (+Z at yaw 0; same wall/yaw rules as furniture) and only from its front side. NEVER fake a reflection with a second actor or flipped copy — put the real actor in front of the mirror and let the mirror show it.
+  Aim cameras at a REFLECTION with a mirror reference: "<actorId>.chest@<mirrorId>" (also ".head", or just "<actorId>@<mirrorId>") is the point where that actor appears inside the mirror and it follows the actor as they move — use it as the camera "lookAt" (or cameraLookAt target / orbit "around"). Script: scene.reflect(actor.chest, mirror). Do not compute reflected coordinates yourself.
+  The camera must be on the mirror's front side (the side it faces), off to one side so it does not appear in its own reflection, and the actor must be in front of the mirror too, so the line from camera to the reflection crosses the glass.
+  "Reveal it was a mirror": open with a long lens (100–135mm) and lookAt "<actor>.chest@<mirror>" so the glass fills the frame and the reflected actor is in it, then "zoom" out to 24–35mm (and/or dolly back) so the mirror frame, the wall and the REAL actor appear. Keep the actor walking toward the mirror during the move. Do not end the shot on an empty mirror.`;
+
 const SET_DRESSING = () => `Set dressing (IMPORTANT — the scene must look like the place described, not an empty box):
 - Furnish and dress the space to fit the situation: a room usually needs 6–15 props (furniture, appliances, lamps, small items). Never leave the set empty.
 - Place everything to real-world scale using these preset sizes at scale 1 (position = center of the footprint on the floor, y = 0; use "scale" to resize):
@@ -70,10 +78,7 @@ ${catalogTable()}
 - No two props may overlap on the floor (stacked items excepted). Keep walking paths ≥ 0.8 m wide and never route an actor through furniture: add waypoints around it.
 - Place actors on free floor, standing near what they interact with; seated actors (pose "sit") go on a sofa/chair footprint. Keep doors and windows unblocked.
 - Put the cameras where the audience would stand; keep every shot's subject inside the frame.
-- Mirrors: prop type "mirror" is a REAL reflective mirror (0.9 × 1.8 m at scale 1, "color" = frame, position y = bottom edge). It reflects what is in front of it (+Z at yaw 0; same wall/yaw rules as furniture) and only from its front side. NEVER fake a reflection with a second actor or flipped copy — put the real actor in front of the mirror and let the mirror show it.
-  Aim cameras at a REFLECTION with a mirror reference: "<actorId>.chest@<mirrorId>" (also ".head", or just "<actorId>@<mirrorId>") is the point where that actor appears inside the mirror and it follows the actor as they move — use it as the camera "lookAt" (or cameraLookAt target / orbit "around"). Script: scene.reflect(actor.chest, mirror). Do not compute reflected coordinates yourself.
-  The camera must be on the mirror's front side (the side it faces), off to one side so it does not appear in its own reflection, and the actor must be in front of the mirror too, so the line from camera to the reflection crosses the glass.
-  "Reveal it was a mirror": open with a long lens (100–135mm) and lookAt "<actor>.chest@<mirror>" so the glass fills the frame and the reflected actor is in it, then "zoom" out to 24–35mm (and/or dolly back) so the mirror frame, the wall and the REAL actor appear. Keep the actor walking toward the mirror during the move. Do not end the shot on an empty mirror.`;
+- ${MIRROR_NOTES}`;
 
 /** World position of a wall opening: where on the floor plan the door/window is. */
 function openingWorld(space: Extract<Space, { type: "room" }>, o: Extract<Space, { type: "room" }>["openings"][number]): [number, number] {
@@ -167,6 +172,113 @@ export function buildPrompt(opts: { request: string; mode?: PromptMode; current?
       : "",
     `Example of a well-built scene (correct scale, facing, furnishing):\n\`\`\`${fence}\n${mode === "json" ? JSON.stringify(EXAMPLE_SPEC) : EXAMPLE_SCRIPT}\n\`\`\``,
     opts.current ? `Current scene (modify it; keep ids stable):\n\`\`\`json\n${JSON.stringify(opts.current)}\n\`\`\`` : "",
+    `Request:\n${opts.request.trim()}`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+// ---- "add animation to what I placed" ---------------------------------------------------------------
+
+const r1 = (n: number) => Number(n.toFixed(2));
+
+/** Compass word for a yaw (rotation.y): which way an object faces. */
+export function facingWord(yaw: number): string {
+  const a = ((yaw % 360) + 360) % 360;
+  const names = ["+Z (south, toward the viewer)", "+X (east)", "-Z (north)", "-X (west)"];
+  const i = Math.round(a / 90) % 4;
+  const exact = Math.abs(a - Math.round(a / 90) * 90) < 1;
+  return exact ? names[i]! : `about ${names[i]}`;
+}
+
+/** The placed scene as plain text for an LLM: ids, positions, footprints, what blocks walking, existing animation. */
+export function describeScene(spec: BlockshotSpec): string {
+  const lines: string[] = [`Space: ${describeSpace(spec.space)}`, `Length: ${spec.settings.duration} s at ${spec.settings.fps} fps.`];
+
+  lines.push("Actors (their start positions are fixed):");
+  if (spec.actors.length === 0) lines.push("- (none)");
+  for (const a of spec.actors) {
+    lines.push(`- id "${a.id}"${a.name ? ` (${a.name})` : ""}: at (x ${r1(a.position[0])}, z ${r1(a.position[2])}), faces ${facingWord(a.rotation[1])}, height ${a.height} m, pose ${a.pose}`);
+  }
+
+  lines.push("Props (obstacle = an actor must walk around it):");
+  if (spec.props.length === 0) lines.push("- (none)");
+  for (const p of spec.props) {
+    const info = PROP_CATALOG[p.type];
+    const [w, h, d] = propSize(p, spec.assets);
+    const yaw = (p.rotation[1] * Math.PI) / 180;
+    const ex = (Math.abs(Math.cos(yaw)) * w * Math.abs(p.scale[0]) + Math.abs(Math.sin(yaw)) * d * Math.abs(p.scale[2])) / 2;
+    const ez = (Math.abs(Math.sin(yaw)) * w * Math.abs(p.scale[0]) + Math.abs(Math.cos(yaw)) * d * Math.abs(p.scale[2])) / 2;
+    const kind = info.passable ? "decor" : info.sittable ? "seat (actors may sit on it)" : "obstacle";
+    const name = p.type === "model" ? `model "${spec.assets.find((x) => x.id === p.asset)?.name ?? p.asset}"` : p.type;
+    let extra = "";
+    if (p.type === "mirror") {
+      const m = mirrorPlane(p);
+      extra = `; reflects toward (${r1(m.normal[0])}, ${r1(m.normal[2])}) — stand in front of it, use refs like "<actorId>.chest@${p.id}"`;
+    }
+    lines.push(`- id "${p.id}" (${name}): center (x ${r1(p.position[0])}, z ${r1(p.position[2])}), covers x ${r1(p.position[0] - ex)}..${r1(p.position[0] + ex)}, z ${r1(p.position[2] - ez)}..${r1(p.position[2] + ez)}, height ${r1(h * Math.abs(p.scale[1]))} m, faces ${facingWord(p.rotation[1])}, ${kind}${extra}`);
+  }
+
+  lines.push("Cameras:");
+  if (spec.cameras.length === 0) lines.push("- (none)");
+  for (const c of spec.cameras) {
+    const aim = c.lookAt === undefined ? `rotation ${JSON.stringify(c.rotation)}` : `aimed at ${typeof c.lookAt === "string" ? `"${c.lookAt}"` : JSON.stringify(c.lookAt)}`;
+    lines.push(`- id "${c.id}"${c.name ? ` (${c.name})` : ""}: at ${JSON.stringify(c.position.map(r1))}, ${aim}, ${c.focalLength}mm`);
+  }
+
+  lines.push(`Existing actions (${spec.actions.length}): ${spec.actions.length ? JSON.stringify(spec.actions) : "none"}`);
+  lines.push(
+    `Existing shots in edit order (${spec.shots.length}): ${
+      spec.shots.length ? JSON.stringify(spec.shots.map(({ id, camera, start, end, description, prompt }) => ({ id, camera, start, end, ...(description ? { description } : {}), ...(prompt ? { hasPrompt: true } : {}) }))) : "none"
+    }`,
+  );
+  return lines.join("\n");
+}
+
+const ANIMATE_RULES = `Hard rules:
+- The scene is ALREADY BUILT and must not change. Do NOT add, delete, rename, move or recolor actors or props, and do not change "space". Actors start exactly where they are listed.
+- Use the exact ids listed below. Add ONLY animation: movement (walkTo/runTo/turnTo), poses, looks, camera moves/zooms/orbits, and — only if the request needs them — new cameras and the shot list.
+- Walk around obstacles (add waypoints); never route an actor through an obstacle or a wall. Seated actors keep pose "sit" on their seat.
+- Times are scene seconds from 0. Make the animation fit the length, or set "duration" when it needs more.
+- Keep the 180-degree rule between cuts; shots are usually 2–6 seconds; eye-level camera height 1.5–1.7 m.`;
+
+/**
+ * Prompt for animating an already placed scene. The LLM answers with ONLY additions (actions / cameras / shots), so the
+ * user's hand placement can never be lost or rearranged by the model.
+ */
+export function buildAnimatePrompt(opts: { request: string; spec: BlockshotSpec; mode?: PromptMode }): string {
+  const mode = opts.mode ?? "json";
+  const hasMirror = opts.spec.props.some((p) => p.type === "mirror");
+  const format =
+    mode === "json"
+      ? `Output exactly ONE \`\`\`json code block with ONLY the new things:
+{ "actions": [ ... ],            // NEW actions, appended to the existing ones
+  "cameras": [ ... ],            // optional: NEW cameras only (new ids)
+  "addShots": [ ... ],           // optional: NEW shots; appended, or { ..., "after": "<shotId>" } to insert after that shot
+  "patchShots": [ ... ],         // optional: changes to EXISTING shots by id, e.g. { "id": "S1", "end": 5, "camera": "cam2" }; other fields stay
+  "removeShots": [ "S2" ],       // optional: delete shots by id
+  "shots": [ ... ],              // optional, rarely needed: the COMPLETE shot list; replaces everything (existing descriptions/prompts are lost unless you repeat them)
+  "duration": seconds,           // optional: project length
+  "clearActions": true }         // optional: drop the existing actions first, to re-animate from scratch
+Action shapes:
+${ACTION_LINES}
+Cameras: { "id", "name"?, "position": [x,y,z], "lookAt"?: [x,y,z] | ref, "focalLength"? mm }. Shots: { "id", "camera", "start", "end", "description"?, "prompt"? } — change the cut with addShots / patchShots / removeShots; leave shots you do not mention alone.
+Refs: "actorId", "actorId.part" (parts: ${BODY_PARTS.join(", ")}), "actorId.part@mirrorId" (reflection). Poses: ${POSES.join(", ")}. Ease: linear, easeIn, easeOut, easeInOut, step.`
+      : `Output exactly ONE \`\`\`js code block (Blockshot Script; globals: scene, vec, rand). The scene already exists: get handles with scene.use("<id>") and do NOT call scene.room/ground/street/actor/prop.
+const a = scene.use("<actorId>");   // actor handle (or camera handle for a camera id)
+a.walkTo([x,0,z] | [[x,0,z],...], { start, duration?, speed? }); a.runTo(...); a.turnTo(target, { start }); a.pose(name, { start }); a.lookAt(b.head, { start });
+const c = scene.camera("<new id>", { lens, at: [x,y,z], lookAt: a.chest }); // new camera; existing ones: scene.use("<cameraId>")
+c.moveTo(pos, { start, duration, ease }); c.dolly(m, {...}); c.truck(m, {...}); c.pedestal(m, {...}); c.orbit(target, { degrees, start, duration }); c.zoom(mm, {...}); c.lookAt(target, { start });
+scene.reflect(a.chest, mirrorId) -> a reference to where that point appears inside a mirror (aim cameras at reflections with it).
+scene.clearActions(idOrHandle?) removes existing actions (of one object, or all). Shots: scene.shot(id, { camera, start, end, description, after? }) adds one (appended, or after the shot id in "after"); scene.patchShot(id, { camera?, start?, end?, description? }) edits an existing one; scene.removeShot(id) deletes one; scene.clearShots() empties the list (rarely needed). scene.settings({ duration }).
+Poses: ${POSES.join(", ")}.`;
+  return [
+    "You are a previsualization animator for film. A user has already placed actors, props and cameras in a 3D scene. Animate it according to the request below.",
+    ANIMATE_RULES,
+    RULES,
+    hasMirror ? MIRROR_NOTES : "",
+    format,
+    `The scene as placed:\n${describeScene(opts.spec)}`,
     `Request:\n${opts.request.trim()}`,
   ]
     .filter(Boolean)

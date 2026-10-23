@@ -79,6 +79,7 @@
 - [ ] 샷별 ZIP 내보내기: first_frame.png, {pass}.mp4, camera.json, shot.txt
 - [ ] AI 영상 모델별 내보내기 프리셋 (해상도·길이·fps 제약)
 - [ ] JSON Patch(`ops`) 부분 수정 임포트
+- [x] (일부 앞당김) 배치된 장면에 애니메이션만 추가하는 AI 모드: 추가분 JSON(`actions/cameras/shots`) 병합 + `scene.use(id)` 스크립트
 - [ ] URL 공유 (`?spec=` gzip+base64url, `#script=`)
 - [ ] 핸드헬드 노이즈, 스플라인 카메라 경로, 포커스 거리/DOF 미리보기
 

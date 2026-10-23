@@ -53,6 +53,12 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 | `scene.street({ length?, roadWidth?, sidewalkWidth? })` | 거리 |
 | `scene.actor(id, opts) → Actor` | `opts: { name?, color?, height?, build?, at?, facing?, pose? }` |
 | `scene.prop(type, opts) → Prop` | `opts: { id?, at?, facing?, rotation?, scale?, color? }` |
+| `scene.use(id) → handle` | **이미 있는 오브젝트**(손으로 배치했거나 이전 스크립트가 만든 것)의 핸들. 인물이면 Actor, 카메라면 Camera 핸들(걷기·줌 등 모든 메서드 사용), 소품이면 `{ id }`. 없는 id면 가능한 id 목록과 함께 오류 |
+| `scene.clearActions(idOrHandle?)` | 기존 액션 삭제 — 한 오브젝트 것만, 인자가 없으면 전부 (처음부터 다시 연출할 때) |
+| `scene.patchShot(id, { camera?, start?, end?, name?, description?, prompt? })` | **기존 샷의 일부만 수정** — 적은 필드만 바뀐다. 없는 id면 가능한 id 목록과 함께 오류 |
+| `scene.removeShot(id)` | 샷 하나 삭제 |
+| `scene.shot(id, { ..., after? })` | 샷 추가. `after: "S1"`이면 S1 바로 뒤에 삽입, 없으면 끝에 추가 |
+| `scene.clearShots()` | 샷 목록 전체 비우기 (컷을 처음부터 새로 만들 때만) |
 | `scene.reflect(ref, mirror) → ref` | `scene.reflect(man.chest, mirror)` → `"man.chest@mirror"`: 거울 속 반사 위치. 카메라 `lookAt`/`orbit`의 대상으로 쓴다 |
 | `scene.camera(id, opts) → Camera` | `opts: { name?, lens?, sensor?, at?, lookAt?, rotation? }` |
 | `scene.shot(id, { camera, start, end, description?, prompt? })` | 샷 추가 |
@@ -112,3 +118,16 @@ scene.shot("S1", { camera: cam, start: 0, end: 10 });
 - 스크립트 예외: 줄 번호 + 메시지를 표시하고 자가 교정 프롬프트 생성
 - 빌더 단계 오류(존재하지 않는 id 참조 등)는 예외로 즉시 던짐
 - 최종 Spec은 다시 zod로 검증 (스크립트와 JSON 경로가 같은 검증을 통과)
+
+
+## 이미 배치된 장면에 애니메이션 추가 (`base`)
+
+`runScript(source, base?)`에 현재 장면(`base`)을 주면 스크립트가 **그 장면 위에서** 실행된다: 배치(인물·소품·공간·모델)는 그대로 유지되고, `scene.use(id)`로 잡은 핸들로 움직임·카메라·샷만 추가한다. 결과 `toSpec()`은 base + 추가분이다. 앱의 **AI/스크립트 → 🎬 배치한 장면에 애니메이션** 모드가 이 방식을 쓴다.
+
+```js
+const a = scene.use("actor1");
+a.walkTo([[-2.5, 0, 0.6], [-1.6, 0, -1.2]], { start: 0.5 });   // 테이블을 돌아서
+a.pose("sit", { start: 6 });
+scene.use("cam1").zoom(85, { start: 1, duration: 5 });
+scene.settings({ duration: 8 });
+```

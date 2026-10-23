@@ -111,19 +111,21 @@ export function validateSpec(input: unknown): ValidationResult {
 }
 
 /** Builds the "please fix" prompt that users paste back into their LLM. */
-export function buildFixPrompt(errors: Issue[], format: "json" | "script" = "json"): string {
+export function buildFixPrompt(errors: Issue[], format: "json" | "script" = "json", additionsOnly = false): string {
   const lines = errors.map((e) => `- ${e.path || "(root)"}: ${e.message}${e.received !== undefined ? ` (received ${e.received})` : ""}`);
+  const what = additionsOnly ? "ONLY the animation additions (not the placed scene)" : "the whole result";
   return [
-    `The previous output has the following errors. Output the whole result again in the same format (${format}) inside one code block. No explanation.`,
+    `The previous output has the following errors. Output ${what} again in the same format (${format}) inside one code block. No explanation.`,
     ...lines,
   ].join("\n");
 }
 
 /** Like buildFixPrompt, for scenes that load fine but are badly placed (see lintLayout). */
-export function buildLayoutFixPrompt(issues: Issue[], format: "json" | "script" = "json"): string {
+export function buildLayoutFixPrompt(issues: Issue[], format: "json" | "script" = "json", additionsOnly = false): string {
   const lines = issues.map((e) => `- ${e.path || "(scene)"}: ${e.message}`);
+  const what = additionsOnly ? "ONLY the corrected animation additions (never change the placed actors/props)" : "the whole scene";
   return [
-    `The scene loads, but its layout has these problems. Fix them and output the whole scene again in the same format (${format}) inside one code block. Keep everything else. No explanation.`,
+    `The scene loads, but it has these problems. Fix them and output ${what} again in the same format (${format}) inside one code block. Keep everything else. No explanation.`,
     ...lines,
   ].join("\n");
 }

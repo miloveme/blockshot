@@ -54,19 +54,26 @@ export interface CameraHandle {
   lookAt(target: Target, opts: { start: number }): CameraHandle;
 }
 
-export function createSceneBuilder() {
+/**
+ * `base` seeds the builder with an existing scene (the "add animation to what I placed" flow): everything in it is kept,
+ * `scene.use(id)` hands out handles for its actors/cameras, and `toSpec()` returns base + whatever the script added.
+ */
+export function createSceneBuilder(base?: BlockshotSpecInput) {
+  const seeded: BlockshotSpecInput = base ? JSON.parse(JSON.stringify(base)) : {};
   const spec: Required<Pick<BlockshotSpecInput, "actors" | "props" | "cameras" | "actions" | "tracks" | "shots">> & BlockshotSpecInput = {
+    ...seeded,
     specVersion: SPEC_VERSION,
-    actors: [],
-    props: [],
-    cameras: [],
-    actions: [],
-    tracks: [],
-    shots: [],
+    actors: seeded.actors ?? [],
+    props: seeded.props ?? [],
+    cameras: seeded.cameras ?? [],
+    actions: seeded.actions ?? [],
+    tracks: seeded.tracks ?? [],
+    shots: seeded.shots ?? [],
   };
   const camCursor = new Map<string, { pos: Vec3; aim: Target | null; rotation: Vec3 }>();
+  for (const c of spec.cameras) camCursor.set(c.id, { pos: c.position ?? [0, 1.6, 5], aim: c.lookAt ?? null, rotation: c.rotation ?? [0, 0, 0] });
   let propCounter = 0;
-  let seed = 1;
+  let seed = seeded.settings?.seed ?? 1;
   let rand = createRand(seed);
 
   const ensureFreeId = (id: string) => {
@@ -191,6 +198,23 @@ export function createSceneBuilder() {
       spec.actors.push({ id, name: o.name, color: o.color, height: o.height, build: o.build, position: o.at, rotation: o.facing !== undefined ? [0, o.facing, 0] : undefined, pose: o.pose });
       return makeActor(id);
     },
+    /** Handle for something that already exists in the scene (placed by hand or by an earlier script). */
+    use(id: string): ActorHandle | CameraHandle | { id: string } {
+      if (spec.actors.some((a) => a.id === id)) return makeActor(id);
+      if (spec.cameras.some((c) => c.id === id)) return makeCamera(id);
+      if (spec.props.some((p) => p.id === id)) return { id };
+      const known = [...spec.actors, ...spec.props, ...spec.cameras].map((o) => o.id).join(", ") || "none";
+      throw new Error(`scene.use("${id}"): no such actor, camera or prop. Available: ${known}`);
+    },
+    /** Removes existing movement/camera actions — of one actor/camera, or all when called without an id — to re-animate from scratch. */
+    clearActions(target?: { id: string } | string) {
+      const id = typeof target === "string" ? target : target?.id;
+      spec.actions = spec.actions.filter((a) => id !== undefined && !(("actor" in a && a.actor === id) || ("camera" in a && a.camera === id)));
+    },
+    /** Empties the shot list so the script can define the cut from scratch. */
+    clearShots() {
+      spec.shots = [];
+    },
     /** Reference to where `target` (e.g. `man.chest`) appears inside a mirror prop — aim a camera at this to film the reflection. */
     reflect(target: string, mirror: { id: string } | string): string {
       const id = typeof mirror === "string" ? mirror : mirror.id;
@@ -209,8 +233,25 @@ export function createSceneBuilder() {
       camCursor.set(id, { pos, aim: o.lookAt ?? null, rotation: o.rotation ?? [0, 0, 0] });
       return makeCamera(id);
     },
-    shot(id: string, o: { camera: CameraHandle | string; start: number; end: number; name?: string; description?: string; prompt?: string }) {
-      spec.shots.push({ id, name: o.name, camera: typeof o.camera === "string" ? o.camera : o.camera.id, start: o.start, end: o.end, description: o.description, prompt: o.prompt });
+    shot(id: string, o: { camera: CameraHandle | string; start: number; end: number; name?: string; description?: string; prompt?: string; after?: string }) {
+      const shot = { id, name: o.name, camera: typeof o.camera === "string" ? o.camera : o.camera.id, start: o.start, end: o.end, description: o.description, prompt: o.prompt };
+      const at = o.after === undefined ? -1 : spec.shots.findIndex((s) => s.id === o.after);
+      if (o.after !== undefined && at < 0) throw new Error(`scene.shot("${id}"): no shot "${o.after}" to insert after. Available: ${spec.shots.map((s) => s.id).join(", ") || "none"}`);
+      if (at < 0) spec.shots.push(shot);
+      else spec.shots.splice(at + 1, 0, shot);
+    },
+    /** Changes fields of an existing shot (camera, start, end, name, description, prompt); everything else stays. */
+    patchShot(id: string, o: { camera?: CameraHandle | string; start?: number; end?: number; name?: string; description?: string; prompt?: string }) {
+      const shot = spec.shots.find((s) => s.id === id);
+      if (!shot) throw new Error(`scene.patchShot("${id}"): no such shot. Available: ${spec.shots.map((s) => s.id).join(", ") || "none"}`);
+      const { camera, ...rest } = o;
+      Object.assign(shot, Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)));
+      if (camera !== undefined) shot.camera = typeof camera === "string" ? camera : camera.id;
+    },
+    /** Deletes a shot by id. */
+    removeShot(id: string) {
+      if (!spec.shots.some((s) => s.id === id)) throw new Error(`scene.removeShot("${id}"): no such shot. Available: ${spec.shots.map((s) => s.id).join(", ") || "none"}`);
+      spec.shots = spec.shots.filter((s) => s.id !== id);
     },
     key(target: string, property: TrackProperty, t: number, value: Vec3 | number | Pose, ease?: Ease) {
       const existing = spec.tracks.find((tr) => tr.target === target && tr.property === property);
@@ -237,8 +278,8 @@ export type SceneBuilder = ReturnType<typeof createSceneBuilder>["scene"];
  * SECURITY: `new Function` is not a sandbox. Call this only inside an isolated Web Worker
  * (apps/web) or QuickJS — never on the main thread with untrusted code.
  */
-export function runScript(source: string): BlockshotSpecInput {
-  const { scene, vec: v, rand } = createSceneBuilder();
+export function runScript(source: string, base?: BlockshotSpecInput): BlockshotSpecInput {
+  const { scene, vec: v, rand } = createSceneBuilder(base);
   const fn = new Function("scene", "vec", "rand", `"use strict";\n${source}`);
   fn(scene, v, rand);
   return scene.toSpec();

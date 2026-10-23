@@ -1,11 +1,12 @@
-import type { BlockshotSpecInput } from "@blockshot/core";
+import type { BlockshotSpec, BlockshotSpecInput } from "@blockshot/core";
 
 const TIMEOUT_MS = 2000;
 
 export type ScriptResult = { ok: true; spec: BlockshotSpecInput } | { ok: false; error: string; line?: number };
 
 /** Runs a Blockshot Script in a throwaway Web Worker with a hard timeout. */
-export function runScriptInWorker(source: string): Promise<ScriptResult> {
+/** `base` seeds the script with the existing scene (scene.use(...) animates what is already placed). */
+export function runScriptInWorker(source: string, base?: BlockshotSpec): Promise<ScriptResult> {
   return new Promise((resolve) => {
     const worker = new Worker(new URL("../workers/script.worker.ts", import.meta.url), { type: "module" });
     const timer = setTimeout(() => {
@@ -22,6 +23,6 @@ export function runScriptInWorker(source: string): Promise<ScriptResult> {
       worker.terminate();
       resolve({ ok: false, error: e.message || "Worker error" });
     };
-    worker.postMessage({ source });
+    worker.postMessage({ source, base });
   });
 }
