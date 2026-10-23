@@ -3,6 +3,7 @@ import {
   type Action,
   type BodyPart,
   type Ease,
+  type Gesture,
   type Pose,
   type BlockshotSpecInput,
   type PropType,
@@ -43,6 +44,10 @@ export interface ActorHandle {
   sitDown(seat: { id: string } | string, opts: { start: number; duration?: number; offset?: number }): ActorHandle;
   /** Rise from the seat and step forward (or to `to`). */
   standUp(opts: { start: number; duration?: number; to?: Vec3 }): ActorHandle;
+  /** A piece of body language (wave, nod, shrug, clap …) layered over the current pose. */
+  gesture(name: Gesture, opts: { start: number; duration?: number; side?: "left" | "right"; intensity?: number }): ActorHandle;
+  /** Reach a hand toward a point / object / body part (IK) and hold it for `duration`. */
+  reach(target: Target, opts: { start: number; hand?: "left" | "right"; duration?: number }): ActorHandle;
   pose(name: Pose, opts: { start: number }): ActorHandle;
   lookAt(target: Target, opts: { start: number; end?: number }): ActorHandle;
 }
@@ -128,6 +133,8 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
       pose: (pose, o) => (action({ type: "pose", actor: id, pose, ...o }), handle),
       sitDown: (seat, o) => (action({ type: "sitDown", actor: id, on: typeof seat === "string" ? seat : seat.id, ...o }), handle),
       standUp: (o) => (action({ type: "standUp", actor: id, ...o }), handle),
+      gesture: (gesture, o) => (action({ type: "gesture", actor: id, gesture, ...o }), handle),
+      reach: (target, o) => (action({ type: "reach", actor: id, target, ...o }), handle),
       lookAt: (target, o) => (action({ type: "lookAt", actor: id, target, ...o }), handle),
     };
     return handle;

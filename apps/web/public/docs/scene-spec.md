@@ -129,6 +129,8 @@ LLM과 사람이 가장 많이 쓰는 레이어. 로드 시 `compile()`이 `trac
 | `turnTo` | `actor, target: Vec3 \| ref \| yaw(number), start, duration?` | 제자리 회전 |
 | `pose` | `actor, pose, start` | 포즈 전환 — 이전 포즈에서 0.35초 동안 관절별로 부드럽게 섞인다(`ActorState.blend`) |
 | `sitDown` | `actor, on: 의자/소파 소품 id, start, duration?(1), offset?(0)` | 좌석까지 걸어가(이동 키) 좌석이 향한 방향으로 돌고 마지막 0.35초에 `sit`으로 내려앉는다. 소파는 `offset`(m, 소파 폭 방향)으로 여러 명이 나눠 앉는다. `on`은 `chair`/`sofa`여야 한다(검증 오류) |
+| `gesture` | `actor, gesture, start, duration?, side?, intensity?(1)` | 몸짓 레이어를 현재 포즈 위에 얹는다(0.25초 페이드). `gesture`: wave, nod, shakeHead, shrug, clap, crossArms, handsOnHips, think, bow, lookAround, cheer. 한 손 제스처는 `side`로 손을 고른다 |
+| `reach` | `actor, target, hand?(right), start, duration?(1.5)` | 손을 점/소품/인물 부위로 뻗는다(2본 IK, 팔 길이를 넘으면 최대한 뻗음). 집기·가리키기·악수에 사용 |
 | `standUp` | `actor, start, duration?(0.8), to?` | `stand`로 일어나 바라보는 방향으로 0.6 m(또는 `to`) 걸어 나온다 |
 | `lookAt` | `actor, target, start, end?` | 머리 방향 |
 | `cameraMove` | `camera, to: Vec3, start, duration, ease?` | 카메라 이동 |

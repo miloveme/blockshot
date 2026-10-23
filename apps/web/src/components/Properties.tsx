@@ -1,6 +1,6 @@
 "use client";
 
-import { LENS_PRESETS, POSES, SEATS, addSitDown, addStandUp, keyTimes, kindOf, movesOf, patchMoveAt, removeActionAt, type Pose } from "@blockshot/core";
+import { GESTURES, LENS_PRESETS, POSES, SEATS, addGesture, addReach, addSitDown, addStandUp, keyTimes, kindOf, movesOf, patchMoveAt, removeActionAt, type Gesture, type Pose } from "@blockshot/core";
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { hasModel, importGlb } from "@/lib/models";
@@ -272,6 +272,7 @@ function MovePaths({ actorId }: { actorId: string }) {
       })}
       {moves.length === 0 ? <p className="text-[10px] text-zinc-600">경로가 없습니다. “경로 찍기”를 누르고 바닥을 클릭하세요 (현재 시간에 시작).</p> : null}
       <SitControls actorId={actorId} />
+      <ActingControls actorId={actorId} />
     </div>
   );
 }
@@ -314,6 +315,53 @@ function SitControls({ actorId }: { actorId: string }) {
         🧍 일어서기
       </button>
       {sitting > 0 ? <p className="text-[10px] text-zinc-600">앉기 {sitting}회 등록됨 — 위치와 자세는 액션이 계산합니다</p> : null}
+    </div>
+  );
+}
+
+const GESTURE_LABEL: Record<Gesture, string> = {
+  wave: "손 흔들기", nod: "끄덕임", shakeHead: "고개 젓기", shrug: "어깨 으쓱", clap: "박수", crossArms: "팔짱",
+  handsOnHips: "허리에 손", think: "생각", bow: "인사(숙임)", lookAround: "두리번", cheer: "환호",
+};
+
+/** Acting: body-language gestures and IK hand reaches, added at the current time. */
+function ActingControls({ actorId }: { actorId: string }) {
+  const spec = useStudio((s) => s.spec);
+  const edit = useStudio((s) => s.edit);
+  const [gesture, setGesture] = useState<Gesture>("wave");
+  const [target, setTarget] = useState("");
+  const [hand, setHand] = useState<"left" | "right">("right");
+  const targets = [
+    ...spec.props.map((p) => ({ value: p.id, label: `${p.type} · ${p.id}` })),
+    ...spec.actors.filter((a) => a.id !== actorId).flatMap((a) => [{ value: `${a.id}.hand_r`, label: `${a.name ?? a.id} 오른손` }, { value: `${a.id}.hand_l`, label: `${a.name ?? a.id} 왼손` }, { value: `${a.id}.head`, label: `${a.name ?? a.id} 머리` }]),
+  ];
+  const chosen = targets.find((t) => t.value === target)?.value ?? targets[0]?.value ?? "";
+  const count = spec.actions.filter((a) => (a.type === "gesture" || a.type === "reach") && a.actor === actorId).length;
+  return (
+    <div className="mt-1 flex flex-col gap-1.5 border-t border-white/10 pt-2">
+      <span className="text-[11px] font-medium text-zinc-300">연기 (현재 시간)</span>
+      <div className="flex items-center gap-1.5">
+        <div className="min-w-0 flex-1">
+          <SelectField value={gesture} options={GESTURES.map((g) => ({ value: g, label: GESTURE_LABEL[g] }))} onCommit={setGesture} />
+        </div>
+        <button className="whitespace-nowrap rounded bg-violet-500/80 px-2 py-1 text-[11px] text-white hover:bg-violet-400" onClick={() => edit((s) => addGesture(s, actorId, gesture, { start: useStudio.getState().time }))}>
+          🎭 연기
+        </button>
+      </div>
+      {targets.length > 0 ? (
+        <div className="flex items-center gap-1.5">
+          <div className="min-w-0 flex-1">
+            <SelectField value={chosen} options={targets} onCommit={setTarget} />
+          </div>
+          <div className="w-14">
+            <SelectField value={hand} options={[{ value: "right", label: "오른손" }, { value: "left", label: "왼손" }]} onCommit={setHand} />
+          </div>
+          <button className="whitespace-nowrap rounded bg-white/10 px-2 py-1 text-[11px] hover:bg-white/20" title="손을 대상 쪽으로 뻗습니다 (IK)" onClick={() => edit((s) => addReach(s, actorId, chosen, { start: useStudio.getState().time, hand }))}>
+            🤚 뻗기
+          </button>
+        </div>
+      ) : null}
+      {count > 0 ? <p className="text-[10px] text-zinc-600">연기 {count}개 등록됨</p> : null}
     </div>
   );
 }

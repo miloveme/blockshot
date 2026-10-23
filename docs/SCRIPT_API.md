@@ -75,6 +75,8 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 | `.pose(name, { start })` | `stand` `walk` `run` `sit` `point` `talk` `idle` — 이전 포즈에서 0.35초 블렌드 |
 | `.sitDown(seat, { start, duration?, offset? })` | 의자/소파(핸들·id)로 걸어가 앉기. 소파는 `offset`(m)으로 자리를 나눈다 |
 | `.standUp({ start, duration?, to? })` | 일어나 앞으로 한 걸음(또는 `to`) |
+| `.gesture(name, { start, duration?, side?, intensity? })` | 몸짓(wave·nod·shrug·clap·cheer …). 포즈 위에 얹힌다 |
+| `.reach(target, { start, hand?, duration? })` | 손을 대상으로 뻗기(IK). `target`은 점/소품/`인물.hand_r` 등 |
 | `.lookAt(target, { start, end? })` | 머리 방향 |
 | `.head` `.chest` `.pelvis` `.handL` `.handR` | 참조 문자열 (`"minsu.head"`) |
 | `.id` | |

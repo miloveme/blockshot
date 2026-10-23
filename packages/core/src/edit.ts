@@ -1,4 +1,4 @@
-import type { Actor, BlockshotSpec, Camera, Key, Prop, PropType, Shot, TrackProperty, Vec3 } from "./schema";
+import type { Actor, BlockshotSpec, Camera, Gesture, Key, Prop, PropType, Shot, Target, TrackProperty, Vec3 } from "./schema";
 import { compile, evaluate } from "./evaluate";
 import { parseRef } from "./mirror";
 import { SEATS } from "./catalog";
@@ -363,6 +363,20 @@ export function addSitDown(spec: BlockshotSpec, actorId: string, seatId: string,
 export function addStandUp(spec: BlockshotSpec, actorId: string, opts: { start: number; duration?: number; to?: Vec3 }): BlockshotSpec {
   if (!spec.actors.some((a) => a.id === actorId)) return spec;
   const action = { type: "standUp" as const, actor: actorId, start: roundT(Math.max(0, opts.start)), duration: opts.duration ?? 0.8, ...(opts.to ? { to: opts.to } : {}) };
+  return extendDuration({ ...spec, actions: [...spec.actions, action] });
+}
+
+/** Adds a body-language gesture for the actor. */
+export function addGesture(spec: BlockshotSpec, actorId: string, gesture: Gesture, opts: { start: number; duration?: number; side?: "left" | "right" }): BlockshotSpec {
+  if (!spec.actors.some((a) => a.id === actorId)) return spec;
+  const action = { type: "gesture" as const, actor: actorId, gesture, start: roundT(Math.max(0, opts.start)), intensity: 1, ...(opts.duration ? { duration: opts.duration } : {}), ...(opts.side ? { side: opts.side } : {}) };
+  return extendDuration({ ...spec, actions: [...spec.actions, action] });
+}
+
+/** Adds a hand reach (IK) toward a point / object / body part. */
+export function addReach(spec: BlockshotSpec, actorId: string, target: Target, opts: { start: number; hand?: "left" | "right"; duration?: number }): BlockshotSpec {
+  if (!spec.actors.some((a) => a.id === actorId)) return spec;
+  const action = { type: "reach" as const, actor: actorId, target, hand: opts.hand ?? "right", start: roundT(Math.max(0, opts.start)), duration: opts.duration ?? 1.5 };
   return extendDuration({ ...spec, actions: [...spec.actions, action] });
 }
 

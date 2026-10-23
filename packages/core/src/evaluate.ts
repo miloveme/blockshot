@@ -1,8 +1,11 @@
-import type { Action, BodyPart, Key, Pose, BlockshotSpec, Prop, Target, TrackProperty, Vec3 } from "./schema";
+import type { Action, BodyPart, Gesture, Key, Pose, BlockshotSpec, Prop, Target, TrackProperty, Vec3 } from "./schema";
 import { applyEase, DEG, unwrapYaw, vec, yawTowards } from "./math";
 import { verticalFov } from "./camera";
 import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
 import { seatPose } from "./catalog";
+import { REST_HEIGHT, applyLayer, blendPoses, smoothstep, solveRig, toLocal, toWorld, type BoneName, type RigPose, type Skeleton } from "./rig";
+import { Q } from "./quat";
+import { basePose, envelope, GESTURE_DEFS, lookLayer, sampleGesture, solveArm } from "./poses";
 
 const WALK_SPEED = 1.3;
 const RUN_SPEED = 3.5;
@@ -32,7 +35,14 @@ export interface CompiledScene {
   looks: Map<string, Segment[]>;
   /** camera id → aim segments */
   aims: Map<string, Segment[]>;
+  /** actor id → timed body layers (gestures, reaches) */
+  acts: Map<string, ActLayer[]>;
 }
+
+/** A timed body layer on top of the actor's base pose. */
+export type ActLayer =
+  | { kind: "gesture"; gesture: Gesture; start: number; end: number; side: "left" | "right"; intensity: number }
+  | { kind: "reach"; target: Target; hand: "left" | "right"; start: number; end: number };
 
 export interface ActorState {
   id: string;
@@ -51,6 +61,8 @@ export interface ActorState {
   prevPoseTime: number;
   /** 0 → 1 over POSE_BLEND seconds after a pose change; 1 when settled */
   blend: number;
+  /** final bone rotations: base pose + blend + look-at + gestures + reach IK — the renderer just applies these */
+  rig: RigPose;
   lookTarget: Vec3 | null;
 }
 
@@ -107,7 +119,8 @@ export function compile(spec: BlockshotSpec): CompiledScene {
   const tracks = new Map<string, CKey[]>();
   const looks = new Map<string, Segment[]>();
   const aims = new Map<string, Segment[]>();
-  const scene: CompiledScene = { spec, tracks, looks, aims };
+  const acts = new Map<string, ActLayer[]>();
+  const scene: CompiledScene = { spec, tracks, looks, aims, acts };
 
   const track = (id: string, prop: TrackProperty, initial: KeyValue): CKey[] => {
     const k = trackKey(id, prop);
@@ -226,6 +239,19 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       insertKey(pose, { t: a.start, value: "stand", ease: "step" });
       break;
     }
+    case "gesture": {
+      const def = GESTURE_DEFS[a.gesture];
+      const list = scene.acts.get(a.actor) ?? [];
+      list.push({ kind: "gesture", gesture: a.gesture, start: a.start, end: a.start + (a.duration ?? def.duration), side: a.side ?? "right", intensity: a.intensity });
+      scene.acts.set(a.actor, list);
+      break;
+    }
+    case "reach": {
+      const list = scene.acts.get(a.actor) ?? [];
+      list.push({ kind: "reach", target: a.target, hand: a.hand, start: a.start, end: a.start + a.duration });
+      scene.acts.set(a.actor, list);
+      break;
+    }
     case "lookAt": {
       const list = scene.looks.get(a.actor) ?? [];
       list.push({ start: a.start, end: a.end ?? Infinity, target: a.target });
@@ -327,25 +353,87 @@ function actorCore(scene: CompiledScene, id: string, t: number) {
   return { actor, position, rotation, pose, poseTime, prevPose, prevPoseTime: Math.max(0, t - prevStart), blend };
 }
 
-/** Resolve a Vec3 or "id[.part]" reference to a world point at time t. */
+/** Resolve a Vec3 or "id[.part]" reference to a world point at time t. Actor parts follow the posed skeleton. */
 export function resolveTarget(scene: CompiledScene, target: Target, t: number): Vec3 {
+  return resolveImpl(scene, target, t, true);
+}
+
+/**
+ * `rigAware` = false uses the fixed body layout instead of the animated skeleton. Reach IK uses that for the point it
+ * reaches toward, so two actors reaching for each other can never recurse.
+ */
+function resolveImpl(scene: CompiledScene, target: Target, t: number, rigAware: boolean): Vec3 {
   if (typeof target !== "string") return target;
   const { id, part, mirror } = parseRef(target);
   if (mirror !== undefined) {
     // "id@mirror": where the reflection of that point appears (the camera should aim at this to film the reflection)
     const m = scene.spec.props.find((p) => p.id === mirror && p.type === "mirror");
-    const base = resolveTarget(scene, part ? `${id}.${part}` : id, t);
+    const base = resolveImpl(scene, part ? `${id}.${part}` : id, t, rigAware);
     return m ? reflectPoint(base, mirrorPlane(m)) : base;
   }
   if (scene.spec.actors.some((a) => a.id === id)) {
     const core = actorCore(scene, id, t);
-    return partPosition({ ...core, height: core.actor.height }, (part as BodyPart) ?? "chest");
+    const which = (part as BodyPart) ?? "chest";
+    if (!rigAware) return partPosition({ ...core, height: core.actor.height }, which);
+    const { skeleton } = computeRig(scene, id, t, core, null);
+    return rigPart(skeleton, which, core.actor.height / REST_HEIGHT, core.position, core.rotation);
   }
   const camKeys = scene.tracks.get(trackKey(id, "position"));
   if (camKeys) return sampleKeys(camKeys, t) as Vec3;
   const prop = scene.spec.props.find((p) => p.id === id);
   if (prop) return prop.position;
   return [0, 0, 0];
+}
+
+const offsetIn = (bone: Skeleton[BoneName], v: Vec3, scale: number): Vec3 => {
+  const r = Q.rotate(bone.rot, [v[0] * scale, v[1] * scale, v[2] * scale]);
+  return [bone.pos[0] + r[0], bone.pos[1] + r[1], bone.pos[2] + r[2]];
+};
+
+/** World position of a body part, read from the posed skeleton. */
+function rigPart(sk: Skeleton, part: BodyPart, scale: number, position: Vec3, rotation: Vec3): Vec3 {
+  let local: Vec3;
+  switch (part) {
+    case "head": local = offsetIn(sk.head, [0, 0.09, 0], scale); break; // centre of the head sphere
+    case "chest": local = offsetIn(sk.chest, [0, 0.03, 0], scale); break;
+    case "pelvis": local = sk.hips.pos; break;
+    case "hand_l": local = offsetIn(sk.leftHand, [0, -0.04, 0], scale); break;
+    case "hand_r": local = offsetIn(sk.rightHand, [0, -0.04, 0], scale); break;
+    case "foot_l": local = offsetIn(sk.leftFoot, [0, 0.01, 0.05], scale); break;
+    case "foot_r": local = offsetIn(sk.rightFoot, [0, 0.01, 0.05], scale); break;
+  }
+  return toWorld(local, position, rotation);
+}
+
+/**
+ * The actor's final pose at time t: base pose (blended from the previous one) → head look-at → gestures → reach IK.
+ * `lookTarget` is a world point or null (null also keeps body-part lookups from recursing through look-at).
+ */
+function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnType<typeof actorCore>, lookTarget: Vec3 | null): { pose: RigPose; skeleton: Skeleton } {
+  const scale = core.actor.height / REST_HEIGHT;
+  let pose = basePose(core.pose, core.poseTime);
+  if (core.blend < 1 && core.prevPose !== core.pose) {
+    pose = blendPoses(basePose(core.prevPose, core.prevPoseTime), pose, smoothstep(core.blend));
+  }
+  if (lookTarget) {
+    const local = toLocal(lookTarget, core.position, core.rotation);
+    pose = applyLayer(pose, lookLayer(local, solveRig(pose, scale)), 1);
+  }
+  for (const layer of scene.acts.get(id) ?? []) {
+    const u = t - layer.start;
+    if (u < 0 || t > layer.end) continue;
+    const d = layer.end - layer.start;
+    if (layer.kind === "gesture") {
+      const g = sampleGesture(layer.gesture, u, d, layer.side, layer.intensity);
+      pose = applyLayer(pose, g.layer, g.weight);
+    } else {
+      const w = envelope(u, d, true);
+      if (w <= 0) continue;
+      const goal = toLocal(resolveImpl(scene, layer.target, t, false), core.position, core.rotation);
+      pose = applyLayer(pose, solveArm(pose, layer.hand, goal, scale).layer, w);
+    }
+  }
+  return { pose, skeleton: solveRig(pose, scale) };
 }
 
 /** Deterministic scene state at time t (seconds). Pure. */
@@ -358,6 +446,7 @@ export function evaluate(scene: CompiledScene, t: number): SceneState {
   for (const a of spec.actors) {
     const core = actorCore(scene, a.id, t);
     const look = activeSegment(scene.looks.get(a.id), t);
+    const lookTarget = look ? resolveTarget(scene, look.target, t) : null;
     actors[a.id] = {
       id: a.id,
       name: a.name,
@@ -371,7 +460,8 @@ export function evaluate(scene: CompiledScene, t: number): SceneState {
       prevPose: core.prevPose,
       prevPoseTime: core.prevPoseTime,
       blend: core.blend,
-      lookTarget: look ? resolveTarget(scene, look.target, t) : null,
+      lookTarget,
+      rig: computeRig(scene, a.id, t, core, lookTarget).pose,
     };
   }
 

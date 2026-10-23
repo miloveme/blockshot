@@ -26,6 +26,8 @@ const ACTION_LINES = `    { "type": "walkTo"|"runTo", "actor", "to": [x,0,z] | [
     { "type": "pose", "actor", "pose", "start" },
     { "type": "sitDown", "actor", "on": chairOrSofaPropId, "start", "duration"?, "offset"? },
     { "type": "standUp", "actor", "start", "duration"?, "to"? },
+    { "type": "gesture", "actor", "gesture": "wave"|"nod"|"shakeHead"|"shrug"|"clap"|"crossArms"|"handsOnHips"|"think"|"bow"|"lookAround"|"cheer", "start", "duration"?, "side"?: "left"|"right", "intensity"?: 0-1 },
+    { "type": "reach", "actor", "target": ref | [x,y,z], "hand"?: "left"|"right", "start", "duration"? },
     { "type": "lookAt", "actor", "target", "start", "end"? },
     { "type": "cameraMove", "camera", "to": [x,y,z], "start", "duration", "ease"? },
     { "type": "cameraLookAt", "camera", "target", "start" },
@@ -50,7 +52,7 @@ const SCRIPT_SUMMARY = `Blockshot Script API (JavaScript; globals: scene, vec, r
 scene.settings({ fps, duration, resolution }); scene.meta({ title });
 scene.room({ width, depth, height, doors: [{ wall, offset }], windows: [{ wall, offset }] }) | scene.ground() | scene.street();
 const a = scene.actor(id, { name, color, height, at: [x,0,z], facing: yawDeg, pose });
-a.walkTo([x,0,z] | [[x,0,z],...], { start, duration }); a.turnTo(target, { start }); a.pose(name, { start }); a.sitDown(chair, { start, duration?, offset? }); a.standUp({ start, to? }); a.lookAt(b.head, { start });
+a.walkTo([x,0,z] | [[x,0,z],...], { start, duration }); a.turnTo(target, { start }); a.pose(name, { start }); a.sitDown(chair, { start, duration?, offset? }); a.standUp({ start, to? }); a.gesture(name, { start, duration?, side?, intensity? }); a.reach(target, { start, hand?, duration? }); a.lookAt(b.head, { start });
 scene.prop(type, { id, at, facing, scale, color });
 const c = scene.camera(id, { lens, at: [x,y,z], lookAt: a.head });
 c.moveTo(pos, { start, duration, ease }); c.dolly(m, {...}); c.truck(m, {...}); c.pedestal(m, {...}); c.orbit(target, { degrees, start, duration }); c.zoom(mm, {...}); c.lookAt(target, { start });
@@ -242,6 +244,7 @@ const ANIMATE_RULES = `Hard rules:
 - Use the exact ids listed below. Add ONLY animation: movement (walkTo/runTo/turnTo), poses, looks, camera moves/zooms/orbits, and — only if the request needs them — new cameras and the shot list.
 - Walk around obstacles (add waypoints); never route an actor through an obstacle or a wall.
 - To seat someone use a sitDown action on the chair/sofa id (it walks them onto the seat, turns them and lowers them; "offset" slides along a sofa's width so several people can sit); use standUp to rise. Do not fake sitting with only a "sit" pose at a standing position.
+- Direct the acting like a director: give people body language with "gesture" (wave, nod, shakeHead, shrug, clap, crossArms, handsOnHips, think, bow, lookAround, cheer) and use "reach" to put a hand on or toward an object / another person's body part (picking up, touching, pointing, handing over). Combine them with lookAt so people look at what they react to.
 - Times are scene seconds from 0. Make the animation fit the length, or set "duration" when it needs more.
 - Keep the 180-degree rule between cuts; shots are usually 2–6 seconds; eye-level camera height 1.5–1.7 m.`;
 
@@ -269,7 +272,7 @@ Cameras: { "id", "name"?, "position": [x,y,z], "lookAt"?: [x,y,z] | ref, "focalL
 Refs: "actorId", "actorId.part" (parts: ${BODY_PARTS.join(", ")}), "actorId.part@mirrorId" (reflection). Poses: ${POSES.join(", ")}. Ease: linear, easeIn, easeOut, easeInOut, step.`
       : `Output exactly ONE \`\`\`js code block (Blockshot Script; globals: scene, vec, rand). The scene already exists: get handles with scene.use("<id>") and do NOT call scene.room/ground/street/actor/prop.
 const a = scene.use("<actorId>");   // actor handle (or camera handle for a camera id)
-a.walkTo([x,0,z] | [[x,0,z],...], { start, duration?, speed? }); a.runTo(...); a.turnTo(target, { start }); a.pose(name, { start }); a.sitDown(seatId, { start, duration?, offset? }); a.standUp({ start, to? }); a.lookAt(b.head, { start });
+a.walkTo([x,0,z] | [[x,0,z],...], { start, duration?, speed? }); a.runTo(...); a.turnTo(target, { start }); a.pose(name, { start }); a.sitDown(seatId, { start, duration?, offset? }); a.standUp({ start, to? }); a.gesture(name, { start, duration?, side?, intensity? }); a.reach(target, { start, hand?, duration? }); a.lookAt(b.head, { start });
 const c = scene.camera("<new id>", { lens, at: [x,y,z], lookAt: a.chest }); // new camera; existing ones: scene.use("<cameraId>")
 c.moveTo(pos, { start, duration, ease }); c.dolly(m, {...}); c.truck(m, {...}); c.pedestal(m, {...}); c.orbit(target, { degrees, start, duration }); c.zoom(mm, {...}); c.lookAt(target, { start });
 scene.reflect(a.chest, mirrorId) -> a reference to where that point appears inside a mirror (aim cameras at reflections with it).

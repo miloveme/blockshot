@@ -31,6 +31,11 @@ export const POSES = ["stand", "idle", "walk", "run", "sit", "point", "talk"] as
 export const Pose = z.enum(POSES);
 export type Pose = z.infer<typeof Pose>;
 
+/** Acting gestures an actor can perform (see core/poses). */
+export const GESTURES = ["wave", "nod", "shakeHead", "shrug", "clap", "crossArms", "handsOnHips", "think", "bow", "lookAround", "cheer"] as const;
+export const GestureName = z.enum(GESTURES);
+export type Gesture = z.infer<typeof GestureName>;
+
 export const Settings = z.object({
   fps: z.number().int().min(1).max(120).default(24),
   duration: z.number().positive().default(6),
@@ -139,6 +144,10 @@ export const Action = z.discriminatedUnion("type", [
   z.object({ type: z.literal("runTo"), actor: Id, to: z.union([Vec3, z.array(Vec3).min(1)]), duration: z.number().positive().optional(), speed: z.number().positive().optional(), ...timed }),
   z.object({ type: z.literal("turnTo"), actor: Id, target: z.union([Target, z.number()]), duration: z.number().positive().default(0.6), ...timed }),
   z.object({ type: z.literal("pose"), actor: Id, pose: Pose, ...timed }),
+  /** a piece of body language: wave, nod, shrug … `side` picks the hand of one-handed ones; `intensity` scales it */
+  z.object({ type: z.literal("gesture"), actor: Id, gesture: GestureName, side: z.enum(["left", "right"]).optional(), duration: z.number().positive().optional(), intensity: z.number().min(0).max(1).default(1), ...timed }),
+  /** reach a hand toward a point / object / body part (IK) — pointing, touching, handing over — and hold it for `duration` */
+  z.object({ type: z.literal("reach"), actor: Id, target: Target, hand: z.enum(["left", "right"]).default("right"), duration: z.number().positive().default(1.5), ...timed }),
   /** walk onto a chair / sofa, turn to face the way it faces and lower into the seat */
   z.object({ type: z.literal("sitDown"), actor: Id, on: Id, duration: z.number().positive().default(1), offset: z.number().default(0), ...timed }),
   /** rise from the seat and step forward (or to `to`) */
