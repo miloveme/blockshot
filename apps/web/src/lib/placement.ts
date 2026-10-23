@@ -6,6 +6,13 @@ import { useStudio, type AssetRef } from "./store";
 /** Click-to-place: turns a floor point (x, z) into a new actor / camera / prop through the pure core ops. One undo step each. */
 
 const state = () => useStudio.getState();
+
+/**
+ * The canvas click that places something bubbles on to R3F's own handler (on the wrapper div), which would then see an
+ * empty-space click and deselect the object we just created. This timestamp lets it tell the two apart.
+ */
+let lastToolUse = 0;
+export const toolUsedJustNow = () => performance.now() - lastToolUse < 300;
 const stepOf = () => (state().snapEnabled ? 0.1 : 0);
 
 export interface Ghost {
@@ -27,6 +34,7 @@ export function ghostFor(ref: AssetRef, point: [number, number]): Ghost {
 
 /** Creates the asset at the floor point and selects it. */
 export function placeAsset(ref: AssetRef, point: [number, number]) {
+  lastToolUse = performance.now();
   let id: string | null = null;
   state().edit((s) => {
     const r = ref.kind === "actor" ? addActorAt(s, point, stepOf()) : ref.kind === "camera" ? addCameraAt(s, point, stepOf()) : addPropAt(s, ref.type, point, { step: stepOf(), asset: ref.asset });
@@ -40,6 +48,7 @@ export function placeAsset(ref: AssetRef, point: [number, number]) {
 export function applyToolAt(point: [number, number], keepArmed: boolean): boolean {
   const tool = state().tool;
   if (!tool) return false;
+  lastToolUse = performance.now();
   if (tool.kind === "place") {
     placeAsset(tool.ref, point);
     if (!keepArmed) state().setTool(null);

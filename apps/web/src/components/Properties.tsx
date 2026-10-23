@@ -1,6 +1,6 @@
 "use client";
 
-import { LENS_PRESETS, POSES, keyTimes, kindOf, movesOf, patchMoveAt, removeActionAt, type Pose } from "@blockshot/core";
+import { GESTURES, HAND_SHAPES, LENS_PRESETS, POSES, SEATS, addGesture, addHandShape, addReach, addSitDown, addStandUp, describeAction, labeledActions, patchActionAt, keyTimes, kindOf, movesOf, patchMoveAt, removeActionAt, type Gesture, type HandShape, type Pose } from "@blockshot/core";
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { hasModel, importGlb } from "@/lib/models";
@@ -271,6 +271,137 @@ function MovePaths({ actorId }: { actorId: string }) {
         );
       })}
       {moves.length === 0 ? <p className="text-[10px] text-zinc-600">경로가 없습니다. “경로 찍기”를 누르고 바닥을 클릭하세요 (현재 시간에 시작).</p> : null}
+      <SitControls actorId={actorId} />
+      <ActingControls actorId={actorId} />
+    </div>
+  );
+}
+
+/** Sit the actor on a chair / sofa at the current time (walk onto the seat, turn, lower) or have them stand up. */
+function SitControls({ actorId }: { actorId: string }) {
+  const spec = useStudio((s) => s.spec);
+  const edit = useStudio((s) => s.edit);
+  const seats = spec.props.filter((p) => SEATS[p.type]);
+  const [picked, setPicked] = useState<string>("");
+  const seat = seats.find((p) => p.id === picked)?.id ?? seats[0]?.id ?? "";
+  const sitting = spec.actions.filter((a) => a.type === "sitDown" && a.actor === actorId).length;
+  return (
+    <div className="mt-1 flex flex-col gap-1.5 border-t border-white/10 pt-2">
+      <span className="text-[11px] font-medium text-zinc-300">앉기 / 일어서기 (현재 시간)</span>
+      {seats.length === 0 ? (
+        <p className="text-[10px] text-zinc-600">의자나 소파를 먼저 배치하세요.</p>
+      ) : (
+        <div className="flex items-center gap-1.5">
+          <div className="min-w-0 flex-1">
+            <SelectField value={seat} options={seats.map((p) => ({ value: p.id, label: `${p.type} · ${p.id}` }))} onCommit={setPicked} />
+          </div>
+          <button
+            className="whitespace-nowrap rounded bg-sky-500/80 px-2 py-1 text-[11px] text-white hover:bg-sky-400"
+            title="걸어가 의자/소파에 앉습니다 (소파는 위치를 나눠 여러 명이 앉을 수 있어요)"
+            onClick={() => {
+              const t = useStudio.getState().time;
+              // a sofa seats several people: spread the next sitter along its width
+              const others = spec.actions.filter((a) => a.type === "sitDown" && a.on === seat).length;
+              const wide = spec.props.find((p) => p.id === seat)?.type === "sofa";
+              const offset = wide ? [0, -0.55, 0.55, -1.0, 1.0][others % 5]! * (spec.props.find((p) => p.id === seat)?.scale[0] ?? 1) : 0;
+              edit((s) => addSitDown(s, actorId, seat, { start: t, offset }));
+            }}
+          >
+            🪑 앉기
+          </button>
+        </div>
+      )}
+      <button className="self-start rounded bg-white/10 px-2 py-1 text-[11px] hover:bg-white/20" onClick={() => edit((s) => addStandUp(s, actorId, { start: useStudio.getState().time }))}>
+        🧍 일어서기
+      </button>
+      {sitting > 0 ? <p className="text-[10px] text-zinc-600">앉기 {sitting}회 등록됨 — 위치와 자세는 액션이 계산합니다</p> : null}
+    </div>
+  );
+}
+
+const GESTURE_LABEL: Record<Gesture, string> = {
+  wave: "손 흔들기", nod: "끄덕임", shakeHead: "고개 젓기", shrug: "어깨 으쓱", clap: "박수", crossArms: "팔짱",
+  handsOnHips: "허리에 손", think: "생각", bow: "인사(숙임)", lookAround: "두리번", cheer: "환호",
+};
+
+const HAND_LABEL: Record<HandShape, string> = { open: "펼침", relaxed: "편하게", fist: "주먹", point: "가리키기", pinch: "집기", grip: "쥐기" };
+
+/** Acting: body-language gestures and IK hand reaches, added at the current time. */
+function ActingControls({ actorId }: { actorId: string }) {
+  const spec = useStudio((s) => s.spec);
+  const edit = useStudio((s) => s.edit);
+  const [gesture, setGesture] = useState<Gesture>("wave");
+  const [target, setTarget] = useState("");
+  const [hand, setHand] = useState<"left" | "right">("right");
+  const [shape, setShape] = useState<HandShape>("fist");
+  const targets = [
+    ...spec.props.map((p) => ({ value: p.id, label: `${p.type} · ${p.id}` })),
+    ...spec.actors.filter((a) => a.id !== actorId).flatMap((a) => [{ value: `${a.id}.hand_r`, label: `${a.name ?? a.id} 오른손` }, { value: `${a.id}.hand_l`, label: `${a.name ?? a.id} 왼손` }, { value: `${a.id}.head`, label: `${a.name ?? a.id} 머리` }]),
+  ];
+  const chosen = targets.find((t) => t.value === target)?.value ?? targets[0]?.value ?? "";
+  return (
+    <div className="mt-1 flex flex-col gap-1.5 border-t border-white/10 pt-2">
+      <span className="text-[11px] font-medium text-zinc-300">연기 (현재 시간)</span>
+      <div className="flex items-center gap-1.5">
+        <div className="min-w-0 flex-1">
+          <SelectField value={gesture} options={GESTURES.map((g) => ({ value: g, label: GESTURE_LABEL[g] }))} onCommit={setGesture} />
+        </div>
+        <button className="whitespace-nowrap rounded bg-violet-500/80 px-2 py-1 text-[11px] text-white hover:bg-violet-400" onClick={() => edit((s) => addGesture(s, actorId, gesture, { start: useStudio.getState().time }))}>
+          🎭 연기
+        </button>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <div className="min-w-0 flex-1">
+          <SelectField value={shape} options={HAND_SHAPES.map((h) => ({ value: h, label: HAND_LABEL[h] }))} onCommit={setShape} />
+        </div>
+        <button className="whitespace-nowrap rounded bg-white/10 px-2 py-1 text-[11px] hover:bg-white/20" title="현재 시간부터 양손 손가락 모양을 바꿉니다" onClick={() => edit((s) => addHandShape(s, actorId, shape, { start: useStudio.getState().time }))}>
+          ✊ 손 모양
+        </button>
+      </div>
+      {targets.length > 0 ? (
+        <div className="flex items-center gap-1.5">
+          <div className="min-w-0 flex-1">
+            <SelectField value={chosen} options={targets} onCommit={setTarget} />
+          </div>
+          <div className="w-14">
+            <SelectField value={hand} options={[{ value: "right", label: "오른손" }, { value: "left", label: "왼손" }]} onCommit={setHand} />
+          </div>
+          <button className="whitespace-nowrap rounded bg-white/10 px-2 py-1 text-[11px] hover:bg-white/20" title="손을 대상 쪽으로 뻗습니다 (IK)" onClick={() => edit((s) => addReach(s, actorId, chosen, { start: useStudio.getState().time, hand }))}>
+            🤚 뻗기
+          </button>
+        </div>
+      ) : null}
+      <ActionList ownerId={actorId} />
+    </div>
+  );
+}
+
+/** The actor's non-movement actions with their labels (act3 …): edit timing or delete one without touching the rest. */
+function ActionList({ ownerId }: { ownerId: string }) {
+  const spec = useStudio((s) => s.spec);
+  const edit = useStudio((s) => s.edit);
+  const rows = labeledActions(spec).filter(({ action }) => "actor" in action && action.actor === ownerId && action.type !== "walkTo" && action.type !== "runTo");
+  if (rows.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1 pt-1">
+      <span className="text-[10px] text-zinc-500">동작 목록 — AI에게 “act3 수정해줘”처럼 id로 지목할 수 있어요</span>
+      {rows.map(({ label, index, action }) => (
+        <div key={index} className="flex items-center gap-1.5 text-[11px] text-zinc-400">
+          <span className="w-10 shrink-0 truncate font-mono text-[10px] text-zinc-500" title={label}>{label}</span>
+          <span className="min-w-0 flex-1 truncate" title={describeAction(action)}>{describeAction(action).replace(/ @.*$/, "")}</span>
+          <div className="w-14" title="시작(초)">
+            <NumField value={action.start} min={0} step={0.1} onCommit={(v) => edit((s) => patchActionAt(s, index, { start: v }))} />
+          </div>
+          {"duration" in action && action.duration !== undefined ? (
+            <div className="w-12" title="길이(초)">
+              <NumField value={action.duration} min={0.1} step={0.1} onCommit={(v) => edit((s) => patchActionAt(s, index, { duration: v }))} />
+            </div>
+          ) : null}
+          <button className="text-red-300 hover:underline" onClick={() => edit((s) => removeActionAt(s, index))}>
+            삭제
+          </button>
+        </div>
+      ))}
     </div>
   );
 }

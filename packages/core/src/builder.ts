@@ -3,6 +3,8 @@ import {
   type Action,
   type BodyPart,
   type Ease,
+  type Gesture,
+  type HandShape,
   type Pose,
   type BlockshotSpecInput,
   type PropType,
@@ -14,6 +16,7 @@ import {
 } from "./schema";
 import { createRand, DEG, vec, yawTowards } from "./math";
 import { partPosition } from "./evaluate";
+import { actionLabels, mergeAction, patchProblem } from "./actions";
 import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
 
 /**
@@ -39,6 +42,16 @@ export interface ActorHandle {
   walkTo(to: Vec3 | Vec3[], opts: { start: number; duration?: number; speed?: number }): ActorHandle;
   runTo(to: Vec3 | Vec3[], opts: { start: number; duration?: number; speed?: number }): ActorHandle;
   turnTo(target: Target | number, opts: { start: number; duration?: number }): ActorHandle;
+  /** Walk onto a chair/sofa, turn to face the way it faces and lower into the seat. `offset` slides along a sofa's width (m). */
+  sitDown(seat: { id: string } | string, opts: { start: number; duration?: number; offset?: number }): ActorHandle;
+  /** Rise from the seat and step forward (or to `to`). */
+  standUp(opts: { start: number; duration?: number; to?: Vec3 }): ActorHandle;
+  /** A piece of body language (wave, nod, shrug, clap …) layered over the current pose. */
+  gesture(name: Gesture, opts: { start: number; duration?: number; side?: "left" | "right"; intensity?: number }): ActorHandle;
+  /** Shape the fingers (fist, point, pinch, grip, open, relaxed) of one or both hands for `duration`. */
+  handShape(shape: HandShape, opts: { start: number; hand?: "left" | "right" | "both"; duration?: number }): ActorHandle;
+  /** Reach a hand toward a point / object / body part (IK) and hold it for `duration`. */
+  reach(target: Target, opts: { start: number; hand?: "left" | "right"; duration?: number }): ActorHandle;
   pose(name: Pose, opts: { start: number }): ActorHandle;
   lookAt(target: Target, opts: { start: number; end?: number }): ActorHandle;
 }
@@ -80,7 +93,7 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
     const taken = [...spec.actors, ...spec.props, ...spec.cameras].some((o) => o.id === id);
     if (taken) throw new Error(`Duplicate id "${id}"`);
   };
-  const action = (a: Action | Record<string, unknown>) => spec.actions.push(a as Action);
+  const action = (a: Record<string, unknown>) => spec.actions.push(a as Action);
 
   const resolveRough = (target: Target): Vec3 => {
     if (typeof target !== "string") return target;
@@ -122,6 +135,11 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
       runTo: (to, o) => (action({ type: "runTo", actor: id, to, ...o }), handle),
       turnTo: (target, o) => (action({ type: "turnTo", actor: id, target, ...o }), handle),
       pose: (pose, o) => (action({ type: "pose", actor: id, pose, ...o }), handle),
+      sitDown: (seat, o) => (action({ type: "sitDown", actor: id, on: typeof seat === "string" ? seat : seat.id, ...o }), handle),
+      standUp: (o) => (action({ type: "standUp", actor: id, ...o }), handle),
+      gesture: (gesture, o) => (action({ type: "gesture", actor: id, gesture, ...o }), handle),
+      handShape: (shape, o) => (action({ type: "handShape", actor: id, shape, ...o }), handle),
+      reach: (target, o) => (action({ type: "reach", actor: id, target, ...o }), handle),
       lookAt: (target, o) => (action({ type: "lookAt", actor: id, target, ...o }), handle),
     };
     return handle;
@@ -164,6 +182,13 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
     return handle;
   }
 
+  // labels as the LLM saw them (before this script removed anything), so "act3" keeps meaning the same action
+  const originalLabels = actionLabels(spec.actions as Action[]);
+  const labelOf = (ref: string, fn: string): number => {
+    const at = originalLabels.indexOf(ref);
+    if (at < 0) throw new Error(`scene.${fn}("${ref}"): no such action. Available: ${originalLabels.join(", ") || "none"}`);
+    return at;
+  };
   const scene = {
     settings(s: Partial<Settings>) {
       spec.settings = { ...(spec.settings ?? {}), ...s };
@@ -210,6 +235,19 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
     clearActions(target?: { id: string } | string) {
       const id = typeof target === "string" ? target : target?.id;
       spec.actions = spec.actions.filter((a) => id !== undefined && !(("actor" in a && a.actor === id) || ("camera" in a && a.camera === id)));
+    },
+    /** Changes fields of an existing action by its id / label ("act3", see "Existing actions"); the type cannot change. */
+    patchAction(ref: string, fields: Record<string, unknown>) {
+      const at = labelOf(ref, "patchAction");
+      const problem = patchProblem(spec.actions[at] as Action, fields);
+      if (problem) throw new Error(`scene.patchAction("${ref}"): ${problem}`);
+      spec.actions[at] = mergeAction(spec.actions[at] as Action, fields);
+    },
+    /** Deletes an existing action by its id / label. */
+    removeAction(ref: string) {
+      const at = labelOf(ref, "removeAction");
+      spec.actions.splice(at, 1);
+      originalLabels.splice(at, 1);
     },
     /** Empties the shot list so the script can define the cut from scratch. */
     clearShots() {

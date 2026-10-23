@@ -602,6 +602,10 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [
@@ -675,6 +679,10 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [
@@ -735,6 +743,10 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [
@@ -770,12 +782,281 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [
               "type",
               "actor",
               "pose",
+              "start"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "gesture"
+              },
+              "actor": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              },
+              "gesture": {
+                "type": "string",
+                "enum": [
+                  "wave",
+                  "nod",
+                  "shakeHead",
+                  "shrug",
+                  "clap",
+                  "crossArms",
+                  "handsOnHips",
+                  "think",
+                  "bow",
+                  "lookAround",
+                  "cheer"
+                ]
+              },
+              "side": {
+                "type": "string",
+                "enum": [
+                  "left",
+                  "right"
+                ]
+              },
+              "duration": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "intensity": {
+                "default": 1,
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "start": {
+                "type": "number",
+                "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              }
+            },
+            "required": [
+              "type",
+              "actor",
+              "gesture",
+              "start"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "handShape"
+              },
+              "actor": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              },
+              "shape": {
+                "type": "string",
+                "enum": [
+                  "open",
+                  "relaxed",
+                  "fist",
+                  "point",
+                  "pinch",
+                  "grip"
+                ]
+              },
+              "hand": {
+                "default": "both",
+                "type": "string",
+                "enum": [
+                  "left",
+                  "right",
+                  "both"
+                ]
+              },
+              "duration": {
+                "default": 2,
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "start": {
+                "type": "number",
+                "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              }
+            },
+            "required": [
+              "type",
+              "actor",
+              "shape",
+              "start"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "reach"
+              },
+              "actor": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              },
+              "target": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "items": false,
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*(\\.[a-z_]+)?(@[a-zA-Z][a-zA-Z0-9_-]*)?$"
+                  }
+                ]
+              },
+              "hand": {
+                "default": "right",
+                "type": "string",
+                "enum": [
+                  "left",
+                  "right"
+                ]
+              },
+              "duration": {
+                "default": 1.5,
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "start": {
+                "type": "number",
+                "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              }
+            },
+            "required": [
+              "type",
+              "actor",
+              "target",
+              "start"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "sitDown"
+              },
+              "actor": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              },
+              "on": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              },
+              "duration": {
+                "default": 1,
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "offset": {
+                "default": 0,
+                "type": "number"
+              },
+              "start": {
+                "type": "number",
+                "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              }
+            },
+            "required": [
+              "type",
+              "actor",
+              "on",
+              "start"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "standUp"
+              },
+              "actor": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              },
+              "duration": {
+                "default": 0.8,
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "to": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "items": false,
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "start": {
+                "type": "number",
+                "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              }
+            },
+            "required": [
+              "type",
+              "actor",
               "start"
             ]
           },
@@ -821,6 +1102,10 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [
@@ -876,6 +1161,10 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [
@@ -925,6 +1214,10 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [
@@ -968,6 +1261,10 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [
@@ -1035,6 +1332,10 @@
               "start": {
                 "type": "number",
                 "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
               }
             },
             "required": [

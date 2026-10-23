@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Action, Camera, Id, Shot, type BlockshotSpec } from "./schema";
 import { compile } from "./evaluate";
+import { actionLabels, findActionIndex, mergeAction, patchProblem } from "./actions";
 import type { Issue } from "./validate";
 
 /**
@@ -22,12 +23,16 @@ export const Addon = z.object({
   removeShots: z.array(Id).optional(),
   /** project length in seconds (grown automatically to fit the animation if omitted) */
   duration: z.number().positive().optional(),
+  /** changes to EXISTING actions by id/label ("act3"); only the listed fields change, the type cannot */
+  patchActions: z.array(z.object({ id: Id }).catchall(z.unknown())).optional(),
+  /** ids/labels of existing actions to delete */
+  removeActions: z.array(Id).optional(),
   /** remove the existing actions first, to re-animate from scratch */
   clearActions: z.boolean().optional(),
 });
 export type Addon = z.infer<typeof Addon>;
 
-const KEYS = ["actions", "cameras", "shots", "addShots", "patchShots", "removeShots", "duration", "clearActions"] as const;
+const KEYS = ["actions", "cameras", "shots", "addShots", "patchShots", "removeShots", "patchActions", "removeActions", "duration", "clearActions"] as const;
 
 export function parseAddon(data: unknown): { ok: true; addon: Addon } | { ok: false; errors: Issue[] } {
   if (!data || typeof data !== "object" || Array.isArray(data)) return { ok: false, errors: [{ path: "", message: "Expected a JSON object with actions / cameras / shots" }] };
@@ -60,6 +65,18 @@ export function addonFromSpec(full: BlockshotSpec, current: BlockshotSpec): Addo
 /** Problems an add-on has against the scene it is applied to (e.g. patching a shot that does not exist). */
 export function addonIssues(spec: BlockshotSpec, addon: Addon): Issue[] {
   const issues: Issue[] = [];
+  if (addon.clearActions && (addon.patchActions?.length || addon.removeActions?.length)) issues.push({ path: "clearActions", message: "clearActions drops every existing action, so it cannot be combined with patchActions / removeActions" });
+  const labels = new Set(actionLabels(spec.actions));
+  const list2 = () => [...labels].join(", ") || "none";
+  addon.removeActions?.forEach((id, i) => !labels.has(id) && issues.push({ path: `removeActions[${i}]`, message: `Unknown action id "${id}". Available: ${list2()}` }));
+  addon.patchActions?.forEach((p, i) => {
+    const at = findActionIndex(spec.actions, p.id);
+    if (at < 0) issues.push({ path: `patchActions[${i}].id`, message: `Unknown action id "${p.id}". Available: ${list2()}` });
+    else {
+      const problem = patchProblem(spec.actions[at]!, p);
+      if (problem) issues.push({ path: `patchActions[${i}].type`, message: problem });
+    }
+  });
   const have = new Set((addon.shots ?? spec.shots).map((s) => s.id));
   const list = () => [...have].join(", ") || "none";
   addon.removeShots?.forEach((id, i) => !have.has(id) && issues.push({ path: `removeShots[${i}]`, message: `Unknown shot id "${id}". Available: ${list()}` }));
@@ -89,9 +106,18 @@ function editShots(spec: BlockshotSpec, addon: Addon): BlockshotSpec["shots"] {
 
 /** Merges the additions into the scene and grows the project length so the new animation fits. Run validateSpec on the result. */
 export function applyAddon(spec: BlockshotSpec, addon: Addon): BlockshotSpec {
+  // labels are resolved against the actions as the LLM saw them, before anything is removed
+  let existing = [...spec.actions];
+  const drop = new Set((addon.removeActions ?? []).map((id) => findActionIndex(spec.actions, id)));
+  const patches = new Map<number, Record<string, unknown>>();
+  for (const p of addon.patchActions ?? []) {
+    const at = findActionIndex(spec.actions, p.id);
+    if (at >= 0) patches.set(at, { ...(patches.get(at) ?? {}), ...p });
+  }
+  existing = existing.flatMap((act, i) => (drop.has(i) ? [] : [patches.has(i) ? mergeAction(act, patches.get(i)!) : act]));
   const next: BlockshotSpec = {
     ...spec,
-    actions: [...(addon.clearActions ? [] : spec.actions), ...(addon.actions ?? [])],
+    actions: [...(addon.clearActions ? [] : existing), ...(addon.actions ?? [])],
     cameras: [...spec.cameras, ...(addon.cameras ?? [])],
     shots: editShots(spec, addon),
   };

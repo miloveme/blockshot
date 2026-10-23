@@ -1,6 +1,7 @@
 import { PROP_TYPES, POSES, BODY_PARTS, SPEC_VERSION, type BlockshotSpec, type Space } from "./schema";
-import { PROP_CATALOG, propSize } from "./catalog";
+import { PROP_CATALOG, SEATS, propSize } from "./catalog";
 import { mirrorPlane } from "./mirror";
+import { actionLabels } from "./actions";
 
 /** Imported models need a user-owned asset, so they are never offered to an LLM. */
 const LLM_PROP_TYPES = PROP_TYPES.filter((t) => t !== "model");
@@ -24,6 +25,11 @@ const RULES = `Conventions:
 const ACTION_LINES = `    { "type": "walkTo"|"runTo", "actor", "to": [x,0,z] | [[x,0,z], ...], "start", "duration"?, "speed"? },
     { "type": "turnTo", "actor", "target": ref | [x,y,z] | yawDegrees, "start", "duration"? },
     { "type": "pose", "actor", "pose", "start" },
+    { "type": "sitDown", "actor", "on": chairOrSofaPropId, "start", "duration"?, "offset"? },
+    { "type": "standUp", "actor", "start", "duration"?, "to"? },
+    { "type": "gesture", "actor", "gesture": "wave"|"nod"|"shakeHead"|"shrug"|"clap"|"crossArms"|"handsOnHips"|"think"|"bow"|"lookAround"|"cheer", "start", "duration"?, "side"?: "left"|"right", "intensity"?: 0-1 },
+    { "type": "handShape", "actor", "shape": "open"|"relaxed"|"fist"|"point"|"pinch"|"grip", "hand"?: "left"|"right"|"both", "start", "duration"? },
+    { "type": "reach", "actor", "target": ref | [x,y,z], "hand"?: "left"|"right", "start", "duration"? },
     { "type": "lookAt", "actor", "target", "start", "end"? },
     { "type": "cameraMove", "camera", "to": [x,y,z], "start", "duration", "ease"? },
     { "type": "cameraLookAt", "camera", "target", "start" },
@@ -48,7 +54,7 @@ const SCRIPT_SUMMARY = `Blockshot Script API (JavaScript; globals: scene, vec, r
 scene.settings({ fps, duration, resolution }); scene.meta({ title });
 scene.room({ width, depth, height, doors: [{ wall, offset }], windows: [{ wall, offset }] }) | scene.ground() | scene.street();
 const a = scene.actor(id, { name, color, height, at: [x,0,z], facing: yawDeg, pose });
-a.walkTo([x,0,z] | [[x,0,z],...], { start, duration }); a.turnTo(target, { start }); a.pose(name, { start }); a.lookAt(b.head, { start });
+a.walkTo([x,0,z] | [[x,0,z],...], { start, duration }); a.turnTo(target, { start }); a.pose(name, { start }); a.sitDown(chair, { start, duration?, offset? }); a.standUp({ start, to? }); a.gesture(name, { start, duration?, side?, intensity? }); a.reach(target, { start, hand?, duration? }); a.handShape(shape, { start, hand?, duration? }); a.lookAt(b.head, { start });
 scene.prop(type, { id, at, facing, scale, color });
 const c = scene.camera(id, { lens, at: [x,y,z], lookAt: a.head });
 c.moveTo(pos, { start, duration, ease }); c.dolly(m, {...}); c.truck(m, {...}); c.pedestal(m, {...}); c.orbit(target, { degrees, start, duration }); c.zoom(mm, {...}); c.lookAt(target, { start });
@@ -74,7 +80,7 @@ ${catalogTable()}
 - Facing: yaw 0 faces +Z, yaw 90 faces +X, yaw 180 faces -Z, yaw -90 faces -X. Furniture backs go against walls, so a prop standing against:
   north wall (z = -depth/2) → yaw 0 · south wall (z = +depth/2) → yaw 180 · west wall (x = -width/2) → yaw 90 · east wall (x = +width/2) → yaw -90.
   Keep each footprint inside the walls (center at least half its size away from every wall).
-- Seat chairs/sofas toward what people look at (a table, a TV, each other). Put cups/phones ON surfaces: set position y to the surface height (table top = 0.76 × scale y).
+- Seat chairs/sofas toward what people look at (a table, a TV, each other). Seat people with sitDown actions on the chair/sofa id (a seated actor at the start may use pose "sit" placed on the seat). Put cups/phones ON surfaces: set position y to the surface height (table top = 0.76 × scale y).
 - No two props may overlap on the floor (stacked items excepted). Keep walking paths ≥ 0.8 m wide and never route an actor through furniture: add waypoints around it.
 - Place actors on free floor, standing near what they interact with; seated actors (pose "sit") go on a sofa/chair footprint. Keep doors and windows unblocked.
 - Put the cameras where the audience would stand; keep every shot's subject inside the frame.
@@ -209,7 +215,7 @@ export function describeScene(spec: BlockshotSpec): string {
     const yaw = (p.rotation[1] * Math.PI) / 180;
     const ex = (Math.abs(Math.cos(yaw)) * w * Math.abs(p.scale[0]) + Math.abs(Math.sin(yaw)) * d * Math.abs(p.scale[2])) / 2;
     const ez = (Math.abs(Math.sin(yaw)) * w * Math.abs(p.scale[0]) + Math.abs(Math.cos(yaw)) * d * Math.abs(p.scale[2])) / 2;
-    const kind = info.passable ? "decor" : info.sittable ? "seat (actors may sit on it)" : "obstacle";
+    const kind = info.passable ? "decor" : info.sittable ? (SEATS[p.type] ? "seat (use sitDown with this id)" : "seat (actors may sit on it)") : "obstacle";
     const name = p.type === "model" ? `model "${spec.assets.find((x) => x.id === p.asset)?.name ?? p.asset}"` : p.type;
     let extra = "";
     if (p.type === "mirror") {
@@ -226,7 +232,12 @@ export function describeScene(spec: BlockshotSpec): string {
     lines.push(`- id "${c.id}"${c.name ? ` (${c.name})` : ""}: at ${JSON.stringify(c.position.map(r1))}, ${aim}, ${c.focalLength}mm`);
   }
 
-  lines.push(`Existing actions (${spec.actions.length}): ${spec.actions.length ? JSON.stringify(spec.actions) : "none"}`);
+  const labels = actionLabels(spec.actions);
+  lines.push(
+    spec.actions.length
+      ? `Existing actions (${spec.actions.length}) — each has an "id" you can use in patchActions / removeActions:\n${spec.actions.map((a, i) => `- ${JSON.stringify({ ...a, id: labels[i] })}`).join("\n")}`
+      : "Existing actions (0): none",
+  );
   lines.push(
     `Existing shots in edit order (${spec.shots.length}): ${
       spec.shots.length ? JSON.stringify(spec.shots.map(({ id, camera, start, end, description, prompt }) => ({ id, camera, start, end, ...(description ? { description } : {}), ...(prompt ? { hasPrompt: true } : {}) }))) : "none"
@@ -238,7 +249,10 @@ export function describeScene(spec: BlockshotSpec): string {
 const ANIMATE_RULES = `Hard rules:
 - The scene is ALREADY BUILT and must not change. Do NOT add, delete, rename, move or recolor actors or props, and do not change "space". Actors start exactly where they are listed.
 - Use the exact ids listed below. Add ONLY animation: movement (walkTo/runTo/turnTo), poses, looks, camera moves/zooms/orbits, and — only if the request needs them — new cameras and the shot list.
-- Walk around obstacles (add waypoints); never route an actor through an obstacle or a wall. Seated actors keep pose "sit" on their seat.
+- Walk around obstacles (add waypoints); never route an actor through an obstacle or a wall.
+- To seat someone use a sitDown action on the chair/sofa id (it walks them onto the seat, turns them and lowers them; "offset" slides along a sofa's width so several people can sit); use standUp to rise. Do not fake sitting with only a "sit" pose at a standing position.
+- Direct the acting like a director: give people body language with "gesture" (wave, nod, shakeHead, shrug, clap, crossArms, handsOnHips, think, bow, lookAround, cheer) and use "reach" to put a hand on or toward an object / another person's body part (picking up, touching, pointing, handing over). Use "handShape" for the fingers (fist, point, pinch, grip …). Combine them with lookAt so people look at what they react to.
+- When asked to change part of the existing animation, edit ONLY the actions concerned (patchActions / removeActions by id) and leave the rest alone; use clearActions only to re-animate everything.
 - Times are scene seconds from 0. Make the animation fit the length, or set "duration" when it needs more.
 - Keep the 180-degree rule between cuts; shots are usually 2–6 seconds; eye-level camera height 1.5–1.7 m.`;
 
@@ -257,20 +271,22 @@ export function buildAnimatePrompt(opts: { request: string; spec: BlockshotSpec;
   "addShots": [ ... ],           // optional: NEW shots; appended, or { ..., "after": "<shotId>" } to insert after that shot
   "patchShots": [ ... ],         // optional: changes to EXISTING shots by id, e.g. { "id": "S1", "end": 5, "camera": "cam2" }; other fields stay
   "removeShots": [ "S2" ],       // optional: delete shots by id
+  "patchActions": [ ... ],       // optional: changes to EXISTING actions by id, e.g. { "id": "act3", "start": 2, "duration": 1.5 }; only the listed fields change (the type cannot)
+  "removeActions": [ "act2" ],   // optional: delete existing actions by id
   "shots": [ ... ],              // optional, rarely needed: the COMPLETE shot list; replaces everything (existing descriptions/prompts are lost unless you repeat them)
   "duration": seconds,           // optional: project length
   "clearActions": true }         // optional: drop the existing actions first, to re-animate from scratch
 Action shapes:
 ${ACTION_LINES}
-Cameras: { "id", "name"?, "position": [x,y,z], "lookAt"?: [x,y,z] | ref, "focalLength"? mm }. Shots: { "id", "camera", "start", "end", "description"?, "prompt"? } — change the cut with addShots / patchShots / removeShots; leave shots you do not mention alone.
+Existing actions are listed with ids (act1, act2 …). To adjust one, use patchActions; to drop one, removeActions; new actions may carry their own "id" label. Cameras: { "id", "name"?, "position": [x,y,z], "lookAt"?: [x,y,z] | ref, "focalLength"? mm }. Shots: { "id", "camera", "start", "end", "description"?, "prompt"? } — change the cut with addShots / patchShots / removeShots; leave shots you do not mention alone.
 Refs: "actorId", "actorId.part" (parts: ${BODY_PARTS.join(", ")}), "actorId.part@mirrorId" (reflection). Poses: ${POSES.join(", ")}. Ease: linear, easeIn, easeOut, easeInOut, step.`
       : `Output exactly ONE \`\`\`js code block (Blockshot Script; globals: scene, vec, rand). The scene already exists: get handles with scene.use("<id>") and do NOT call scene.room/ground/street/actor/prop.
 const a = scene.use("<actorId>");   // actor handle (or camera handle for a camera id)
-a.walkTo([x,0,z] | [[x,0,z],...], { start, duration?, speed? }); a.runTo(...); a.turnTo(target, { start }); a.pose(name, { start }); a.lookAt(b.head, { start });
+a.walkTo([x,0,z] | [[x,0,z],...], { start, duration?, speed? }); a.runTo(...); a.turnTo(target, { start }); a.pose(name, { start }); a.sitDown(seatId, { start, duration?, offset? }); a.standUp({ start, to? }); a.gesture(name, { start, duration?, side?, intensity? }); a.reach(target, { start, hand?, duration? }); a.handShape(shape, { start, hand?, duration? }); a.lookAt(b.head, { start });
 const c = scene.camera("<new id>", { lens, at: [x,y,z], lookAt: a.chest }); // new camera; existing ones: scene.use("<cameraId>")
 c.moveTo(pos, { start, duration, ease }); c.dolly(m, {...}); c.truck(m, {...}); c.pedestal(m, {...}); c.orbit(target, { degrees, start, duration }); c.zoom(mm, {...}); c.lookAt(target, { start });
 scene.reflect(a.chest, mirrorId) -> a reference to where that point appears inside a mirror (aim cameras at reflections with it).
-scene.clearActions(idOrHandle?) removes existing actions (of one object, or all). Shots: scene.shot(id, { camera, start, end, description, after? }) adds one (appended, or after the shot id in "after"); scene.patchShot(id, { camera?, start?, end?, description? }) edits an existing one; scene.removeShot(id) deletes one; scene.clearShots() empties the list (rarely needed). scene.settings({ duration }).
+scene.clearActions(idOrHandle?) removes existing actions (of one object, or all) — prefer targeted edits: scene.patchAction("act3", { start: 2, duration: 1.5 }) changes fields of ONE existing action by the id shown in "Existing actions" (the type cannot change); scene.removeAction("act2") deletes one. Shots: scene.shot(id, { camera, start, end, description, after? }) adds one (appended, or after the shot id in "after"); scene.patchShot(id, { camera?, start?, end?, description? }) edits an existing one; scene.removeShot(id) deletes one; scene.clearShots() empties the list (rarely needed). scene.settings({ duration }).
 Poses: ${POSES.join(", ")}.`;
   return [
     "You are a previsualization animator for film. A user has already placed actors, props and cameras in a 3D scene. Animate it according to the request below.",

@@ -54,6 +54,8 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 | `scene.actor(id, opts) → Actor` | `opts: { name?, color?, height?, build?, at?, facing?, pose? }` |
 | `scene.prop(type, opts) → Prop` | `opts: { id?, at?, facing?, rotation?, scale?, color? }` |
 | `scene.use(id) → handle` | **이미 있는 오브젝트**(손으로 배치했거나 이전 스크립트가 만든 것)의 핸들. 인물이면 Actor, 카메라면 Camera 핸들(걷기·줌 등 모든 메서드 사용), 소품이면 `{ id }`. 없는 id면 가능한 id 목록과 함께 오류 |
+| `scene.patchAction(id, fields)` | 기존 액션 한 개의 필드만 수정 (id = 명시한 `id` 또는 `act1`, `act2` … 위치 라벨, `type`은 변경 불가) |
+| `scene.removeAction(id)` | 기존 액션 한 개 삭제 |
 | `scene.clearActions(idOrHandle?)` | 기존 액션 삭제 — 한 오브젝트 것만, 인자가 없으면 전부 (처음부터 다시 연출할 때) |
 | `scene.patchShot(id, { camera?, start?, end?, name?, description?, prompt? })` | **기존 샷의 일부만 수정** — 적은 필드만 바뀐다. 없는 id면 가능한 id 목록과 함께 오류 |
 | `scene.removeShot(id)` | 샷 하나 삭제 |
@@ -72,7 +74,12 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 | `.walkTo(to, { start, duration?, speed? })` | `to`는 Vec3 또는 경유점 배열 |
 | `.runTo(to, { start, duration?, speed? })` | |
 | `.turnTo(target, { start, duration? })` | target: Vec3 · 참조 · yaw(도) |
-| `.pose(name, { start })` | `stand` `walk` `run` `sit` `point` `talk` `idle` |
+| `.pose(name, { start })` | `stand` `walk` `run` `sit` `point` `talk` `idle` — 이전 포즈에서 0.35초 블렌드 |
+| `.sitDown(seat, { start, duration?, offset? })` | 의자/소파(핸들·id)로 걸어가 앉기. 소파는 `offset`(m)으로 자리를 나눈다 |
+| `.standUp({ start, duration?, to? })` | 일어나 앞으로 한 걸음(또는 `to`) |
+| `.gesture(name, { start, duration?, side?, intensity? })` | 몸짓(wave·nod·shrug·clap·cheer …). 포즈 위에 얹힌다 |
+| `.handShape(shape, { start, hand?, duration? })` | 손가락 모양: open·relaxed·fist·point·pinch·grip (`hand`: left/right/both) |
+| `.reach(target, { start, hand?, duration? })` | 손을 대상으로 뻗기(IK). `target`은 점/소품/`인물.hand_r` 등 |
 | `.lookAt(target, { start, end? })` | 머리 방향 |
 | `.head` `.chest` `.pelvis` `.handL` `.handR` | 참조 문자열 (`"minsu.head"`) |
 | `.id` | |

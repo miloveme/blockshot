@@ -53,6 +53,7 @@ LLM이 "장면은 만드는데 객체가 어울리게 놓이지 않는" 문제�
    규칙: **배치를 바꾸지 말 것(추가·삭제·이동·이름 변경 금지)**, 장애물은 우회, 추가분만 출력. "세트를 채워라" 지시는 넣지 않는다.
 2. **출력은 추가분만**: JSON `{ "actions": [...], "cameras"?: [...], "shots"?: [...], "duration"?, "clearActions"? }` 또는 `scene.use(id)`를 쓰는 스크립트(`runScript(source, base)`).
    - `actions`는 기존 액션 뒤에 **추가**(`clearActions: true`면 기존 액션을 먼저 비움), `cameras`는 새 id만
+   - **액션도 부분 수정**: 기존 액션에는 라벨이 붙는다(명시한 `id`, 없으면 순서대로 `act1`, `act2` …; 프롬프트의 "Existing actions"에 표시). `patchActions`(`{ "id": "act3", "start": 2, "duration": 1.5 }` — 적은 필드만 바뀌고 `type`은 못 바꿈) · `removeActions`(`["act2"]`). 라벨은 수정 전 목록 기준으로 해석되고, 적용 순서는 (clearActions) → 삭제 → 수정 → `actions` 추가. `clearActions`와는 함께 못 쓴다. 스크립트는 `scene.patchAction("act3", {...})` / `scene.removeAction("act2")`
    - **샷은 부분 수정**: `addShots`(끝에 추가, `after: "S1"`이면 그 뒤에 삽입) · `patchShots`(id로 지정, 적은 필드만 바뀌고 설명·프롬프트 등 나머지는 유지, 예 `{ "id": "S2", "end": 7, "camera": "cam2" }`) · `removeShots`(id 삭제). 적용 순서는 교체 → 삭제 → 수정 → 추가. 없는 id를 가리키면 "Unknown shot id … Available: …" 오류로 수정 요청 프롬프트가 만들어진다
    - `shots`(전체 교체)도 남아 있지만 기존 샷의 설명·프롬프트가 사라지므로 권장하지 않는다. 프롬프트에는 기존 샷의 설명도 함께 들어간다
    - 프로젝트 길이는 애니메이션이 끝날 때까지 자동으로 늘어난다 (`applyAddon`)

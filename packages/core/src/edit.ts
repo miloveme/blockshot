@@ -1,6 +1,8 @@
-import type { Actor, BlockshotSpec, Camera, Key, Prop, PropType, Shot, TrackProperty, Vec3 } from "./schema";
+import type { Actor, BlockshotSpec, Camera, Gesture, HandShape, Key, Prop, PropType, Shot, Target, TrackProperty, Vec3 } from "./schema";
 import { compile, evaluate } from "./evaluate";
 import { parseRef } from "./mirror";
+import { SEATS } from "./catalog";
+import { mergeAction, patchProblem } from "./actions";
 
 /**
  * Pure editing operations for UI tools. Every function returns a NEW spec (inputs are never mutated),
@@ -111,6 +113,7 @@ export function removeEntity(spec: BlockshotSpec, id: string): BlockshotSpec {
     actions: spec.actions.filter((a) => {
       if ("actor" in a && a.actor === id) return false;
       if ("camera" in a && a.camera === id) return false;
+      if (a.type === "sitDown" && a.on === id) return false;
       if ("target" in a && refersTo(a.target, id)) return false;
       if (a.type === "orbit" && refersTo(a.around, id)) return false;
       return true;
@@ -291,6 +294,13 @@ export function removeActionAt(spec: BlockshotSpec, index: number): BlockshotSpe
   return { ...spec, actions: spec.actions.filter((_, i) => i !== index) };
 }
 
+/** Changes fields of the action at `index` (start, duration, target …); the type cannot change. */
+export function patchActionAt(spec: BlockshotSpec, index: number, fields: Record<string, unknown>): BlockshotSpec {
+  const action = spec.actions[index];
+  if (!action || patchProblem(action, fields)) return spec;
+  return extendDuration({ ...spec, actions: spec.actions.map((a, i) => (i === index ? mergeAction(a, fields) : a)) });
+}
+
 export function patchMoveAt(spec: BlockshotSpec, index: number, patch: { start?: number; speed?: number | undefined; run?: boolean; to?: Vec3 | Vec3[] }): BlockshotSpec {
   const a = spec.actions[index];
   if (!a || (a.type !== "walkTo" && a.type !== "runTo")) return spec;
@@ -345,4 +355,50 @@ export function removeAsset(spec: BlockshotSpec, assetId: string): BlockshotSpec
   const users = spec.props.filter((p) => p.asset === assetId).map((p) => p.id);
   const base = users.reduce((s, id) => removeEntity(s, id), spec);
   return { ...base, assets: base.assets.filter((a) => a.id !== assetId) };
+}
+
+// ---- sitting ---------------------------------------------------------------------------------------
+
+/** Adds a sitDown (walk onto the seat, turn, lower) for the actor at time `start`. */
+export function addSitDown(spec: BlockshotSpec, actorId: string, seatId: string, opts: { start: number; duration?: number; offset?: number }): BlockshotSpec {
+  const seat = spec.props.find((p) => p.id === seatId);
+  if (!seat || !SEATS[seat.type] || !spec.actors.some((a) => a.id === actorId)) return spec;
+  const action = { type: "sitDown" as const, actor: actorId, on: seatId, start: roundT(Math.max(0, opts.start)), duration: opts.duration ?? 1, offset: opts.offset ?? 0 };
+  return extendDuration({ ...spec, actions: [...spec.actions, action] });
+}
+
+/** Adds a standUp at time `start`. */
+export function addStandUp(spec: BlockshotSpec, actorId: string, opts: { start: number; duration?: number; to?: Vec3 }): BlockshotSpec {
+  if (!spec.actors.some((a) => a.id === actorId)) return spec;
+  const action = { type: "standUp" as const, actor: actorId, start: roundT(Math.max(0, opts.start)), duration: opts.duration ?? 0.8, ...(opts.to ? { to: opts.to } : {}) };
+  return extendDuration({ ...spec, actions: [...spec.actions, action] });
+}
+
+/** Adds a body-language gesture for the actor. */
+export function addGesture(spec: BlockshotSpec, actorId: string, gesture: Gesture, opts: { start: number; duration?: number; side?: "left" | "right" }): BlockshotSpec {
+  if (!spec.actors.some((a) => a.id === actorId)) return spec;
+  const action = { type: "gesture" as const, actor: actorId, gesture, start: roundT(Math.max(0, opts.start)), intensity: 1, ...(opts.duration ? { duration: opts.duration } : {}), ...(opts.side ? { side: opts.side } : {}) };
+  return extendDuration({ ...spec, actions: [...spec.actions, action] });
+}
+
+/** Holds a hand shape (fist, point …) for `duration` seconds. */
+export function addHandShape(spec: BlockshotSpec, actorId: string, shape: HandShape, opts: { start: number; hand?: "left" | "right" | "both"; duration?: number }): BlockshotSpec {
+  if (!spec.actors.some((a) => a.id === actorId)) return spec;
+  const action = { type: "handShape" as const, actor: actorId, shape, hand: opts.hand ?? "both", start: roundT(Math.max(0, opts.start)), duration: opts.duration ?? 2 };
+  return extendDuration({ ...spec, actions: [...spec.actions, action] });
+}
+
+/** Adds a hand reach (IK) toward a point / object / body part. */
+export function addReach(spec: BlockshotSpec, actorId: string, target: Target, opts: { start: number; hand?: "left" | "right"; duration?: number }): BlockshotSpec {
+  if (!spec.actors.some((a) => a.id === actorId)) return spec;
+  const action = { type: "reach" as const, actor: actorId, target, hand: opts.hand ?? "right", start: roundT(Math.max(0, opts.start)), duration: opts.duration ?? 1.5 };
+  return extendDuration({ ...spec, actions: [...spec.actions, action] });
+}
+
+/** Grows the project so the last generated key still fits. */
+function extendDuration(spec: BlockshotSpec): BlockshotSpec {
+  let end = spec.settings.duration;
+  for (const keys of compile(spec).tracks.values()) end = Math.max(end, keys[keys.length - 1]?.t ?? 0);
+  const duration = Math.ceil(end * 10) / 10;
+  return duration > spec.settings.duration ? { ...spec, settings: { ...spec.settings, duration } } : spec;
 }
