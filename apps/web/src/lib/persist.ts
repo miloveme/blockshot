@@ -78,4 +78,5 @@ export function downloadSpec() {
   a.download = `${spec.meta.title.replace(/[^\p{L}\p{N}_-]+/gu, "_") || "scene"}.blockshot.json`;
   a.click();
   URL.revokeObjectURL(a.href);
+  if (spec.assets.length) useStudio.getState().notify("저장됨 — 모델(GLB) 파일은 JSON에 포함되지 않습니다. 다른 브라우저에서 열면 모델을 다시 불러와야 합니다");
 }

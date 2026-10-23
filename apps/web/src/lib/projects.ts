@@ -5,9 +5,10 @@ import { validateSpec, type BlockshotSpec } from "@blockshot/core";
 /** Multi-project storage in IndexedDB. The project being edited is remembered in localStorage. */
 
 const DB_NAME = "blockshot";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const KV = "kv"; // v1 single-document autosave (migrated, then removed)
 const PROJECTS = "projects";
+const MODELS = "models"; // imported GLB files, keyed by content hash, shared by every project
 const CURRENT_KEY = "blockshot.currentProject";
 
 export interface ProjectRecord {
@@ -24,6 +25,7 @@ function openDb(): Promise<IDBDatabase> {
       const db = req.result;
       if (!db.objectStoreNames.contains(KV)) db.createObjectStore(KV);
       if (!db.objectStoreNames.contains(PROJECTS)) db.createObjectStore(PROJECTS, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(MODELS)) db.createObjectStore(MODELS, { keyPath: "id" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -128,4 +130,18 @@ export function parseSpecText(text: string, source: string): ParsedSpec {
     return { ok: false, message: `${source}: ${first.path || "(root)"} — ${first.message}${r.errors.length > 1 ? ` 외 ${r.errors.length - 1}건` : ""}` };
   }
   return { ok: true, spec: r.spec };
+}
+
+export interface ModelRecord {
+  id: string;
+  name: string;
+  data: ArrayBuffer;
+}
+
+export async function putModel(rec: ModelRecord): Promise<void> {
+  await run(MODELS, "readwrite", (s) => s.put(rec));
+}
+
+export async function getModel(id: string): Promise<ModelRecord | undefined> {
+  return run<ModelRecord | undefined>(MODELS, "readonly", (s) => s.get(id));
 }

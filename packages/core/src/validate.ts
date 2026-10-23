@@ -64,6 +64,12 @@ export function validateSpec(input: unknown): ValidationResult {
   spec.actors.forEach((a, i) => register(a.id, `actors[${i}].id`));
   spec.props.forEach((p, i) => register(p.id, `props[${i}].id`));
   spec.cameras.forEach((c, i) => register(c.id, `cameras[${i}].id`));
+  const assetIds = new Set(spec.assets.map((a) => a.id));
+  spec.props.forEach((p, i) => {
+    if (p.type === "model" && (!p.asset || !assetIds.has(p.asset))) {
+      errors.push({ path: `props[${i}].asset`, message: `Model prop "${p.id}" needs "asset" = an id from assets (available: ${[...assetIds].join(", ") || "none"})` });
+    }
+  });
 
   const list = (s: Set<string>) => (s.size ? [...s].join(", ") : "(none)");
   const checkActor = (id: string, path: string) => {

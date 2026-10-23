@@ -83,13 +83,29 @@ export type Actor = z.infer<typeof Actor>;
 export const PROP_TYPES = [
   "box", "cylinder", "sphere", "plane",
   "chair", "table", "sofa", "bed", "door", "window", "car", "lamp", "cup", "phone", "mirror",
+  "model",
 ] as const;
 export const PropType = z.enum(PROP_TYPES);
 export type PropType = z.infer<typeof PropType>;
 
+/**
+ * An imported 3D model. Only metadata lives in the Spec; the GLB bytes stay in the browser (IndexedDB, keyed by
+ * `id`, which is a content hash) so `.blockshot.json` stays small. `size` is the normalized bounding box in meters.
+ */
+export const Asset = z.object({
+  id: Id,
+  name: z.string(),
+  kind: z.literal("glb").default("glb"),
+  size: Vec3,
+  bytes: z.number().int().nonnegative().optional(),
+});
+export type Asset = z.infer<typeof Asset>;
+
 export const Prop = z.object({
   id: Id,
   type: PropType,
+  /** for type "model": id of an entry in `assets` */
+  asset: Id.optional(),
   position: Vec3.default([0, 0, 0]),
   rotation: Vec3.default([0, 0, 0]),
   scale: Vec3.default([1, 1, 1]),
@@ -183,6 +199,7 @@ export const BlockshotSpec = z.object({
   tracks: z.array(Track).default([]),
   shots: z.array(Shot).default([]),
   bin: z.array(BinClip).default([]),
+  assets: z.array(Asset).default([]),
 });
 /** Fully-defaulted spec (output of parsing). */
 export type BlockshotSpec = z.infer<typeof BlockshotSpec>;

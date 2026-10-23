@@ -7,7 +7,7 @@ import { addActorCmd, addCameraCmd, addCameraFromFreeView, addPropCmd } from "@/
 import { getBridge } from "@/lib/render";
 import { downloadSpec, openSpecFile } from "@/lib/persist";
 
-const btn = "rounded bg-white/10 px-2.5 py-1 text-xs hover:bg-white/20 disabled:opacity-40";
+const btn = "whitespace-nowrap rounded bg-white/10 px-2.5 py-1 text-xs hover:bg-white/20 disabled:opacity-40";
 const PROP_LABEL: Record<string, string> = {
   box: "상자", cylinder: "원기둥", sphere: "구", plane: "평면", chair: "의자", table: "테이블", sofa: "소파", bed: "침대",
   door: "문", window: "창", car: "자동차", lamp: "램프", cup: "컵", phone: "폰", mirror: "거울",
@@ -46,7 +46,7 @@ export function Toolbar({ onImport }: { onImport: () => void }) {
             </MenuItem>
             <div className="my-1 border-t border-white/10 px-2 pt-1 text-[10px] uppercase text-zinc-500">소품</div>
             <div className="grid grid-cols-2">
-              {PROP_TYPES.map((t) => (
+              {PROP_TYPES.filter((t) => t !== "model").map((t) => (
                 <MenuItem key={t} onClick={() => { addPropCmd(t); setMenu(false); }}>
                   {PROP_LABEL[t] ?? t}
                 </MenuItem>

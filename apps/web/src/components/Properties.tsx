@@ -1,7 +1,10 @@
 "use client";
 
-import { LENS_PRESETS, POSES, keyTimes, kindOf, type Pose } from "@blockshot/core";
+import { LENS_PRESETS, POSES, keyTimes, kindOf, movesOf, patchMoveAt, removeActionAt, type Pose } from "@blockshot/core";
+import { useEffect, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
+import { hasModel, importGlb } from "@/lib/models";
+import { startPath } from "@/lib/placement";
 import { commitTransform, deleteSelected, insertKeyAtCurrentTime, matchCameraToFreeView, patch, removeKeysAtTime, setLens, setPoseCmd } from "@/lib/actions";
 import { getBridge } from "@/lib/render";
 import { ColorField, NumField, Row, SelectField, TextField, Vec3Field } from "./fields";
@@ -66,6 +69,7 @@ export function Properties() {
 
       {actor ? (
         <>
+          <MovePaths actorId={id} />
           <Row label="이름">
             <TextField value={actor.name ?? ""} onCommit={(v) => patch(id, { name: v || undefined })} />
           </Row>
@@ -87,8 +91,9 @@ export function Properties() {
       {prop ? (
         <>
           <Row label="종류">
-            <span className="text-xs text-zinc-300">{prop.type}</span>
+            <span className="text-xs text-zinc-300">{prop.type === "model" ? `모델 · ${spec.assets.find((a) => a.id === prop.asset)?.name ?? prop.asset}` : prop.type}</span>
           </Row>
+          {prop.type === "model" && prop.asset ? <ModelStatus assetId={prop.asset} /> : null}
           <Row label="색상">
             <ColorField value={prop.color} onCommit={(v) => patch(id, { color: v })} />
           </Row>
@@ -184,6 +189,88 @@ function KeyButtons({ id }: { id: string }) {
       <p className="text-[10px] text-zinc-600">
         {here ? `${time.toFixed(2)}s에 ${here.manual ? "수동" : "액션"} 키가 있습니다` : "키가 있는 값은 움직이면 현재 시간에 키가 추가됩니다"}
       </p>
+    </div>
+  );
+}
+
+/** Whether the model's file is stored in this browser, with a way to point it at the file again. */
+function ModelStatus({ assetId }: { assetId: string }) {
+  const [present, setPresent] = useState<{ id: string; ok: boolean } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    let live = true;
+    void hasModel(assetId).then((ok) => live && setPresent({ id: assetId, ok }));
+    return () => {
+      live = false;
+    };
+  }, [assetId]);
+  if (present?.id !== assetId || present.ok) return null;
+  return (
+    <div className="flex flex-col gap-1 rounded border border-red-500/40 bg-red-500/10 p-2 pl-3 text-[11px] text-red-200">
+      <span>이 브라우저에 모델 파일이 없습니다 (다른 기기에서 열었거나 저장소를 지웠을 수 있어요).</span>
+      <button className="self-start rounded bg-white/10 px-2 py-0.5 hover:bg-white/20" onClick={() => fileRef.current?.click()}>
+        GLB 파일 다시 불러오기
+      </button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".glb"
+        hidden
+        onChange={async (e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (f && (await importGlb(f, assetId))) setPresent({ id: assetId, ok: true });
+        }}
+      />
+    </div>
+  );
+}
+
+/** The actor's walk / run actions (editable) and the button that draws a new one by clicking the floor. */
+function MovePaths({ actorId }: { actorId: string }) {
+  const spec = useStudio((s) => s.spec);
+  const tool = useStudio((s) => s.tool);
+  const edit = useStudio((s) => s.edit);
+  const moves = movesOf(spec, actorId);
+  const drawing = tool?.kind === "path" && tool.actorId === actorId;
+  return (
+    <div className="flex flex-col gap-1.5 rounded border border-white/10 p-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-medium text-zinc-300">이동 경로 ({moves.length})</span>
+        <button
+          className={`rounded px-2 py-0.5 text-[11px] ${drawing ? "bg-amber-400 text-black" : "bg-sky-500/80 text-white hover:bg-sky-400"}`}
+          onClick={() => (drawing ? useStudio.getState().setTool(null) : startPath(actorId))}
+          title="바닥을 차례로 클릭해 걷는 경로를 만듭니다 (3D·탑뷰 모두)"
+        >
+          {drawing ? "경로 찍는 중…" : "🚶 경로 찍기"}
+        </button>
+      </div>
+      {moves.map(({ index, action }) => {
+        const count = Array.isArray(action.to[0]) ? action.to.length : 1;
+        return (
+          <div key={index} className="flex items-center gap-1.5 text-[11px] text-zinc-400">
+            <button
+              className="rounded bg-white/10 px-1.5 py-0.5 hover:bg-white/20"
+              title="걷기 ↔ 달리기"
+              onClick={() => edit((s) => patchMoveAt(s, index, { run: action.type === "walkTo" }))}
+            >
+              {action.type === "runTo" ? "🏃" : "🚶"}
+            </button>
+            <span className="whitespace-nowrap">시작</span>
+            <div className="w-16">
+              <NumField value={action.start} min={0} step={0.1} onCommit={(v) => edit((s) => patchMoveAt(s, index, { start: v }))} />
+            </div>
+            <span className="whitespace-nowrap">{count}점</span>
+            <div className="w-14" title="속도(m/s) — 비우면 기본값">
+              <NumField value={action.speed ?? (action.type === "runTo" ? 3.5 : 1.3)} min={0.1} max={12} step={0.1} onCommit={(v) => edit((s) => patchMoveAt(s, index, { speed: v }))} />
+            </div>
+            <button className="ml-auto text-red-300 hover:underline" onClick={() => edit((s) => removeActionAt(s, index))}>
+              삭제
+            </button>
+          </div>
+        );
+      })}
+      {moves.length === 0 ? <p className="text-[10px] text-zinc-600">경로가 없습니다. “경로 찍기”를 누르고 바닥을 클릭하세요 (현재 시간에 시작).</p> : null}
     </div>
   );
 }

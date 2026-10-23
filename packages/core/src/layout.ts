@@ -1,5 +1,5 @@
 import type { Action, BlockshotSpec, Prop, Space, Vec3 } from "./schema";
-import { PROP_CATALOG } from "./catalog";
+import { PROP_CATALOG, propSize } from "./catalog";
 import { DEG } from "./math";
 import { compile, evaluate, partPosition, type CameraState } from "./evaluate";
 import { mirrorPlane, reflectPoint, sideOf, type MirrorPlane } from "./mirror";
@@ -21,8 +21,8 @@ const EDGE_TOLERANCE = 0.05;
 const MIN_OVERLAP_AREA = 0.04;
 const MAX_REPORTED = 12;
 
-function footprint(p: Pick<Prop, "type" | "position" | "rotation" | "scale">): Box {
-  const [w, , d] = PROP_CATALOG[p.type].size;
+function footprint(p: Pick<Prop, "type" | "asset" | "position" | "rotation" | "scale">, assets: BlockshotSpec["assets"]): Box {
+  const [w, , d] = propSize(p, assets);
   const hx = (w * Math.abs(p.scale[0])) / 2;
   const hz = (d * Math.abs(p.scale[2])) / 2;
   const yaw = p.rotation[1] * DEG;
@@ -67,7 +67,7 @@ const roomBounds = (space: Space): Box | null =>
 export function lintLayout(spec: BlockshotSpec): Issue[] {
   const issues: Issue[] = [];
   const room = roomBounds(spec.space);
-  const solid = spec.props.map((p, i) => ({ p, i, box: footprint(p), info: PROP_CATALOG[p.type] }));
+  const solid = spec.props.map((p, i) => ({ p, i, box: footprint(p, spec.assets), info: PROP_CATALOG[p.type] }));
 
   if (spec.space.type !== "ground" && spec.props.length === 0) {
     issues.push({ path: "props", message: `The ${spec.space.type} is empty — add furniture/props that suit the situation` });

@@ -1,12 +1,18 @@
 "use client";
 
 import { create } from "zustand";
-import { compile, editDuration, editTimeOf, evaluate, locateEdit, validateSpec, type BlockshotSpec, type CompiledScene, type ClipData, type SceneState } from "@blockshot/core";
+import { compile, editDuration, editTimeOf, evaluate, locateEdit, validateSpec, type BlockshotSpec, type CompiledScene, type ClipData, type PropType, type SceneState, type Vec3 } from "@blockshot/core";
 import example from "@blockshot/core/examples/living-room.json";
 
 export type ViewMode = { kind: "free" } | { kind: "shot" } | { kind: "camera"; id: string };
 export type GizmoMode = "translate" | "rotate" | "scale";
-export type Panel = "scene" | "shots" | "ai" | "render";
+export type Panel = "scene" | "assets" | "shots" | "ai" | "render";
+/** What a click on the floor creates. */
+export type AssetRef = { kind: "actor" } | { kind: "camera" } | { kind: "prop"; type: PropType; asset?: string };
+/** Armed tool: placing an asset, or drawing a walk path for an actor point by point. */
+export type Tool = { kind: "place"; ref: AssetRef } | { kind: "path"; actorId: string; points: Vec3[]; run: boolean };
+/** Main area: 3D viewport, 3D + plan side by side, or the plan alone. */
+export type Layout = "3d" | "split" | "plan";
 /** Live take in progress: the recorder drives `id` from keyboard input while time plays. */
 export interface Recording {
   id: string;
@@ -64,6 +70,8 @@ interface StudioState {
   editZoom: number;
   /** spec before a continuous gesture (e.g. trimming a clip by dragging) — one undo step for the whole drag */
   gestureBase: BlockshotSpec | null;
+  tool: Tool | null;
+  layout: Layout;
 
   /** Replace the whole document (load / import). Clears history and selection. */
   setSpec(spec: BlockshotSpec): void;
@@ -94,6 +102,8 @@ interface StudioState {
   editLive(fn: (spec: BlockshotSpec) => BlockshotSpec | null): void;
   endGesture(): void;
   setPilot(on: boolean): void;
+  setTool(t: Tool | null): void;
+  setLayout(l: Layout): void;
 }
 
 const initial = validateSpec(example);
@@ -154,13 +164,15 @@ export const useStudio = create<StudioState>((set, get) => {
     dragClips: null,
     editZoom: 1,
     gestureBase: null,
+    tool: null,
+    layout: "3d",
 
     setSpec(spec) {
       const c = compile(spec);
       const time = Math.min(get().time, spec.settings.duration);
       set({
         spec, compiled: c, revision: get().revision + 1, time, sceneState: evaluate(c, time),
-        view: { kind: "shot" }, selection: null, past: [], future: [],
+        view: { kind: "shot" }, selection: null, past: [], future: [], tool: null,
         editTime: 0, cutShotId: spec.shots[0]?.id ?? null,
       });
       get().setEditTime(0);
@@ -263,6 +275,12 @@ export const useStudio = create<StudioState>((set, get) => {
     },
     setPilot(pilot) {
       set({ pilot });
+    },
+    setTool(tool) {
+      set({ tool });
+    },
+    setLayout(layout) {
+      set({ layout });
     },
     notify(text, kind = "info") {
       clearTimeout(noticeTimer);

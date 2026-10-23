@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect } from "react";
-import { useStudio, type Panel, type ViewMode } from "@/lib/store";
+import { useStudio, type Layout, type Panel, type ViewMode } from "@/lib/store";
 import { Timeline } from "./Timeline";
 import { LoadingScreen } from "./LoadingScreen";
 import { ImportPanel } from "./ImportPanel";
@@ -12,12 +12,18 @@ import { LensBar } from "./LensBar";
 import { Outliner, Properties } from "./Properties";
 import { ShotEditor } from "./ShotEditor";
 import { RenderPanel } from "./RenderPanel";
+import { AssetPanel } from "./AssetPanel";
+import { ToolHud } from "./ToolHud";
+import { SpaceEditor } from "./SpaceEditor";
+import { PlanView } from "./PlanView";
 import { deleteSelected, insertKeyAtCurrentTime, removeKeysAtCurrentTime } from "@/lib/actions";
 import { startRecording, stopRecording } from "@/lib/recorder";
 import {
   clearRange, copySelection, cutSelection, deleteSelection, duplicateSelection, jumpEditPoint, moveCurrent, paste, setInPoint, setOutPoint, splitAtPlayhead, stepFrames,
 } from "@/lib/shotActions";
 import { loadSpecText, startAutosave } from "@/lib/persist";
+import { finishPath } from "@/lib/placement";
+import { importGlb } from "@/lib/models";
 
 const Viewport = dynamic(() => import("./viewport/Viewport"), {
   ssr: false,
@@ -122,6 +128,21 @@ function ViewButtons() {
   );
 }
 
+function LayoutButtons() {
+  const layout = useStudio((s) => s.layout);
+  const setLayout = useStudio((s) => s.setLayout);
+  const items: Array<[Layout, string, string]> = [["3d", "▣ 3D", "3D 뷰포트만"], ["split", "◫ 분할", "3D + 탑뷰 (T)"], ["plan", "⊞ 탑뷰", "탑뷰만 — 위에서 보며 배치 (T)"]];
+  return (
+    <div className="flex overflow-hidden rounded bg-white/10 text-xs">
+      {items.map(([id, label, tip]) => (
+        <button key={id} title={tip} onClick={() => setLayout(id)} className={`whitespace-nowrap px-2.5 py-1 ${layout === id ? "bg-amber-400 text-black" : "text-zinc-200 hover:bg-white/10"}`}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
@@ -133,6 +154,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 const TABS: Array<[Panel, string]> = [
   ["scene", "장면"],
+  ["assets", "에셋"],
   ["shots", "편집"],
   ["ai", "AI/스크립트"],
   ["render", "렌더"],
@@ -163,8 +185,15 @@ function SidePanel() {
           <Section title="속성">
             <Properties />
           </Section>
+          <details className="rounded border border-white/10 p-2">
+            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-zinc-500">공간 · 방 구조</summary>
+            <div className="mt-2">
+              <SpaceEditor />
+            </div>
+          </details>
         </>
       ) : null}
+      {panel === "assets" ? <AssetPanel /> : null}
       {panel === "shots" ? <ShotEditor /> : null}
       {panel === "ai" ? <ImportPanel onClose={() => setPanel("scene")} /> : null}
       {panel === "render" ? <RenderPanel /> : null}
@@ -190,6 +219,7 @@ function Toast() {
 export default function Studio() {
   const title = useStudio((s) => s.spec.meta.title);
   const [w, h] = useStudio((s) => s.spec.settings.resolution);
+  const layout = useStudio((s) => s.layout);
 
   useEffect(() => {
     let stop: (() => void) | undefined;
@@ -211,6 +241,24 @@ export default function Studio() {
       if (el instanceof HTMLInputElement && !["range", "color", "checkbox"].includes(el.type)) return;
       const s = useStudio.getState();
       if (s.rendering) return;
+      if (s.tool) {
+        // an armed placement / path tool owns Esc (cancel) and Enter (finish path)
+        if (code === "Escape") {
+          e.preventDefault();
+          s.setTool(null);
+          return;
+        }
+        if (code === "Enter" && s.tool.kind === "path") {
+          e.preventDefault();
+          finishPath();
+          return;
+        }
+        if (code === "Backspace" && s.tool.kind === "path") {
+          e.preventDefault();
+          s.setTool({ ...s.tool, points: s.tool.points.slice(0, -1) });
+          return;
+        }
+      }
       if (s.recording) {
         // while recording the keyboard drives the take (see Recorder); only stop keys are handled here
         if (code === "Space" || code === "Escape") {
@@ -273,6 +321,7 @@ export default function Studio() {
       else if (code === "KeyW") s.setGizmoMode("translate");
       else if (code === "KeyE") s.setGizmoMode("rotate");
       else if (code === "KeyS") s.setSnap(!s.snapEnabled);
+      else if (code === "KeyT") s.setLayout(s.layout === "3d" ? "split" : s.layout === "split" ? "plan" : "3d");
       else if (code === "KeyV") s.setView({ kind: "free" });
       else if (code === "Digit0") s.setView({ kind: "shot" });
       else if (/^Digit[1-9]$/.test(code)) {
@@ -291,10 +340,17 @@ export default function Studio() {
       onDrop={(e) => {
         e.preventDefault();
         const f = e.dataTransfer.files[0];
-        if (f) void f.text().then((text) => loadSpecText(text, f.name));
+        if (!f) return;
+        if (/\.glb$/i.test(f.name)) {
+          // a dropped model: import it, then arm placement so the next floor click puts it down
+          void importGlb(f).then((id) => id && useStudio.getState().setTool({ kind: "place", ref: { kind: "prop", type: "model", asset: id } }));
+          useStudio.getState().setPanel("assets");
+          return;
+        }
+        void f.text().then((text) => loadSpecText(text, f.name));
       }}
     >
-      <header className="flex items-center gap-4 border-b border-white/10 px-4 py-2.5">
+      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-white/10 px-4 py-2.5">
         <Link href="/projects" className="rounded bg-white/10 px-2.5 py-1 text-xs hover:bg-white/20" title="프로젝트 목록 (자동 저장됨)">
           ← 프로젝트
         </Link>
@@ -309,18 +365,29 @@ export default function Studio() {
           }}
           onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
         />
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex flex-wrap items-center gap-3">
+          <LayoutButtons />
           <ViewButtons />
           <Toolbar onImport={() => useStudio.getState().setPanel("ai")} />
         </div>
       </header>
       <div className="flex min-h-0 flex-1">
-        <main className="relative flex min-w-0 flex-1 items-center justify-center bg-black p-3">
-          {/* viewport is locked to the render aspect ratio so framing matches the output */}
-          <div className="relative max-h-full w-full" style={{ aspectRatio: `${w} / ${h}`, maxWidth: `calc((100dvh - 150px) * ${w / h})` }}>
+        <main className="relative flex min-w-0 flex-1 items-center justify-center gap-3 bg-black p-3">
+          {/* viewport is locked to the render aspect ratio so framing matches the output; hidden (not unmounted) in plan-only layout */}
+          <div
+            className={layout === "plan" ? "hidden" : "relative max-h-full"}
+            style={{ aspectRatio: `${w} / ${h}`, width: layout === "split" ? "52%" : "100%", flex: layout === "split" ? "none" : undefined, maxWidth: layout === "split" ? undefined : `calc((100dvh - 150px) * ${w / h})` }}
+          >
             <Viewport />
             <ShotHud />
+            {layout === "3d" ? <ToolHud /> : null}
           </div>
+          {layout !== "3d" ? (
+            <div className="relative h-full min-w-0 flex-1 overflow-hidden rounded border border-white/10">
+              <PlanView className="h-full w-full" />
+              <ToolHud />
+            </div>
+          ) : null}
         </main>
         <SidePanel />
       </div>
