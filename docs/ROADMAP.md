@@ -104,6 +104,7 @@
 - [x] 뼈 키프레임: `bone:<이름>`/`hips` 트랙(오일러 도, 키 구간 오버라이드), 포즈 키·복사·좌우 반전, 자동 모션 → 키 굳히기(bake, RDP)·해제, 뷰포트 뼈 선택 + 회전 입력, AI addon `tracks`·`actor.bone()`
 - [x] 코드 API(Remotion 스타일): `interpolate`/`spring`/`noise`, `scene.sequence`(시간 오프셋), `scene.animate`/`actor.boneFn`(시간 함수 → 키 샘플링)
 - [x] `drive.drift`(0–1): 코너 슬립각 드리프트(체이싱), 붙여넣기 프롬프트에 차량·코드 API·액션 연출 팁 포함(MCP 지침과 동일 수준)
+- [x] 내가 배치한 장면에 MCP로 애니메이션 추가: 툴바 🔗 링크 복사 + MCP `load_link`(링크 속 장면 읽기), /guide 프롬프트 ⑦
 - [ ] 인물 리깅: 지금은 관절 11개의 프리미티브 마네킹(절차적 포즈). 스킨 메시·목/손목/발목/손가락, 모션 클립(걷기 외), 리깅된 GLB 캐릭터와 애니메이션 임포트는 미구현
 
 ## M5 이후

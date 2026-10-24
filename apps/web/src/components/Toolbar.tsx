@@ -5,7 +5,7 @@ import { PROP_TYPES } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
 import { addActorCmd, addCameraCmd, addCameraFromFreeView, addPropCmd } from "@/lib/actions";
 import { getBridge } from "@/lib/render";
-import { downloadSpec, openSpecFile } from "@/lib/persist";
+import { copyShareLink, downloadSpec, openSpecFile } from "@/lib/persist";
 
 const btn = "whitespace-nowrap rounded bg-white/10 px-2.5 py-1 text-xs hover:bg-white/20 disabled:opacity-40";
 const PROP_LABEL: Record<string, string> = {
@@ -83,6 +83,9 @@ export function Toolbar({ onImport }: { onImport: () => void }) {
       />
       <button className={btn} onClick={downloadSpec} title="장면을 .blockshot.json 파일로 저장 (다시 열어서 편집 가능)">
         프로젝트 저장
+      </button>
+      <button className={btn} onClick={() => void copyShareLink()} title="장면이 통째로 들어 있는 링크를 복사합니다 — AI(MCP)에게 주면 내가 배치한 장면에 애니메이션을 추가해 줍니다">
+        🔗 링크 복사
       </button>
       <button
         className="rounded bg-emerald-500 px-2.5 py-1 text-xs font-medium text-black hover:bg-emerald-400"

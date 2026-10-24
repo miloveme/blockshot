@@ -21,6 +21,7 @@ Vercel 프로젝트 환경변수 `mcp_token`(또는 `MCP_TOKEN`)을 설정하면
 | `animate_prompt` | `spec`, `request`, `mode?` | 앱 안 AI가 쓰는 애니메이션 프롬프트(규칙+장면 묘사) |
 | `evaluate` | `spec`, `times[]`, `bones?` | 해당 시각의 정확한 위치·방향·포즈·뼈 각도(도)·카메라 |
 | `preview` | `spec`, `t`, `view`: camera/top, `camera?`, `width?` | **PNG 이미지** — 카메라 시점(실제 리그 골격·소품 박스·바닥 격자) 또는 탑뷰(방향 화살표·카메라 시야) |
+| `load_link` | `url`(스튜디오 🔗 링크 복사로 만든 링크) | 링크 속 장면을 읽어 인물·소품·카메라·기존 동작 요약 + spec 반환 — **내가 배치한 장면에 애니메이션만 추가**할 때 시작점 |
 | `open_link` | `spec` | 스튜디오에서 이 장면을 여는 URL |
 
 권장 루프: `get_guide` → `run_script` → `preview`(여러 시각) / `evaluate`로 확인 → 고쳐서 `run_script`(base 넘겨 부분 수정) → `open_link`를 사용자에게 전달. 사용자는 링크에서 재생하고 키프레임·뼈를 직접 손본다.
@@ -55,7 +56,7 @@ claude mcp add blockshot-local -e BLOCKSHOT_URL=https://blockshot-eta.vercel.app
 - 요구사항: Node 22+, Chrome(Edge/Chromium) — 렌더 도구에만 필요, 환경변수 `BLOCKSHOT_URL`·`BLOCKSHOT_CHROME`
 - **로컬 stdio는 `MCP_TOKEN` 없이 동작**: 토큰은 원격 `/api/mcp`(POST)만 보호한다. 로컬 서버는 네트워크 엔드포인트가 없고 파일은 공개 정적 다운로드다(렌더 때만 Chrome이 스튜디오 페이지를 받아 온다)
 - 기존 원격 등록을 로컬로 **전환**하는 절차(원격 항목 찾기 → 제거(저장된 토큰도 함께 사라짐) → 로컬 등록, 같은 이름 재사용 가능)
-- **검증**: `printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n' | node ~/.blockshot/blockshot-mcp.mjs` → 도구 목록 한 줄. 새 세션에서 로컬 서버는 정확히 10개 도구(`get_guide, run_script, validate_spec, apply_addon, animate_prompt, evaluate, preview, open_link, render_video, render_still`)이고 `local_setup`이 없으며, 원격은 11개(`local_setup` + 렌더 안내용 스텁 포함). 이어서 `run_script` → `render_still` PNG까지 확인
+- **검증**: `printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n' | node ~/.blockshot/blockshot-mcp.mjs` → 도구 목록 한 줄. 새 세션에서 로컬 서버는 정확히 11개 도구(`get_guide, run_script, validate_spec, apply_addon, animate_prompt, evaluate, preview, load_link, open_link, render_video, render_still`; 개수와 목록은 `local_setup`이 코드에서 직접 계산)이고 `local_setup`이 없으며, 원격은 12개(`local_setup` + 렌더 안내용 스텁 포함). 이어서 `run_script` → `render_still` PNG까지 확인
 
 **프롬프트로 맡기기**: `/guide`의 "AI에게 MCP 연결 맡기기"에 복사용 프롬프트가 있다(로컬 설치·원격 연결·원격→로컬 전환·Codex·연결 점검·첫 작업). 같은 안내 전체는 공개 문서 `/docs/mcp-setup.md`(`pnpm --filter @blockshot/mcp build`가 `localSetupText`로 생성)에도 있어 웹을 읽는 AI는 주소만 알려 줘도 된다.
 
@@ -66,6 +67,10 @@ claude mcp add blockshot-local -e BLOCKSHOT_URL=https://blockshot-eta.vercel.app
 어느 쪽을 쓸지: 데스크톱은 **로컬**(비용 0, MP4 가능), 설치가 안 되는 곳은 **원격**. 둘 다 등록해도 된다(이름만 다르게).
 
 패키지 구조: 도구 정의는 `packages/mcp/src/tools.ts`(호스트 무관). 원격(`apps/web/src/server/mcp.ts`)과 로컬(`node-platform.ts` + `cli.ts`)이 각자 샌드박스·PNG 처리를 주입한다. 스튜디오 페이지는 `window.__blockshot`(`lib/render.ts`)로 헤드리스 렌더 API를 노출한다.
+
+## 내가 배치한 장면에 애니메이션 추가 (링크 방식)
+
+서버는 아무것도 저장하지 않으므로 장면은 링크로 넘긴다: 스튜디오 툴바 **🔗 링크 복사**(`/studio#s=…` — 장면 전체가 URL 조각에 들어 있음) → AI에게 "이 링크 장면에 애니메이션 추가해 줘: <링크>" → AI가 `load_link`로 읽고 `run_script`(`base` + `scene.use(id)`) / `apply_addon`으로 동작·카메라·샷만 추가 → `preview`로 확인 → `open_link`/`run_script`가 주는 새 링크를 열면 새 프로젝트로 들어온다. 링크가 매우 길면(수만 자) 일부 앱에서 잘리므로 그때는 `.blockshot.json`을 붙여넣는다. `/guide` 프롬프트 ⑦ 참고.
 
 ## 구현 메모
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BASE_TOOLS, REMOTE_EXTRA_TOOLS, handleRpc } from "../src";
+import { BASE_TOOLS, LOCAL_TOOL_NAMES, REMOTE_EXTRA_TOOLS, handleRpc, shareLink, specFromShareLink } from "../src";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { initPng, nodePlatform } from "../src/node-platform";
@@ -64,9 +64,30 @@ describe("shared MCP tools on the node platform", () => {
       // backslashes must survive the template literal (Windows path, printf newline)
       String.raw`-OutFile $HOME\.blockshot\blockshot-mcp.mjs`,
       String.raw`"method":"tools/list"}\n' | node`,
-      "get_guide, run_script, validate_spec, apply_addon, animate_prompt, evaluate, preview, open_link, render_video, render_still",
+      LOCAL_TOOL_NAMES.join(", "),
+      `exactly these ${LOCAL_TOOL_NAMES.length} tools`,
     ]) expect(text).toContain(needle);
     const init = (await rpc("initialize", { protocolVersion: "2025-06-18" })).result.instructions as string;
     expect(init).toContain("local_setup");
+  });
+
+  it("load_link reads a studio share link back into the same scene", async () => {
+    const text: string = (await call("run_script", { source: SCRIPT })).content[0].text;
+    const spec = JSON.parse(text.slice(text.indexOf("spec:\n") + 6));
+    const link = shareLink("https://elsewhere.test", spec);
+    const back = await call("load_link", { url: `보세요: ${link} 감사합니다`.replace(/ 감사합니다$/, "") });
+    expect(back.isError).toBeUndefined();
+    expect(back.content[0].text).toContain("Loaded the user's scene");
+    expect(JSON.parse(back.content[0].text.slice(back.content[0].text.indexOf("spec:\n") + 6))).toEqual(spec);
+    expect("spec" in specFromShareLink(link.split("#s=")[1]!)).toBe(true); // bare payload works too
+    expect((await call("load_link", { url: "https://x.test/studio#s=%%%" })).isError).toBe(true);
+    expect((await call("load_link", { url: "https://x.test/studio#s=AAAAAAAAAAAA" })).isError).toBe(true); // valid base64, not a scene
+  });
+
+  it("the advertised tool lists match the real ones", async () => {
+    const local = (await rpc("tools/list")).result.tools.map((t: { name: string }) => t.name);
+    expect(LOCAL_TOOL_NAMES.slice(0, local.length)).toEqual(local);
+    const hosted = ((await handleRpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }, platform, [...BASE_TOOLS, ...REMOTE_EXTRA_TOOLS])) as { result: { tools: unknown[] } }).result.tools;
+    expect(hosted.length).toBe(BASE_TOOLS.length + 3);
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { sharedSpecFromHash } from "./share";
+import { makeShareLink, sharedSpecFromHash } from "./share";
 import { validateSpec, type BlockshotSpec } from "@blockshot/core";
 import example from "@blockshot/core/examples/living-room.json";
 import { useStudio } from "./store";
@@ -83,4 +83,19 @@ export function downloadSpec() {
   a.click();
   URL.revokeObjectURL(a.href);
   if (spec.assets.length) useStudio.getState().notify("저장됨 — 모델(GLB) 파일은 JSON에 포함되지 않습니다. 다른 브라우저에서 열면 모델을 다시 불러와야 합니다");
+}
+
+/** Copies a link that contains the whole scene, to hand to an AI ("animate what I placed") or to share. */
+export async function copyShareLink() {
+  const { spec, notify } = useStudio.getState();
+  const link = await makeShareLink(spec);
+  try {
+    await navigator.clipboard.writeText(link);
+  } catch {
+    notify("클립보드에 복사하지 못했습니다 — 브라우저 권한을 확인하세요", "error");
+    return;
+  }
+  // some apps cut very long URLs; the .blockshot.json file always works
+  if (link.length > 12000) notify(`링크를 복사했습니다 (${Math.round(link.length / 1000)}k자 — 길어서 일부 앱에서 잘릴 수 있어요. 그럴 땐 프로젝트 저장 파일을 쓰세요)`);
+  else notify("링크를 복사했습니다 — AI에게 “이 링크 장면에 애니메이션 추가해 줘: <링크>”라고 붙여넣으세요");
 }
