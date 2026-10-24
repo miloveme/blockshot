@@ -87,6 +87,7 @@ Workflow
 3. preview { spec, t, view: "camera"|"top" } → a PNG of that moment (stick-figure skeletons + prop boxes through the real camera; top view shows facing and camera frustums). Look at it before you answer; check several times.
 4. evaluate { spec, times } → exact numbers (positions, poses, camera state) when you need to verify distances, facing, timing.
 5. open_link { spec } → the URL to give the user.
+6. MP4 / real 3D renders: not on this hosted server. If you can run shell commands for the user, call local_setup and (after asking them) install the local server — it adds render_video and render_still. Otherwise give the user the link; the studio exports the MP4 in their browser.
 
 Conventions: Y-up, metres, seconds, degrees. rotation.y = 0 faces +Z. An actor's local +X is the actor's LEFT. Time starts at 0.
 Acting: prefer actions (walkTo, sitDown, gesture, hold, drive…), use scene.sequence/animate/boneFn and interpolate/spring/noise for procedural motion, and bone keyframes ("bone:<name>" tracks) for specific postures — all of it stays editable by the user.
@@ -228,6 +229,58 @@ export const BASE_TOOLS: Tool[] = [
   },
 ];
 
+/** How an AI with a shell installs the local server from the hosted site (one file, no npm). */
+export function localSetupText(origin: string): string {
+  const url = `${origin}/mcp/blockshot-mcp.mjs`;
+  return `# Install the LOCAL Blockshot MCP (adds render_video = real MP4 and render_still = real 3D PNG; costs the hosted server nothing)
+
+Do this only if you can run shell commands on the user's computer (e.g. Claude Code) — ASK THE USER FIRST, and tell them what you will do: download one file from ${origin} into ~/.blockshot and register it as an MCP server. If you cannot run commands (claude.ai chat, phone, iPad), skip this: keep using this hosted server (scripts, preview, links work everywhere), and tell the user to open the link from open_link and use the studio's "영상 렌더" button to export the MP4 in their browser.
+
+Requirements: Node.js 22+ (check: node -v) and Google Chrome (or Edge/Chromium; set BLOCKSHOT_CHROME to its path if it is not in a standard location). Nothing else — the file bundles everything.
+
+macOS / Linux:
+  mkdir -p ~/.blockshot && curl -fsSL ${url} -o ~/.blockshot/blockshot-mcp.mjs
+Windows (PowerShell):
+  New-Item -ItemType Directory -Force $HOME\.blockshot | Out-Null; Invoke-WebRequest ${url} -OutFile $HOME\.blockshot\blockshot-mcp.mjs
+
+Register it:
+  Claude Code:  claude mcp add blockshot-local -e BLOCKSHOT_URL=${origin} -- node ~/.blockshot/blockshot-mcp.mjs
+  Other MCP clients (JSON): { "command": "node", "args": ["<home>/.blockshot/blockshot-mcp.mjs"], "env": { "BLOCKSHOT_URL": "${origin}" } }
+
+The new tools appear after the MCP client reloads its servers (in Claude Code: start a new session or run /mcp). Then call render_video / render_still on the local server "blockshot-local" with the same spec. To update later, download the file again.`;
+}
+
+const NEEDS_LOCAL = (origin: string) =>
+  `Real rendering (MP4 / 3D PNG) is not available on the hosted server — it runs on the user's own machine.\n\n${localSetupText(origin)}`;
+
+/** Tools only the hosted (remote) server has: it cannot render, but it tells the AI how to get a local server that can. */
+export const REMOTE_EXTRA_TOOLS: Tool[] = [
+  {
+    name: "local_setup",
+    description: "How to install the local Blockshot MCP (one downloaded file) so that render_video (MP4) and render_still (real 3D PNG) become available. Call it when the user wants an MP4/video export or a high-fidelity image and you can run shell commands.",
+    inputSchema: { type: "object", properties: {} },
+    async run(_a, p) {
+      return ok(text(localSetupText(p.origin)));
+    },
+  },
+  {
+    name: "render_video",
+    description: "Export the scene as an MP4. NOT available on the hosted server — returns the steps to install the local server that can (needs a shell on the user's computer); without a shell, the user exports from the studio link.",
+    inputSchema: { type: "object", properties: { spec: SPEC_PROP } },
+    async run(_a, p) {
+      return fail(NEEDS_LOCAL(p.origin));
+    },
+  },
+  {
+    name: "render_still",
+    description: "A real 3D PNG of the scene (the studio's renderer). NOT available on the hosted server — returns the steps to install the local server that can; use preview for a schematic image meanwhile.",
+    inputSchema: { type: "object", properties: { spec: SPEC_PROP, t: { type: "number" } } },
+    async run(_a, p) {
+      return fail(NEEDS_LOCAL(p.origin));
+    },
+  },
+];
+
 const PROTOCOLS = ["2025-06-18", "2025-03-26", "2024-11-05"];
 
 interface RpcRequest {
@@ -249,7 +302,7 @@ export async function handleRpc(msg: RpcRequest, platform: Platform, tools: Tool
         protocolVersion: PROTOCOLS.includes(asked) ? asked : PROTOCOLS[0],
         capabilities: { tools: {} },
         serverInfo: { name: "blockshot", version: "0.1.0" },
-        instructions: "Blockshot: author previz scenes with code. Call get_guide first, then run_script, preview, evaluate, open_link.",
+        instructions: "Blockshot: author previz scenes with code. Call get_guide first, then run_script, preview, evaluate, open_link. MP4 export / real 3D renders need the local server — call local_setup (or render_video) for how to install it if you can run shell commands.",
       });
     }
     case "ping":

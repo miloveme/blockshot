@@ -8,7 +8,7 @@
     ".": "./src/index.ts"
   },
   "bin": {
-    "blockshot-mcp": "./dist/cli.mjs"
+    "blockshot-mcp": "./dist/blockshot-mcp.mjs"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -21,9 +21,9 @@
   "devDependencies": {
     "@jitl/quickjs-singlefile-mjs-release-sync": "^0.32.0",
     "@resvg/resvg-js": "^2.6.2",
+    "@resvg/resvg-wasm": "^2.6.2",
     "@types/node": "^24.19.2",
     "esbuild": "^0.28.2",
-    "playwright-core": "^1.50.0",
     "quickjs-emscripten-core": "^0.32.0",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",

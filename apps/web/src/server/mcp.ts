@@ -2,7 +2,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Resvg } from "@resvg/resvg-js";
-import { FONT_BASE64, handleRpc as handle, type Platform } from "@blockshot/mcp";
+import { BASE_TOOLS, FONT_BASE64, REMOTE_EXTRA_TOOLS, handleRpc as handle, type Platform } from "@blockshot/mcp";
 import { runScriptSandboxed } from "./sandbox";
 
 /** The remote (Vercel) host of the shared MCP tools: QuickJS sandbox + resvg PNG. Tool logic lives in packages/mcp. */
@@ -24,5 +24,5 @@ export function handleRpc(msg: Parameters<typeof handle>[0], origin: string) {
     runScript: (source, base) => runScriptSandboxed(source, base),
     renderPng: (svg) => new Resvg(svg, { font: { fontFiles: [ensureFont()], defaultFontFamily: "Geist", loadSystemFonts: false } }).render().asPng().toString("base64"),
   };
-  return handle(msg, platform);
+  return handle(msg, platform, [...BASE_TOOLS, ...REMOTE_EXTRA_TOOLS]);
 }

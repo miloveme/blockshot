@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { BASE_TOOLS, handleRpc } from "../src";
-import { nodePlatform } from "../src/node-platform";
+import { BASE_TOOLS, REMOTE_EXTRA_TOOLS, handleRpc } from "../src";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { initPng, nodePlatform } from "../src/node-platform";
 
+await initPng(readFileSync(createRequire(import.meta.url).resolve("@resvg/resvg-wasm/index_bg.wasm")));
 const platform = nodePlatform("https://studio.test");
 const rpc = (method: string, params?: Record<string, unknown>, id = 1) => handleRpc({ jsonrpc: "2.0", id, method, params }, platform, BASE_TOOLS) as Promise<{ result?: any; error?: any }>;
 const call = async (name: string, args: Record<string, unknown>) => (await rpc("tools/call", { name, arguments: args })).result;
@@ -35,5 +38,12 @@ describe("shared MCP tools on the node platform", () => {
     expect(Buffer.from(img.data, "base64").subarray(1, 4).toString()).toBe("PNG");
     const ev = JSON.parse((await call("evaluate", { spec, times: [0, 2], bones: ["head"] })).content[0].text);
     expect(ev[1].actors.a.bones.head[1]).toBeCloseTo(40, 0);
+  });
+
+  it("the hosted server explains how to install the local one instead of rendering", async () => {
+    const r = (await handleRpc({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "render_video", arguments: {} } }, platform, [...BASE_TOOLS, ...REMOTE_EXTRA_TOOLS])) as { result: { isError: boolean; content: { text: string }[] } };
+    expect(r.result.isError).toBe(true);
+    expect(r.result.content[0]!.text).toContain("https://studio.test/mcp/blockshot-mcp.mjs");
+    expect(r.result.content[0]!.text).toContain("claude mcp add blockshot-local");
   });
 });

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { createInterface } from "node:readline";
 import { handleRpc, BASE_TOOLS } from "./tools";
-import { nodePlatform } from "./node-platform";
+import { initPng, nodePlatform } from "./node-platform";
+import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 import { localRenderTools } from "./local-render";
 
 /**
@@ -12,6 +13,7 @@ import { localRenderTools } from "./local-render";
  *
  * Env: BLOCKSHOT_URL (studio to open links / render in; default https://blockshot-eta.vercel.app), BLOCKSHOT_CHROME (Chrome path).
  */
+await initPng(resvgWasm);
 const studioUrl = (process.env.BLOCKSHOT_URL ?? "https://blockshot-eta.vercel.app").replace(/\/+$/, "");
 const platform = nodePlatform(studioUrl);
 const tools = [...BASE_TOOLS, ...localRenderTools(studioUrl)];

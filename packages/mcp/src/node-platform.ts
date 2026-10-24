@@ -1,9 +1,6 @@
-import { existsSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { newQuickJSWASMModuleFromVariant, type QuickJSWASMModule } from "quickjs-emscripten-core";
 import variant from "@jitl/quickjs-singlefile-mjs-release-sync";
-import { Resvg } from "@resvg/resvg-js";
+import { Resvg, initWasm } from "@resvg/resvg-wasm";
 import { FONT_BASE64 } from "./font.generated";
 import { SANDBOX_RUNTIME } from "./runtime.generated";
 import { ScriptError, type Platform } from "./tools";
@@ -48,17 +45,17 @@ export async function runScriptSandboxed(source: string, base: unknown, opts: { 
   }
 }
 
-let fontFile: string | null = null;
-function ensureFont(): string {
-  if (!fontFile) {
-    const f = join(tmpdir(), "blockshot-geist.ttf");
-    if (!existsSync(f)) writeFileSync(f, Buffer.from(FONT_BASE64, "base64"));
-    fontFile = f;
-  }
-  return fontFile;
+// The PNG encoder is resvg compiled to WASM (embedded in the CLI bundle), so the local server is ONE self-contained file
+// with no native add-ons to install.
+let wasmReady: Promise<void> | null = null;
+const font = () => new Uint8Array(Buffer.from(FONT_BASE64, "base64"));
+
+export async function initPng(wasm: Uint8Array): Promise<void> {
+  wasmReady ??= initWasm(wasm);
+  await wasmReady;
 }
 
 export const pngFromSvg = (svg: string): string =>
-  new Resvg(svg, { font: { fontFiles: [ensureFont()], defaultFontFamily: "Geist", loadSystemFonts: false } }).render().asPng().toString("base64");
+  Buffer.from(new Resvg(svg, { font: { fontBuffers: [font()], defaultFontFamily: "Geist", loadSystemFonts: false } }).render().asPng()).toString("base64");
 
 export const nodePlatform = (origin: string): Platform => ({ origin, runScript: (source, base) => runScriptSandboxed(source, base), renderPng: pngFromSvg });

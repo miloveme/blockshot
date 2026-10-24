@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { validateSpec, type BlockshotSpec } from "@blockshot/core";
+import { openPage, type ChromePage } from "./chrome";
 import { shareLink, type Content, type Tool, type ToolResult } from "./tools";
 
 /**
@@ -13,41 +14,25 @@ import { shareLink, type Content, type Tool, type ToolResult } from "./tools";
 const text = (t: string): Content => ({ type: "text", text: t });
 const fail = (msg: string): ToolResult => ({ content: [text(msg)], isError: true });
 
-interface PageApi {
-  ready(): boolean;
-  video(req: Record<string, unknown>): Promise<{ base64: string; extension: string; frames: number; seconds: number; cameraLog: unknown }>;
-  still(req: Record<string, unknown>): Promise<{ base64: string }>;
-}
-declare global {
-  interface Window {
-    __blockshot?: PageApi;
-  }
+interface PageVideo {
+  base64: string;
+  extension: string;
+  frames: number;
+  seconds: number;
 }
 
-async function withStudio<T>(studioUrl: string, spec: BlockshotSpec, fn: (page: import("playwright-core").Page) => Promise<T>): Promise<T> {
-  let chromium: typeof import("playwright-core").chromium;
+async function withStudio<T>(studioUrl: string, spec: BlockshotSpec, fn: (page: ChromePage) => Promise<T>): Promise<T> {
+  const page = await openPage(shareLink(studioUrl, spec));
   try {
-    ({ chromium } = await import("playwright-core"));
-  } catch {
-    throw new Error("playwright-core is not installed (npm i playwright-core) — it drives your local Chrome for rendering");
-  }
-  const args = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--enable-webgl"];
-  const exe = process.env.BLOCKSHOT_CHROME;
-  let browser;
-  try {
-    browser = await chromium.launch(exe ? { executablePath: exe, args } : { channel: "chrome", args });
-  } catch (e) {
-    throw new Error(`Could not start Chrome (${(e as Error).message.split("\n")[0]}). Install Google Chrome, or set BLOCKSHOT_CHROME to a Chrome/Chromium executable.`);
-  }
-  try {
-    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
-    await page.goto(shareLink(studioUrl, spec), { waitUntil: "load" });
-    await page.waitForFunction(() => window.__blockshot?.ready(), undefined, { timeout: 60_000 }).catch(() => {
-      throw new Error(`The studio at ${studioUrl} did not become ready (is it updated to a version with the render API?)`);
-    });
+    const deadline = Date.now() + 60_000;
+    for (;;) {
+      if (await page.evaluate<boolean>("Boolean(window.__blockshot && window.__blockshot.ready())", 5000).catch(() => false)) break;
+      if (Date.now() > deadline) throw new Error(`The studio at ${studioUrl} did not become ready (is it updated to a version with the render API?)`);
+      await new Promise((r) => setTimeout(r, 500));
+    }
     return await fn(page);
   } finally {
-    await browser.close();
+    await page.close();
   }
 }
 
@@ -68,7 +53,7 @@ export function localRenderTools(studioUrl: string): Tool[] {
         const spec = specOf(a.spec);
         if (!spec) return fail("The scene is invalid — validate it with validate_spec first.");
         try {
-          const r = await withStudio(studioUrl, spec, (page) => page.evaluate((req) => window.__blockshot!.video(req), { range: a.range, camera: a.camera, scale: a.scale, pass: a.pass }));
+          const r = await withStudio(studioUrl, spec, (page) => page.evaluate<PageVideo>(`window.__blockshot.video(${JSON.stringify({ range: a.range, camera: a.camera, scale: a.scale, pass: a.pass })})`));
           const title = (spec.meta.title ?? "blockshot").replace(/[^\p{L}\p{N}_-]+/gu, "_") || "blockshot";
           const wanted = a.output ? resolve(String(a.output)) : null;
           // the container follows the codec the browser could encode (.mp4 with H.264, otherwise .webm)
@@ -89,7 +74,7 @@ export function localRenderTools(studioUrl: string): Tool[] {
         const spec = specOf(a.spec);
         if (!spec) return fail("The scene is invalid — validate it with validate_spec first.");
         try {
-          const r = await withStudio(studioUrl, spec, (page) => page.evaluate((req) => window.__blockshot!.still(req), { t: a.t, camera: a.camera, width: a.width, pass: a.pass }));
+          const r = await withStudio(studioUrl, spec, (page) => page.evaluate<{ base64: string }>(`window.__blockshot.still(${JSON.stringify({ t: a.t, camera: a.camera, width: a.width, pass: a.pass })})`));
           return { content: [{ type: "image", data: r.base64, mimeType: "image/png" }] };
         } catch (e) {
           return fail(`Render failed: ${(e as Error).message}`);

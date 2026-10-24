@@ -25,30 +25,35 @@ Vercel 프로젝트 환경변수 `mcp_token`(또는 `MCP_TOKEN`)을 설정하면
 
 권장 루프: `get_guide` → `run_script` → `preview`(여러 시각) / `evaluate`로 확인 → 고쳐서 `run_script`(base 넘겨 부분 수정) → `open_link`를 사용자에게 전달. 사용자는 링크에서 재생하고 키프레임·뼈를 직접 손본다.
 
-## 로컬에서 실행 (`blockshot-mcp`, stdio) — 서버 비용 0, MP4까지
+## 로컬에서 실행 (`blockshot-mcp`) — 서버 비용 0, MP4까지
 
-같은 도구를 내 컴퓨터에서 직접 돌린다. 스크립트는 같은 QuickJS 샌드박스, 프리뷰는 resvg로 로컬에서 처리하므로 Vercel을 전혀 쓰지 않는다. 로컬에서만 되는 도구가 둘 더 있다.
+같은 도구를 내 컴퓨터에서 직접 돌린다. 스크립트는 같은 QuickJS 샌드박스, 프리뷰는 resvg(WASM)로 로컬 처리하므로 Vercel을 쓰지 않는다. 로컬에서만 되는 도구가 둘 더 있다.
 
 | 도구 | 설명 |
 |---|---|
 | `render_still` | 스튜디오와 같은 **진짜 3D 렌더** PNG (`preview` 도식보다 훨씬 정확, 몇 초) |
 | `render_video` | 장면을 **MP4(Chrome이 H.264를 지원하지 않으면 WebM)로 렌더**해 파일로 저장하고 경로를 돌려준다. `range`(샷 id/`all`)·`camera`·`scale`·`pass` 선택 |
 
-렌더는 **내 컴퓨터의 Chrome(헤드리스)** 이 스튜디오 페이지를 열어(`BLOCKSHOT_URL`, 기본은 배포본) 브라우저 렌더러+WebCodecs로 인코딩한다 — 렌더 서버 없음. 소프트웨어 WebGL이라 몇 초 영상도 수십 초~수 분 걸릴 수 있다.
+렌더는 **내 컴퓨터의 Chrome(헤드리스)** 이 스튜디오 페이지를 열어(`BLOCKSHOT_URL`) 브라우저 렌더러+WebCodecs로 인코딩한다 — 렌더 서버 없음. Chrome은 DevTools 프로토콜로 직접 제어한다(`src/chrome.ts`, Playwright 불필요). 소프트웨어 WebGL이라 몇 초 영상도 수십 초~수 분 걸릴 수 있다.
 
-설치(저장소를 받은 경우):
+### AI가 알아서 설치하게 하기 (권장)
+
+원격 MCP에 연결해 두면 된다. 원격 서버의 `local_setup` 도구(와 `render_video`/`render_still` 안내 응답, 서버 `instructions`)가 AI에게 설치 절차를 알려 준다. 셸을 쓸 수 있는 AI(Claude Code 등)는 **사용자에게 물어본 뒤** 파일 하나를 내려받아 등록한다:
 
 ```
-pnpm install && pnpm --filter @blockshot/mcp build      # → packages/mcp/dist/cli.mjs
-claude mcp add blockshot -- node /절대경로/blockshot/packages/mcp/dist/cli.mjs
+mkdir -p ~/.blockshot && curl -fsSL https://blockshot-eta.vercel.app/mcp/blockshot-mcp.mjs -o ~/.blockshot/blockshot-mcp.mjs
+claude mcp add blockshot-local -e BLOCKSHOT_URL=https://blockshot-eta.vercel.app -- node ~/.blockshot/blockshot-mcp.mjs
 ```
 
-필요한 것: Node 22+, Google Chrome(없으면 `BLOCKSHOT_CHROME`에 크롬/크로미움 실행 파일 경로). `render_*`를 쓸 때만 필요하다.
-환경변수: `BLOCKSHOT_URL`(링크·렌더에 쓰는 스튜디오 주소, 로컬 개발 서버면 `http://localhost:3000`), `BLOCKSHOT_CHROME`.
+필요한 것: Node 22+, Google Chrome(또는 Edge/Chromium; 표준 위치가 아니면 `BLOCKSHOT_CHROME`). 번들 하나(약 5 MB)에 전부 들어 있어 npm 설치가 없다. 도구는 MCP 클라이언트가 서버 목록을 다시 읽은 뒤(Claude Code는 새 세션/`/mcp`) 나타난다.
 
-어느 쪽을 쓸지: 데스크톱에서는 **로컬**(비용 0, MP4 가능), iPad·모바일처럼 설치가 안 되는 곳은 **원격**. 둘 다 등록해 두어도 된다(이름만 다르게).
+**설치가 안 되는 환경**(claude.ai 채팅, 모바일, iPad): 원격 MCP(토큰 방식)만 쓴다. 스크립트·프리뷰·링크는 그대로 되고, MP4는 `open_link`로 받은 링크를 열어 스튜디오의 "영상 렌더"로 브라우저에서 내보낸다.
 
-패키지 구조: 도구 정의는 `packages/mcp/src/tools.ts`(호스트 무관), 원격(`apps/web/src/server/mcp.ts`)과 로컬(`node-platform.ts` + `cli.ts`)이 각자 샌드박스·PNG 처리를 주입한다. 스튜디오 페이지는 `window.__blockshot`(`lib/render.ts`)로 헤드리스 렌더 API를 노출한다.
+수동 설치(저장소): `pnpm install && pnpm --filter @blockshot/mcp build` → `packages/mcp/dist/blockshot-mcp.mjs`(빌드는 `apps/web/public/mcp/`에도 복사하며 커밋한다). 환경변수: `BLOCKSHOT_URL`(링크·렌더에 쓰는 스튜디오 주소, 로컬 개발이면 `http://localhost:3000`), `BLOCKSHOT_CHROME`.
+
+어느 쪽을 쓸지: 데스크톱은 **로컬**(비용 0, MP4 가능), 설치가 안 되는 곳은 **원격**. 둘 다 등록해도 된다(이름만 다르게).
+
+패키지 구조: 도구 정의는 `packages/mcp/src/tools.ts`(호스트 무관). 원격(`apps/web/src/server/mcp.ts`)과 로컬(`node-platform.ts` + `cli.ts`)이 각자 샌드박스·PNG 처리를 주입한다. 스튜디오 페이지는 `window.__blockshot`(`lib/render.ts`)로 헤드리스 렌더 API를 노출한다.
 
 ## 구현 메모
 
