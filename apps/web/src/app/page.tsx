@@ -30,6 +30,7 @@ export default function Home() {
         <nav className="flex items-center gap-5 text-sm text-zinc-400">
           <a href="#features" className="hover:text-white">기능</a>
           <a href="#how" className="hover:text-white">사용 방법</a>
+          <Link href="/guide" className="hover:text-white">사용 설명서</Link>
           <Link href="/projects" className="rounded bg-amber-400 px-3.5 py-1.5 font-medium text-black hover:bg-amber-300">
             내 프로젝트
           </Link>
@@ -52,9 +53,9 @@ export default function Home() {
               <Link href="/projects" className="rounded bg-amber-400 px-6 py-3 text-sm font-semibold text-black hover:bg-amber-300">
                 지금 시작하기 →
               </Link>
-              <a href="#how" className="rounded border border-white/15 px-6 py-3 text-sm text-zinc-200 hover:bg-white/5">
-                어떻게 쓰나요
-              </a>
+              <Link href="/guide" className="rounded border border-white/15 px-6 py-3 text-sm text-zinc-200 hover:bg-white/5">
+                사용 설명서 보기
+              </Link>
             </div>
           </div>
           <HeroDiagram />
@@ -92,14 +93,21 @@ export default function Home() {
           <div className="rounded-xl border border-amber-400/30 bg-amber-400/5 px-6 py-12 text-center">
             <h2 className="text-2xl font-semibold tracking-tight">바로 시작해 보세요</h2>
             <p className="mx-auto mt-3 max-w-md text-sm text-zinc-400">새 프로젝트를 만들거나 샘플 거실 장면으로 시작해 보세요. 인물을 옮기고, 렌즈를 바꾸고, 렌더까지 해보세요.</p>
-            <Link href="/projects" className="mt-6 inline-block rounded bg-amber-400 px-6 py-3 text-sm font-semibold text-black hover:bg-amber-300">
-              내 프로젝트 →
-            </Link>
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
+              <Link href="/projects" className="rounded bg-amber-400 px-6 py-3 text-sm font-semibold text-black hover:bg-amber-300">
+                내 프로젝트 →
+              </Link>
+              <Link href="/guide" className="rounded border border-white/15 px-6 py-3 text-sm text-zinc-200 hover:bg-white/5">
+                사용 설명서
+              </Link>
+            </div>
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-white/10 px-6 py-6 text-center text-xs text-zinc-500">Blockshot — 브라우저에서 동작하는 프리비즈 툴</footer>
+      <footer className="border-t border-white/10 px-6 py-6 text-center text-xs text-zinc-500">
+        Blockshot — 브라우저에서 동작하는 프리비즈 툴 · <Link href="/guide" className="hover:text-white">사용 설명서</Link>
+      </footer>
     </div>
   );
 }

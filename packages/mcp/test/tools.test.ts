@@ -46,4 +46,24 @@ describe("shared MCP tools on the node platform", () => {
     expect(r.result.content[0]!.text).toContain("https://studio.test/mcp/blockshot-mcp.mjs");
     expect(r.result.content[0]!.text).toContain("claude mcp add blockshot-local");
   });
+
+  it("local_setup covers install, Codex, requirements, no-token, switching and verification", async () => {
+    const r = (await handleRpc({ jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "local_setup", arguments: {} } }, platform, [...BASE_TOOLS, ...REMOTE_EXTRA_TOOLS])) as { result: { content: { text: string }[] } };
+    const text = r.result.content[0]!.text;
+    for (const needle of [
+      "curl -fsSL https://studio.test/mcp/blockshot-mcp.mjs",
+      "claude mcp add blockshot-local",
+      "[mcp_servers.blockshot-local]",
+      "~/.codex/config.toml",
+      "Node.js 22",
+      "BLOCKSHOT_CHROME",
+      "BLOCKSHOT_URL",
+      "NO token",
+      "claude mcp remove",
+      "tools/list",
+      "get_guide, run_script, validate_spec, apply_addon, animate_prompt, evaluate, preview, open_link, render_video, render_still",
+    ]) expect(text).toContain(needle);
+    const init = (await rpc("initialize", { protocolVersion: "2025-06-18" })).result.instructions as string;
+    expect(init).toContain("local_setup");
+  });
 });

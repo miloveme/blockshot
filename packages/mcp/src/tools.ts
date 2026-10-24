@@ -87,7 +87,7 @@ Workflow
 3. preview { spec, t, view: "camera"|"top" } → a PNG of that moment (stick-figure skeletons + prop boxes through the real camera; top view shows facing and camera frustums). Look at it before you answer; check several times.
 4. evaluate { spec, times } → exact numbers (positions, poses, camera state) when you need to verify distances, facing, timing.
 5. open_link { spec } → the URL to give the user.
-6. MP4 / real 3D renders: not on this hosted server. If you can run shell commands for the user, call local_setup and (after asking them) install the local server — it adds render_video and render_still. Otherwise give the user the link; the studio exports the MP4 in their browser.
+6. MP4 / real 3D renders: not on this hosted server. Call local_setup: it has the exact commands to install the local server (no token needed), register it in Claude Code / Codex / other clients, switch an existing hosted registration to local, and verify it. Do it yourself if you can run shell commands (ask the user first); otherwise give the user the link — the studio exports the MP4 in their browser.
 
 Conventions: Y-up, metres, seconds, degrees. rotation.y = 0 faces +Z. An actor's local +X is the actor's LEFT. Time starts at 0.
 Acting: prefer actions (walkTo, sitDown, gesture, hold, drive…), use scene.sequence/animate/boneFn and interpolate/spring/noise for procedural motion, and bone keyframes ("bone:<name>" tracks) for specific postures — all of it stays editable by the user.
@@ -229,25 +229,60 @@ export const BASE_TOOLS: Tool[] = [
   },
 ];
 
-/** How an AI with a shell installs the local server from the hosted site (one file, no npm). */
+/**
+ * Everything an AI needs to install, register, switch to and verify the local server — without looking at the project's code.
+ * Served by the hosted `local_setup` tool (and summarised in the server `instructions`).
+ */
 export function localSetupText(origin: string): string {
   const url = `${origin}/mcp/blockshot-mcp.mjs`;
-  return `# Install the LOCAL Blockshot MCP (adds render_video = real MP4 and render_still = real 3D PNG; costs the hosted server nothing)
+  return `# Blockshot LOCAL MCP — install, register, switch from the hosted server, verify
 
-Do this only if you can run shell commands on the user's computer (e.g. Claude Code) — ASK THE USER FIRST, and tell them what you will do: download one file from ${origin} into ~/.blockshot and register it as an MCP server. If you cannot run commands (claude.ai chat, phone, iPad), skip this: keep using this hosted server (scripts, preview, links work everywhere), and tell the user to open the link from open_link and use the studio's "영상 렌더" button to export the MP4 in their browser.
+WHAT IT IS: the same Blockshot tools running on the user's own machine over stdio (one self-contained file, ~5 MB, nothing else to install), plus two local-only tools: render_video (real MP4/WebM file) and render_still (real 3D PNG). It needs NO token: MCP_TOKEN only protects the hosted endpoint ${origin}/api/mcp (POST). The local stdio server has no network endpoint to protect, and the file itself is a public static download. The only network use is rendering: headless Chrome loads the studio page from BLOCKSHOT_URL (default ${origin}); scripts, validation and previews run fully offline.
 
-Requirements: Node.js 22+ (check: node -v) and Google Chrome (or Edge/Chromium; set BLOCKSHOT_CHROME to its path if it is not in a standard location). Nothing else — the file bundles everything.
+WHEN TO USE THIS: the user asks for an MP4/video export or a real 3D render, or says things like "register the local MCP", "re-register locally / without the token", "switch to local", "install blockshot locally". You must be able to run shell commands on the user's computer (Claude Code, Codex CLI, …). If you cannot (claude.ai chat, phone, iPad), do NOT try: keep using this hosted server; scripts, preview and links work everywhere, and the user can export the MP4 from the link via the studio's "영상 렌더" button.
 
+ASK FIRST. Tell the user in one sentence what you will do: download one file from ${origin} into ~/.blockshot, register it as an MCP server, and (for a switch) remove the old hosted registration. Never print, log or paste the user's token anywhere; you do not need it.
+
+## 1. Requirements (check before installing)
+- Node.js 22 or newer (uses built-in WebSocket). Check: node -v   → must print v22.x or higher.
+- A Chromium-based browser installed: Google Chrome (recent, 112+ recommended), or Microsoft Edge / Chromium. Only render_video / render_still need it; everything else works without. Standard locations are auto-detected (macOS /Applications/Google Chrome.app, Windows Program Files, Linux /usr/bin/google-chrome|chromium). Otherwise set BLOCKSHOT_CHROME to the executable path.
+- Environment variables (all optional): BLOCKSHOT_URL = studio used for links and rendering (default ${origin}; use http://localhost:3000 for a local dev server), BLOCKSHOT_CHROME = browser executable.
+
+## 2. Download (exact commands)
 macOS / Linux:
   mkdir -p ~/.blockshot && curl -fsSL ${url} -o ~/.blockshot/blockshot-mcp.mjs
 Windows (PowerShell):
   New-Item -ItemType Directory -Force $HOME\.blockshot | Out-Null; Invoke-WebRequest ${url} -OutFile $HOME\.blockshot\blockshot-mcp.mjs
+Updating later = run the same download again. Use an ABSOLUTE path when registering (some clients do not expand ~): on macOS/Linux resolve it with: echo $HOME/.blockshot/blockshot-mcp.mjs
 
-Register it:
-  Claude Code:  claude mcp add blockshot-local -e BLOCKSHOT_URL=${origin} -- node ~/.blockshot/blockshot-mcp.mjs
-  Other MCP clients (JSON): { "command": "node", "args": ["<home>/.blockshot/blockshot-mcp.mjs"], "env": { "BLOCKSHOT_URL": "${origin}" } }
+## 3. Register
+Claude Code (name it "blockshot" if replacing the hosted one, otherwise "blockshot-local"):
+  claude mcp add blockshot-local -e BLOCKSHOT_URL=${origin} -- node /ABSOLUTE/PATH/.blockshot/blockshot-mcp.mjs
+Codex — add to ~/.codex/config.toml (or run: codex mcp add blockshot-local --env BLOCKSHOT_URL=${origin} -- node /ABSOLUTE/PATH/.blockshot/blockshot-mcp.mjs, then check the file):
+  [mcp_servers.blockshot-local]
+  command = "node"
+  args = ["/ABSOLUTE/PATH/.blockshot/blockshot-mcp.mjs"]
+  env = { BLOCKSHOT_URL = "${origin}" }
+Other MCP clients (JSON):
+  { "mcpServers": { "blockshot-local": { "command": "node", "args": ["/ABSOLUTE/PATH/.blockshot/blockshot-mcp.mjs"], "env": { "BLOCKSHOT_URL": "${origin}" } } } }
+No Authorization header, no token, no URL — it is a command, not a remote server.
 
-The new tools appear after the MCP client reloads its servers (in Claude Code: start a new session or run /mcp). Then call render_video / render_still on the local server "blockshot-local" with the same spec. To update later, download the file again.`;
+## 4. Switching an existing hosted (remote) registration to local
+1. Find the old entry: Claude Code: claude mcp list   (the one whose URL ends in /api/mcp). Codex: look in ~/.codex/config.toml for a [mcp_servers.*] block with url = ".../api/mcp" (and a bearer token / http_headers). Other clients: their MCP config file.
+2. Remove it: Claude Code: claude mcp remove <name>.  Codex: delete that [mcp_servers.<name>] block. This also removes the stored token from the client config — you never need to handle it.
+3. Do steps 2–3 above (download + register). Re-using the same name (e.g. "blockshot") keeps the tool names the user is used to; use "blockshot-local" if they want both. Registering both is fine: the hosted one (with token) works on any device, the local one adds the MP4/3D render tools.
+4. Tell the user the new tools appear after the client reloads its MCP servers: Claude Code → start a NEW session (or /mcp); Codex → restart codex. You usually cannot call the new server in the current session.
+
+## 5. Verify (do this before telling the user it worked)
+a) File/Node sanity, works without any MCP client:
+   printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n' | node /ABSOLUTE/PATH/.blockshot/blockshot-mcp.mjs
+   → prints ONE JSON line containing the tool list and exits. If it errors: wrong Node version (<22), truncated download (re-download), or wrong path.
+b) Client sees it: claude mcp list (shows "blockshot-local … Connected"), or /mcp inside Claude Code; for Codex: codex mcp list.
+c) In the NEW session the local server must expose exactly these 10 tools:
+   get_guide, run_script, validate_spec, apply_addon, animate_prompt, evaluate, preview, open_link, render_video, render_still
+   How to tell local from hosted: the local server has NO local_setup tool, and its render_video description starts with "LOCAL ONLY". The hosted server has 11 tools (those 8 + local_setup + render_video + render_still stubs that only explain how to install).
+d) Functional test: call run_script with a tiny scene, then render_still (t=0); a PNG must come back. render_video writes a file under ~/Blockshot/renders/ (or the "output" path) and returns its path. If render_* fails with "Google Chrome was not found" → install Chrome or set BLOCKSHOT_CHROME; if it says the studio did not become ready → check the machine can reach BLOCKSHOT_URL.
+Only after (a) and (b) succeed, report success; mention if you could not run (c)/(d) in the current session.`;
 }
 
 const NEEDS_LOCAL = (origin: string) =>
@@ -257,7 +292,8 @@ const NEEDS_LOCAL = (origin: string) =>
 export const REMOTE_EXTRA_TOOLS: Tool[] = [
   {
     name: "local_setup",
-    description: "How to install the local Blockshot MCP (one downloaded file) so that render_video (MP4) and render_still (real 3D PNG) become available. Call it when the user wants an MP4/video export or a high-fidelity image and you can run shell commands.",
+    description:
+      "Complete instructions to install, register (Claude Code, Codex, generic JSON), switch from this hosted server to, and verify the LOCAL Blockshot MCP: exact commands, Node/Chrome requirements, environment variables, and the expected tool list. The local server needs NO token (MCP_TOKEN only protects this hosted endpoint) and adds render_video (MP4) and render_still (real 3D PNG). Call it when the user wants an MP4/video export or a high-fidelity render, or asks to install / register / switch to the local MCP, or to re-register it locally or without a token — then carry out the steps (install, register, verify) yourself if you can run shell commands, after asking the user.",
     inputSchema: { type: "object", properties: {} },
     async run(_a, p) {
       return ok(text(localSetupText(p.origin)));
@@ -302,7 +338,7 @@ export async function handleRpc(msg: RpcRequest, platform: Platform, tools: Tool
         protocolVersion: PROTOCOLS.includes(asked) ? asked : PROTOCOLS[0],
         capabilities: { tools: {} },
         serverInfo: { name: "blockshot", version: "0.1.0" },
-        instructions: "Blockshot: author previz scenes with code. Call get_guide first, then run_script, preview, evaluate, open_link. MP4 export / real 3D renders need the local server — call local_setup (or render_video) for how to install it if you can run shell commands.",
+        instructions: "Blockshot: author previz scenes with code. Call get_guide first, then run_script, preview, evaluate, open_link. MP4 export / real 3D renders need the LOCAL server (no token needed; one downloaded file, Node 22+ and Chrome). For install / register / switch-to-local / verify steps (Claude Code and Codex) call local_setup, then do them yourself if you can run shell commands (ask the user first). \"Re-register locally without the token\" = local_setup + remove the hosted entry + register the local one + verify.",
       });
     }
     case "ping":
