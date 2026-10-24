@@ -71,3 +71,42 @@ export function seatPose(prop: Pick<Prop, "type" | "position" | "rotation" | "sc
     yaw: prop.rotation[1],
   };
 }
+
+/** How far past a seat's front edge an actor's feet land when they stand up (m). */
+export const STAND_CLEAR = 0.25;
+
+/**
+ * The seat (chair / sofa) whose footprint holds `pos`, if any — so standing up knows which way is "out" and how deep the seat is.
+ * Returns the prop and `pos` in the prop's local frame (x along its width, z toward the way it faces).
+ */
+export function seatUnder(spec: Pick<BlockshotSpec, "props" | "assets">, pos: Vec3): { prop: Prop; local: [number, number] } | null {
+  let best: { prop: Prop; local: [number, number]; d: number } | null = null;
+  for (const p of spec.props) {
+    if (!SEATS[p.type]) continue;
+    const [w, , d] = propSize(p, spec.assets);
+    const yaw = (p.rotation[1] * Math.PI) / 180;
+    const dx = pos[0] - p.position[0];
+    const dz = pos[2] - p.position[2];
+    // world → prop local (inverse of seatPose's rotation)
+    const lx = dx * Math.cos(yaw) - dz * Math.sin(yaw);
+    const lz = dx * Math.sin(yaw) + dz * Math.cos(yaw);
+    const hw = (w * p.scale[0]) / 2 + 0.05;
+    const hd = (d * p.scale[2]) / 2 + 0.05;
+    if (Math.abs(lx) > hw || Math.abs(lz) > hd) continue;
+    const dist = Math.hypot(lx, lz);
+    if (!best || dist < best.d) best = { prop: p, local: [lx, lz], d: dist };
+  }
+  return best ? { prop: best.prop, local: best.local } : null;
+}
+
+/** Where an actor sitting at `pos` ends up after standing: straight out of the seat, just past its front edge. Null when not on a seat. */
+export function standOutPoint(spec: Pick<BlockshotSpec, "props" | "assets">, pos: Vec3): Vec3 | null {
+  const hit = seatUnder(spec, pos);
+  if (!hit) return null;
+  const { prop, local } = hit;
+  const depth = propSize(prop, spec.assets)[2] * prop.scale[2];
+  const lz = Math.max(local[1], depth / 2 + STAND_CLEAR);
+  const yaw = (prop.rotation[1] * Math.PI) / 180;
+  const lx = local[0];
+  return [prop.position[0] + lx * Math.cos(yaw) + lz * Math.sin(yaw), pos[1], prop.position[2] - lx * Math.sin(yaw) + lz * Math.cos(yaw)];
+}

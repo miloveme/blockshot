@@ -139,7 +139,7 @@ LLM과 사람이 가장 많이 쓰는 레이어. 로드 시 `compile()`이 `trac
 | `mount` | `camera, to, offset?([0,1.6,-6]), look?([0,1,0]), start, end?` | 카메라가 인물/소품에 **실려 움직인다**(추격 카메라·후드 캠): 대상의 좌표계에서 `offset`만큼 떨어진 곳에 있고 `look`(대상 프레임) 지점을 본다. `end`를 생략하면 프로젝트 끝까지 |
 | `hold` | `actor, prop, hand?(right), at?(carry), start, duration?(4), then?(keep)` | 소품(전화기·컵 등)을 집어 **손에 들고 사용**한다. `at`: `ear`(통화) · `mouth`(마시기) · `chest`(문자/읽기) · `carry`(들고만). 가까이(≈1 m 이내) 있으면 손을 뻗어 집고 들어 올려 유지한 뒤 내리고, 멀리 있으면 처음부터 손에 든 것으로 본다. `then: keep`이면 손에 계속 들고(팔은 내림), `put`이면 원래 자리에 되돌려 놓는다. 소품은 손을 따라 움직이고(전화기는 화면이 얼굴을 향해 세로로), 걸으며 계단을 올라도 유지된다 |
 | `reach` | `actor, target, hand?(right), start, duration?(1.5)` | 손을 점/소품/인물 부위로 뻗는다(2본 IK, 팔 길이를 넘으면 최대한 뻗음). 집기·가리키기·악수에 사용 |
-| `standUp` | `actor, start, duration?(0.8), to?` | `stand`로 일어나 바라보는 방향으로 0.6 m(또는 `to`) 걸어 나온다 |
+| `standUp` | `actor, start, duration?(0.8), to?` | `stand`로 일어나 좌석(의자·소파) 앞 가장자리 너머 0.25 m까지 걸어 나온다(좌석이 아니면 바라보는 방향으로 0.6 m, 또는 `to`). `pose`/포즈 키로 `sit` → 다른 포즈로 바뀔 때도, 그 자리에 머물러 있으면 같은 방식으로 좌석 밖으로 나온다 |
 | `lookAt` | `actor, target, start, end?` | 머리 방향 |
 | `cameraMove` | `camera, to: Vec3, start, duration, ease?` | 카메라 이동 |
 | `cameraLookAt` | `camera, target, start` | 카메라 조준 대상 변경 |

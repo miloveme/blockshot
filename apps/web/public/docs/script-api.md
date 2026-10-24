@@ -77,7 +77,7 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 | `.turnTo(target, { start, duration? })` | target: Vec3 · 참조 · yaw(도) |
 | `.pose(name, { start })` | `stand` `walk` `run` `sit` `point` `talk` `idle` — 이전 포즈에서 0.35초 블렌드 |
 | `.sitDown(seat, { start, duration?, offset? })` | 의자/소파(핸들·id)로 걸어가 앉기. 소파는 `offset`(m)으로 자리를 나눈다 |
-| `.standUp({ start, duration?, to? })` | 일어나 앞으로 한 걸음(또는 `to`) |
+| `.standUp({ start, duration?, to? })` | 일어나 좌석 앞으로 걸어 나옴(좌석 깊이에 맞춰, 또는 `to`) |
 | `.gesture(name, { start, duration?, side?, intensity? })` | 몸짓(wave·nod·shrug·clap·cheer …). 포즈 위에 얹힌다 |
 | `.handShape(shape, { start, hand?, duration? })` | 손가락 모양: open·relaxed·fist·point·pinch·grip (`hand`: left/right/both) |
 | `scene.use(propId).drive(path, { start, speed?, duration?, ease?, radius?, drift? })` | 차량/소품이 경로를 따라 이동(모서리는 곡선, 차체 기울기·바퀴 회전 포함). `drift`(0–1)는 코너에서 꼬리를 빼는 드리프트. 소품은 `drive` 없이는 움직이지 않는다 |
