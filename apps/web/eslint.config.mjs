@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // generated bundle served to AIs that install the local MCP (packages/mcp)
+    "public/mcp/**",
   ]),
 ]);
 

@@ -1,0 +1,32 @@
+{
+  "name": "@blockshot/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Blockshot MCP tools (platform-agnostic) + a local stdio server (blockshot-mcp) that can also render MP4 with a local Chrome.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "blockshot-mcp": "./dist/blockshot-mcp.mjs"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && tsx scripts/build-cli.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@blockshot/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@jitl/quickjs-singlefile-mjs-release-sync": "^0.32.0",
+    "@resvg/resvg-js": "^2.6.2",
+    "@resvg/resvg-wasm": "^2.6.2",
+    "@types/node": "^24.19.2",
+    "esbuild": "^0.28.2",
+    "quickjs-emscripten-core": "^0.32.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
+  }
+}

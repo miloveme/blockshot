@@ -1,6 +1,6 @@
 import { newQuickJSWASMModuleFromVariant, type QuickJSWASMModule } from "quickjs-emscripten-core";
 import variant from "@jitl/quickjs-singlefile-mjs-release-sync";
-import { SANDBOX_RUNTIME } from "./sandbox-runtime.generated";
+import { SANDBOX_RUNTIME, ScriptError } from "@blockshot/mcp";
 
 /**
  * Runs a Blockshot Script inside QuickJS (WASM): no network, no filesystem, no host objects — only the scene builder bundle.
@@ -45,14 +45,5 @@ export async function runScriptSandboxed(source: string, base: unknown, opts: Sa
   } finally {
     vm.dispose();
     runtime.dispose();
-  }
-}
-
-export class ScriptError extends Error {
-  constructor(
-    message: string,
-    readonly line?: number,
-  ) {
-    super(message);
   }
 }
