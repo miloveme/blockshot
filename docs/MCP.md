@@ -57,6 +57,8 @@ claude mcp add blockshot-local -e BLOCKSHOT_URL=https://blockshot-eta.vercel.app
 - 기존 원격 등록을 로컬로 **전환**하는 절차(원격 항목 찾기 → 제거(저장된 토큰도 함께 사라짐) → 로컬 등록, 같은 이름 재사용 가능)
 - **검증**: `printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n' | node ~/.blockshot/blockshot-mcp.mjs` → 도구 목록 한 줄. 새 세션에서 로컬 서버는 정확히 10개 도구(`get_guide, run_script, validate_spec, apply_addon, animate_prompt, evaluate, preview, open_link, render_video, render_still`)이고 `local_setup`이 없으며, 원격은 11개(`local_setup` + 렌더 안내용 스텁 포함). 이어서 `run_script` → `render_still` PNG까지 확인
 
+**프롬프트로 맡기기**: `/guide`의 "AI에게 MCP 연결 맡기기"에 복사용 프롬프트가 있다(로컬 설치·원격 연결·원격→로컬 전환·Codex·연결 점검·첫 작업). 같은 안내 전체는 공개 문서 `/docs/mcp-setup.md`(`pnpm --filter @blockshot/mcp build`가 `localSetupText`로 생성)에도 있어 웹을 읽는 AI는 주소만 알려 줘도 된다.
+
 **설치가 안 되는 환경**(claude.ai 채팅, 모바일, iPad): 원격 MCP(토큰 방식)만 쓴다. 스크립트·프리뷰·링크는 그대로 되고, MP4는 `open_link`로 받은 링크를 열어 스튜디오의 "영상 렌더"로 브라우저에서 내보낸다.
 
 수동 설치(저장소): `pnpm install && pnpm --filter @blockshot/mcp build` → `packages/mcp/dist/blockshot-mcp.mjs`(빌드는 `apps/web/public/mcp/`에도 복사하며 커밋한다). 환경변수: `BLOCKSHOT_URL`(링크·렌더에 쓰는 스튜디오 주소, 로컬 개발이면 `http://localhost:3000`), `BLOCKSHOT_CHROME`.
