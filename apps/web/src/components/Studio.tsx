@@ -2,7 +2,6 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
-import { PanelBottomOpen, PanelLeftOpen, PanelRightOpen } from "lucide-react";
 import { useStudio } from "@/lib/store";
 import { restoreUi, useUi } from "@/lib/ui";
 import { commandForEvent, eventCode, runCommand } from "@/lib/commands";
@@ -23,7 +22,6 @@ import { StatusBar } from "./editor/StatusBar";
 import { CommandPalette } from "./editor/CommandPalette";
 import { ShortcutsDialog } from "./editor/ShortcutsDialog";
 import { ContextMenu } from "./editor/ContextMenu";
-import { IconButton } from "./ui";
 
 const Viewport = dynamic(() => import("./viewport/Viewport"), {
   ssr: false,
@@ -225,13 +223,6 @@ export default function Studio() {
         <main className="relative flex min-w-0 flex-1 flex-col">
           <ViewportBar />
           <Stage />
-          <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex justify-between">
-            <span className="pointer-events-auto">{leftOpen ? null : <IconButton icon={PanelLeftOpen} size="sm" label="왼쪽 패널 열기" kbd="Alt+1" onClick={() => runCommand("view.left")} className="bg-panel/80" />}</span>
-            <span className="pointer-events-auto flex gap-1">
-              {bottomOpen ? null : <IconButton icon={PanelBottomOpen} size="sm" label="타임라인 열기" kbd="Alt+3" onClick={() => runCommand("view.bottom")} className="bg-panel/80" />}
-              {rightOpen ? null : <IconButton icon={PanelRightOpen} size="sm" label="오른쪽 패널 열기" kbd="Alt+2" onClick={() => runCommand("view.right")} className="bg-panel/80" />}
-            </span>
-          </div>
         </main>
         {rightOpen ? <RightDock /> : null}
       </div>

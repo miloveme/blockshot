@@ -2,14 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ASPECT_PRESETS, LENS_PRESETS, aspectLabel } from "@blockshot/core";
-import { Camera, ChevronDown, Clapperboard, Columns2, Gamepad2, Map as MapIcon, Orbit, Square } from "lucide-react";
+import { Camera, ChevronDown, Clapperboard, Columns2, Gamepad2, Map as MapIcon, Orbit, PanelLeftOpen, PanelRightOpen, Square } from "lucide-react";
 import { useStudio, type Layout } from "@/lib/store";
 import { setAspect, setLens } from "@/lib/actions";
+import { useUi } from "@/lib/ui";
+import { runCommand } from "@/lib/commands";
 import { cx, IconButton, Segmented } from "../ui";
 
 /** Header over the viewport: what you look through (edit view / a camera / the cut), layout, lens and aspect of that camera. */
 export function ViewportBar() {
   const view = useStudio((s) => s.view);
+  // a closed side panel reopens from the end of this bar, right where its close button sat
+  const leftOpen = useUi((s) => s.leftOpen);
+  const rightOpen = useUi((s) => s.rightOpen);
   const layout = useStudio((s) => s.layout);
   const pilot = useStudio((s) => s.pilot);
   const cameras = useStudio((s) => s.spec.cameras);
@@ -27,6 +32,12 @@ export function ViewportBar() {
 
   return (
     <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line bg-panel-2 px-2.5">
+      {leftOpen ? null : (
+        <>
+          <IconButton icon={PanelLeftOpen} size="sm" label="왼쪽 패널 열기 (아웃라이너·에셋)" kbd="Alt+1" tipSide="right" onClick={() => runCommand("view.left")} />
+          <span className="h-5 w-px bg-line" />
+        </>
+      )}
       <Segmented
         size="sm"
         value={mode}
@@ -95,6 +106,12 @@ export function ViewportBar() {
           ))}
         </select>
         <span className="hidden font-mono text-[11px] text-ink-3 md:inline">{resolution.join("×")}</span>
+        {rightOpen ? null : (
+          <>
+            <span className="mx-1 h-5 w-px bg-line" />
+            <IconButton icon={PanelRightOpen} size="sm" label="오른쪽 패널 열기 (속성·샷·AI·렌더)" kbd="Alt+2" tipSide="left" onClick={() => runCommand("view.right")} />
+          </>
+        )}
       </div>
     </div>
   );

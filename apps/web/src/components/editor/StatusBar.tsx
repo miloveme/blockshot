@@ -1,7 +1,9 @@
 "use client";
 
-import { Camera, Clapperboard, Orbit } from "lucide-react";
+import { Camera, Clapperboard, Orbit, PanelBottomOpen } from "lucide-react";
 import { useStudio } from "@/lib/store";
+import { useUi } from "@/lib/ui";
+import { runCommand } from "@/lib/commands";
 import { Kbd } from "../ui";
 
 /** Bottom status line: where you are, what is selected, and the keys that matter right now. */
@@ -13,6 +15,7 @@ export function StatusBar() {
   const spec = useStudio((s) => s.spec);
   const time = useStudio((s) => s.time);
   const autoKey = useStudio((s) => s.autoKey);
+  const bottomOpen = useUi((s) => s.bottomOpen);
   const { fps, resolution, duration } = spec.settings;
 
   const actor = spec.actors.find((a) => a.id === selection);
@@ -51,6 +54,20 @@ export function StatusBar() {
       <span className="ml-auto font-mono tabular-nums">
         {time.toFixed(2)}s / {duration}s · f{Math.round(time * fps)} · {fps}fps · {resolution.join("×")}
       </span>
+      {bottomOpen ? null : (
+        // the timeline's close button sits at the right end of its transport row, just above: reopen from the same corner
+        <button
+          type="button"
+          onClick={() => runCommand("view.bottom")}
+          data-tip="타임라인 열기"
+          data-kbd-label="   Alt+3"
+          data-tip-side="top"
+          className="-mr-1.5 flex h-5 items-center gap-1 rounded px-1.5 text-ink-2 hover:bg-hover hover:text-ink"
+        >
+          <PanelBottomOpen size={13} />
+          타임라인
+        </button>
+      )}
     </footer>
   );
 }
