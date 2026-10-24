@@ -2,7 +2,7 @@ import type { Action, BodyPart, Gesture, HandShape, HoldAt, Key, Pose, Blockshot
 import { applyEase, DEG, unwrapYaw, vec, yawTowards } from "./math";
 import { verticalFov } from "./camera";
 import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
-import { seatPose } from "./catalog";
+import { seatPose, standOutPoint } from "./catalog";
 import { planAroundMovers, timeRouteOnGrid, type Mover } from "./nav-time";
 import { bakeNav, crouchSpans, surfaceSpans, navRadiusOf, routeLegs, staticActors, type Circle, type NavGrid } from "./nav";
 import { BONES, REST_HEIGHT, applyLayer, blendPoses, clonePose, smoothstep, solveRig, toLocal, toWorld, type BoneName, type RigPose, type Skeleton } from "./rig";
@@ -23,8 +23,10 @@ const DRIVE_SPEED = 12;
 export const POSE_BLEND = 0.35;
 /** how far in front of a seat the actor lines up before stepping in (m) */
 const SEAT_APPROACH = 0.5;
-
+/** standing up somewhere that is not a known seat: one step forward (m) */
 const STAND_STEP = 0.6;
+/** how long getting up out of a seat takes when the pose simply switches from sit (s) — standUp's default duration */
+const STAND_TIME = 0.8;
 
 type KeyValue = Key["value"];
 interface CKey {
@@ -221,6 +223,8 @@ function compileUncached(spec: BlockshotSpec): CompiledScene {
     tracks.set(trackKey(t.target, t.property), [...t.keys].sort((a, b) => a.t - b.t));
   }
 
+  for (const a of spec.actors) stepOutOfSeats(spec, tracks.get(trackKey(a.id, "pose"))!, tracks.get(trackKey(a.id, "position"))!);
+
   // wheels need to know how fast and how far each driven prop went, and how its front wheels were steered
   for (const [id, [from, to]] of scene.driven) {
     const pos = tracks.get(trackKey(id, "position"))!;
@@ -230,6 +234,37 @@ function compileUncached(spec: BlockshotSpec): CompiledScene {
     scene.motion.set(id, motionFromKeys(samples));
   }
   return scene;
+}
+
+/**
+ * A pose that switches from "sit" to standing while the actor stays put (a `pose` action, a pose key from the inspector, a manual
+ * track) would leave them standing inside the sofa. Give every such moment the step out of the seat that standUp makes:
+ * the body rises and moves past the seat's front edge, and later keys that still hold the seated spot follow it out.
+ */
+function stepOutOfSeats(spec: BlockshotSpec, pose: CKey[], pos: CKey[]) {
+  for (let i = 1; i < pose.length; i++) {
+    if (pose[i - 1]!.value !== "sit" || pose[i]!.value === "sit") continue;
+    const t = pose[i]!.t;
+    const from = sampleKeys(pos, t) as Vec3;
+    // already moving out (standUp, a walk, keyed motion): leave it alone
+    const later = sampleKeys(pos, t + STAND_TIME) as Vec3;
+    if (Math.hypot(later[0] - from[0], later[2] - from[2]) > 0.1) continue;
+    const to = standOutPoint(spec, from);
+    if (!to) continue;
+    // until the actor sits again, keys parked on the seated spot move to the standing spot
+    const nextSit = pose.slice(i + 1).find((k) => k.value === "sit")?.t ?? Infinity;
+    // (keys are replaced, not edited: manual track keys are the spec's own objects)
+    for (let j = pos.length - 1; j >= 0; j--) {
+      const k = pos[j]!;
+      const v = k.value as Vec3;
+      if (k.t <= t || k.t >= nextSit || Math.hypot(v[0] - from[0], v[2] - from[2]) >= 0.05) continue;
+      // one that falls inside the rise would turn the glide into a jump: drop it, the rise ends on the standing spot anyway
+      if (k.t < t + STAND_TIME) pos.splice(j, 1);
+      else pos[j] = { ...k, value: [to[0], v[1], to[2]] };
+    }
+    insertKey(pos, { t, value: from, ease: "linear" });
+    insertKey(pos, { t: t + STAND_TIME, value: to, ease: "easeOut" });
+  }
 }
 
 function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop: TrackProperty, initial: KeyValue) => CKey[]) {
@@ -384,7 +419,8 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       const pose = track(a.actor, "pose", actor.pose);
       const from = sampleKeys(pos, a.start) as Vec3;
       const yaw = (sampleKeys(rot, a.start) as Vec3)[1] * DEG;
-      const to: Vec3 = a.to ?? [from[0] + Math.sin(yaw) * STAND_STEP, from[1], from[2] + Math.cos(yaw) * STAND_STEP];
+      // out of the seat past its front edge (a deep or scaled sofa needs more than one step), else one step forward
+      const to: Vec3 = a.to ?? standOutPoint(spec, from) ?? [from[0] + Math.sin(yaw) * STAND_STEP, from[1], from[2] + Math.cos(yaw) * STAND_STEP];
       insertKey(pos, { t: a.start, value: from, ease: "linear" });
       insertKey(pos, { t: a.start + a.duration, value: to, ease: "easeOut" });
       insertKey(pose, { t: a.start, value: "stand", ease: "step" });

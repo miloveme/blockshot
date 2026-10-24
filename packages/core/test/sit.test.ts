@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   POSE_BLEND, addActorAt, addPropAt, addSitDown, addStandUp, buildAnimatePrompt, compile, createBlankSpec, describeScene, evaluate, lintLayout, removeEntity,
-  runScript, seatPose, validateSpec, type BlockshotSpec,
+  runScript, seatPose, standOutPoint, STAND_CLEAR, validateSpec, type BlockshotSpec,
 } from "../src";
 
 const parse = (input: unknown): BlockshotSpec => {
@@ -64,16 +64,67 @@ describe("sitDown / standUp", () => {
     expect(at(spec, 2 - POSE_BLEND + 0.01).pose).toBe("sit");
   });
 
-  it("standUp rises and steps forward along the facing, or to a given point", () => {
+  it("standUp rises and steps out past the seat's front edge, or to a given point", () => {
     let spec = addSitDown(scene(), "actor1", "chair1", { start: 0, duration: 1 });
     spec = addStandUp(spec, "actor1", { start: 3 });
     const seated = at(spec, 2.9);
     expect(seated.pose).toBe("sit");
     const up = at(spec, 4);
     expect(up.pose).toBe("stand");
-    expect(up.position[2] - seated.position[2]).toBeCloseTo(0.6, 3); // yaw 0 → +Z
+    const chair = spec.props.find((p) => p.id === "chair1")!;
+    expect(up.position[2] - chair.position[2]).toBeCloseTo(0.46 / 2 + STAND_CLEAR, 3); // yaw 0 → +Z, clear of the 0.46 m seat
     const target = addStandUp(addSitDown(scene(), "actor1", "chair1", { start: 0 }), "actor1", { start: 3, to: [2, 0, 2] });
     expect(at(target, 5).position).toEqual([2, 0, 2]);
+  });
+
+  it("a deep (scaled) sofa needs a longer step out", () => {
+    const base = scene();
+    const deep = { ...base, props: base.props.map((p) => (p.id === "sofa1" ? { ...p, scale: [1, 1, 1.6] as [number, number, number] } : p)) };
+    const spec = addStandUp(addSitDown(deep, "actor1", "sofa1", { start: 0, duration: 2 }), "actor1", { start: 4 });
+    const sofa = spec.props.find((p) => p.id === "sofa1")!;
+    expect(at(spec, 6).position[2] - sofa.position[2]).toBeCloseTo((0.9 * 1.6) / 2 + STAND_CLEAR, 3);
+  });
+
+  it("switching the pose from sit to stand (pose action / pose key) also steps out of the seat", () => {
+    const base = scene();
+    const sofa = base.props.find((p) => p.id === "sofa1")!;
+    const seat = seatPose(sofa, 0.5).position;
+    const seatedStart = { ...base, actors: base.actors.map((a) => ({ ...a, position: seat, pose: "sit" as const })) };
+    const viaAction = parse({ ...seatedStart, actions: [{ type: "pose", actor: "actor1", pose: "stand", start: 2 }] });
+    const viaKeys = parse({ ...seatedStart, tracks: [{ target: "actor1", property: "pose", keys: [{ t: 0, value: "sit", ease: "step" }, { t: 2, value: "stand", ease: "step" }] }] });
+    const out = standOutPoint(seatedStart, seat)!;
+    for (const spec of [viaAction, viaKeys]) {
+      expect(at(spec, 1.9).position).toEqual(seat); // still seated
+      const up = at(spec, 3);
+      expect(up.pose).toBe("stand");
+      expect(up.position[0]).toBeCloseTo(out[0], 4);
+      expect(up.position[2]).toBeCloseTo(sofa.position[2] + 0.9 / 2 + STAND_CLEAR, 4); // in front of the sofa, not inside it
+    }
+    // the spec itself is untouched (compile works on copies)
+    expect(viaKeys.tracks[0]!.keys).toHaveLength(2);
+  });
+
+  it("a keyed position that holds the seated spot follows the actor out; one that moves away is kept", () => {
+    const base = scene();
+    const seat = seatPose(base.props.find((p) => p.id === "sofa1")!, 0).position;
+    const spec = parse({
+      ...base,
+      actors: base.actors.map((a) => ({ ...a, position: seat, pose: "sit" })),
+      tracks: [
+        { target: "actor1", property: "pose", keys: [{ t: 0, value: "sit", ease: "step" }, { t: 2, value: "stand", ease: "step" }] },
+        { target: "actor1", property: "position", keys: [{ t: 0, value: seat, ease: "linear" }, { t: 4, value: seat, ease: "linear" }, { t: 6, value: [1, 0, 1], ease: "linear" }] },
+      ],
+    });
+    const out = standOutPoint(spec, seat)!;
+    expect(at(spec, 4).position[2]).toBeCloseTo(out[2], 4);
+    expect(at(spec, 6).position).toEqual([1, 0, 1]);
+    expect(spec.tracks[1]!.keys[1]!.value).toEqual(seat);
+  });
+
+  it("standing up off the floor (no seat under the actor) does not move them", () => {
+    const base = scene();
+    const spec = parse({ ...base, actors: base.actors.map((a) => ({ ...a, pose: "sit" })), actions: [{ type: "pose", actor: "actor1", pose: "stand", start: 1 }] });
+    expect(at(spec, 3).position).toEqual(base.actors[0]!.position);
   });
 
   it("extends the project length so the whole motion fits", () => {
