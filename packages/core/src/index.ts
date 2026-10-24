@@ -26,3 +26,4 @@ export * from "./nav-time";
 export * from "./vehicle";
 export * from "./bake";
 export * from "./motion";
+export * from "./preview";

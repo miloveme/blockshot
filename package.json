@@ -9,7 +9,8 @@
     "typecheck": "pnpm -r typecheck",
     "gen:schema": "pnpm --filter @blockshot/core gen:schema",
     "lint": "pnpm --filter web lint",
-    "check": "pnpm test && pnpm typecheck && pnpm lint && pnpm build"
+    "check": "pnpm test && pnpm typecheck && pnpm lint && pnpm build",
+    "gen:sandbox": "pnpm --filter @blockshot/core gen:sandbox"
   },
   "engines": {
     "node": ">=22"

@@ -15,7 +15,8 @@ pnpm typecheck      # 모든 패키지 tsc
 pnpm --filter web lint
 pnpm build          # core 타입체크 + next build
 pnpm check          # 위 전부 (CI와 동일)
-pnpm gen:schema     # schema.ts/문서 변경 후 public/ 정적 파일 재생성 (커밋 포함)
+pnpm gen:schema     # schema.ts/문서 변경 후 public/ 정적 파일·MCP 문서 번들 재생성 (커밋 포함)
+pnpm gen:sandbox    # builder.ts/motion.ts 변경 후 MCP QuickJS 샌드박스 번들 재생성 (커밋 포함)
 ```
 
 ## 구조 요약

@@ -114,5 +114,5 @@
 - [x] GLB 임포트 (사용자 모델): 파일/드롭 → IndexedDB(해시 id) → 바닥 정렬 렌더, 다른 브라우저에서는 다시 불러오기
 - [ ] GLB: Draco/Meshopt 압축·애니메이션·.gltf 분리 파일, 에셋 포함 내보내기(zip), 리깅된 마네킹 옵션
 - [ ] 클라우드 저장 + 로그인 (Supabase 또는 Vercel Blob)
-- [ ] stateless HTTP MCP 엔드포인트 검토
+- [x] stateless HTTP MCP 엔드포인트 `/api/mcp` (docs/MCP.md): run_script(QuickJS 샌드박스)·validate·apply_addon·evaluate·preview(SVG→PNG)·open_link(URL 조각 공유 링크)
 - [ ] Z-up(Blender) 입출력 변환, FBX/USD 카메라 익스포트
