@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { handleRpc } from "@/server/mcp";
 
 /**
@@ -19,7 +20,22 @@ export function GET() {
   return Response.json({ name: "blockshot", mcp: "POST JSON-RPC (Streamable HTTP) to this URL", docs: "/llms.txt" }, { headers: CORS });
 }
 
+/**
+ * Access token: when the environment variable `mcp_token` (or `MCP_TOKEN`) is set, calls must carry it as
+ * `Authorization: Bearer <token>` or `?token=<token>` (for clients that cannot send headers). Unset → open (local dev).
+ */
+function authorized(req: Request): boolean {
+  const expected = process.env.mcp_token || process.env.MCP_TOKEN;
+  if (!expected) return true;
+  const header = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  const given = header || new URL(req.url).searchParams.get("token") || "";
+  const a = Buffer.from(given);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 export async function POST(req: Request) {
+  if (!authorized(req)) return Response.json({ jsonrpc: "2.0", id: null, error: { code: -32001, message: "Unauthorized: missing or wrong token" } }, { status: 401, headers: { ...CORS, "www-authenticate": 'Bearer realm="blockshot"' } });
   let body: unknown;
   try {
     body = await req.json();
