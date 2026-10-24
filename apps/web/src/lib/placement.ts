@@ -1,6 +1,6 @@
 "use client";
 
-import { addActorAt, addCameraAt, addPropAt, addWalkPath, placeProp, propSize, type Vec3 } from "@blockshot/core";
+import { addActorAt, addCameraAt, addDrive, addPropAt, addWalkPath, placeProp, propSize, type Vec3 } from "@blockshot/core";
 import { useStudio, type AssetRef } from "./store";
 
 /** Click-to-place: turns a floor point (x, z) into a new actor / camera / prop through the pure core ops. One undo step each. */
@@ -71,10 +71,11 @@ export function finishPath() {
   }
   const t = state().time;
   const before = state().spec.settings.duration;
-  state().edit((s) => addWalkPath(s, tool.actorId, tool.points, { start: t, run: tool.run }));
+  const isProp = state().spec.props.some((q) => q.id === tool.actorId);
+  state().edit((s) => (isProp ? addDrive(s, tool.actorId, tool.points, { start: t }) : addWalkPath(s, tool.actorId, tool.points, { start: t, run: tool.run })));
   state().setTool(null);
   const after = state().spec.settings.duration;
-  state().notify(`${tool.run ? "달리기" : "걷기"} 경로 추가 · ${tool.points.length}점 · ${t.toFixed(2)}s 시작${after > before ? ` · 프로젝트 길이를 ${after}s로 늘렸습니다 (샷 길이는 편집 탭에서 조절)` : ""}`);
+  state().notify(`${isProp ? "주행" : tool.run ? "달리기" : "걷기"} 경로 추가 · ${tool.points.length}점 · ${t.toFixed(2)}s 시작${after > before ? ` · 프로젝트 길이를 ${after}s로 늘렸습니다 (샷 길이는 편집 탭에서 조절)` : ""}`);
 }
 
 export function startPath(actorId: string) {

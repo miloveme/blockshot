@@ -7,6 +7,7 @@ import { planAroundMovers, timeRouteOnGrid, type Mover } from "./nav-time";
 import { bakeNav, crouchSpans, surfaceSpans, navRadiusOf, routeLegs, staticActors, type Circle, type NavGrid } from "./nav";
 import { REST_HEIGHT, applyLayer, blendPoses, smoothstep, solveRig, toLocal, toWorld, type BoneName, type RigPose, type Skeleton } from "./rig";
 import { Q } from "./quat";
+import { driveKeys, KEY_STEP, motionAt, motionFromKeys, smoothPath, type Motion } from "./vehicle";
 import { PROP_CATALOG } from "./catalog";
 import { basePose, envelope, GESTURE_DEFS, handLayer, handShapeLayer, lookLayer, RELAXED_HANDS, sampleGesture, solveArm } from "./poses";
 
@@ -17,6 +18,8 @@ const ORBIT_SAMPLES_PER_SEC = 12;
 /** seconds to blend from the previous pose into a new one */
 /** an actor this close (m, on the floor) to a prop picks it up; farther away it is already in their hand */
 const HOLD_REACH = 1.1;
+/** how fast a vehicle drives when nothing says otherwise (m/s ≈ 43 km/h) */
+const DRIVE_SPEED = 12;
 export const POSE_BLEND = 0.35;
 /** how far in front of a seat the actor lines up before stepping in (m) */
 const SEAT_APPROACH = 0.5;
@@ -29,10 +32,13 @@ interface CKey {
   value: KeyValue;
   ease: Key["ease"];
 }
+/** What a camera / actor aims at: a point, a reference, or something computed per time (a camera riding on a car aims ahead of it). */
+type AimTarget = Target | ((t: number) => Vec3);
+
 interface Segment {
   start: number;
   end: number;
-  target: Target;
+  target: AimTarget;
 }
 
 export interface CompiledScene {
@@ -49,6 +55,10 @@ export interface CompiledScene {
   routes: Map<Action, Vec3[]>;
   /** walk / run actions with a leg no route exists for (walled off) */
   unreachable: Set<Action>;
+  /** time span [from, to] of each driven prop's motion */
+  driven: Map<string, [number, number]>;
+  /** vehicles / props that move: id → speed, odometer and steering over time (for wheels) */
+  motion: Map<string, Motion[]>;
   /** prop id → the hold actions that use it, in time order */
   holds: Map<string, HoldLayer[]>;
   /** actions compiled so far (the walk planner only knows those) */
@@ -119,6 +129,8 @@ export interface SceneState {
   frame: number;
   actors: Record<string, ActorState>;
   props: Record<string, Prop>;
+  /** speed / distance / steering of driven props (for wheels) */
+  motion: Record<string, Motion>;
   cameras: Record<string, CameraState>;
   activeCameraId: string | null;
   activeShotId: string | null;
@@ -167,7 +179,7 @@ function compileUncached(spec: BlockshotSpec): CompiledScene {
   const looks = new Map<string, Segment[]>();
   const aims = new Map<string, Segment[]>();
   const acts = new Map<string, ActLayer[]>();
-  const scene: CompiledScene = { spec, tracks, looks, aims, acts, routes: new Map(), unreachable: new Set(), holds: new Map(), compiled: new Set(), navCache: new Map() };
+  const scene: CompiledScene = { spec, tracks, looks, aims, acts, routes: new Map(), unreachable: new Set(), holds: new Map(), driven: new Map(), motion: new Map(), compiled: new Set(), navCache: new Map() };
 
   const track = (id: string, prop: TrackProperty, initial: KeyValue): CKey[] => {
     const k = trackKey(id, prop);
@@ -184,6 +196,10 @@ function compileUncached(spec: BlockshotSpec): CompiledScene {
     track(a.id, "rotation", a.rotation);
     track(a.id, "pose", a.pose);
   }
+  for (const p of spec.props) {
+    track(p.id, "position", p.position);
+    track(p.id, "rotation", p.rotation);
+  }
   for (const c of spec.cameras) {
     track(c.id, "position", c.position);
     track(c.id, "rotation", c.rotation);
@@ -192,7 +208,8 @@ function compileUncached(spec: BlockshotSpec): CompiledScene {
   }
 
   // Actor actions first (camera actions may reference actor positions), then by start time.
-  const ordered = [...spec.actions].sort((x, y) => Number("camera" in x) - Number("camera" in y) || x.start - y.start);
+  const followsAnother = (x: Action) => Number(x.type === "drive" && x.follow !== undefined);
+  const ordered = [...spec.actions].sort((x, y) => Number("camera" in x) - Number("camera" in y) || followsAnother(x) - followsAnother(y) || x.start - y.start);
 
   for (const action of ordered) {
     compileAction(scene, action, track);
@@ -202,6 +219,15 @@ function compileUncached(spec: BlockshotSpec): CompiledScene {
   // Manual tracks override generated ones for the same target/property.
   for (const t of spec.tracks) {
     tracks.set(trackKey(t.target, t.property), [...t.keys].sort((a, b) => a.t - b.t));
+  }
+
+  // wheels need to know how fast and how far each driven prop went, and how its front wheels were steered
+  for (const [id, [from, to]] of scene.driven) {
+    const pos = tracks.get(trackKey(id, "position"))!;
+    const rot = tracks.get(trackKey(id, "rotation"))!;
+    const samples: Array<{ t: number; position: Vec3; rotation: Vec3 }> = [];
+    for (let t = from; t <= to + KEY_STEP / 2; t += KEY_STEP) samples.push({ t, position: sampleKeys(pos, t) as Vec3, rotation: sampleKeys(rot, t) as Vec3 });
+    scene.motion.set(id, motionFromKeys(samples));
   }
   return scene;
 }
@@ -377,6 +403,104 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       scene.acts.set(a.actor, list);
       break;
     }
+    case "drive": {
+      const prop = spec.props.find((x) => x.id === a.prop)!;
+      const pos = track(a.prop, "position", prop.position);
+      const rot = track(a.prop, "rotation", prop.rotation);
+      const from = sampleKeys(pos, a.start) as Vec3;
+      const fromRot = sampleKeys(rot, a.start) as Vec3;
+      let keys: Array<{ t: number; position: Vec3; rotation: Vec3 }>;
+      if (a.follow !== undefined) {
+        // trail another prop / actor: stay `gap` metres behind it ALONG ITS ROUTE (offset in its own frame), easing in from where we stand
+        const lPos = scene.tracks.get(trackKey(a.follow, "position"))!;
+        const lRot = scene.tracks.get(trackKey(a.follow, "rotation"))!;
+        const lastKey = Math.max(lPos[lPos.length - 1]!.t, lRot[lRot.length - 1]!.t);
+        // the leader's odometer: distance travelled by time
+        const ts: number[] = [];
+        const ss: number[] = [];
+        let travelled = 0;
+        for (let t = 0; t <= lastKey + KEY_STEP / 2; t += KEY_STEP) {
+          const p = sampleKeys(lPos, t) as Vec3;
+          const prev = ts.length ? (sampleKeys(lPos, ts[ts.length - 1]!) as Vec3) : p;
+          travelled += Math.hypot(p[0] - prev[0], p[2] - prev[2]);
+          ts.push(t);
+          ss.push(travelled);
+        }
+        const startPos = sampleKeys(lPos, 0) as Vec3;
+        const startYaw = (sampleKeys(lRot, 0) as Vec3)[1];
+        const timeAtDistance = (d: number): number => {
+          if (d <= 0) return 0;
+          if (d >= travelled) return lastKey;
+          let lo = 0;
+          let hi = ss.length - 1;
+          while (hi - lo > 1) {
+            const mid = (lo + hi) >> 1;
+            if (ss[mid]! <= d) lo = mid;
+            else hi = mid;
+          }
+          return ts[lo]! + ((ts[hi]! - ts[lo]!) * (d - ss[lo]!)) / (ss[hi]! - ss[lo]! || 1);
+        };
+        const duration = a.duration ?? Math.max(1, lastKey - a.start + 1);
+        const n = Math.max(1, Math.ceil(duration / KEY_STEP));
+        keys = [];
+        for (let i = 0; i <= n; i++) {
+          const t = a.start + (i / n) * duration;
+          const dLead = ss[Math.min(ss.length - 1, Math.round(Math.min(t, lastKey) / KEY_STEP))]!;
+          const want = dLead - a.gap; // distance along the leader's route to be at
+          const tw = timeAtDistance(want);
+          const behind = Math.max(0, -want); // before the leader's start the route continues straight back
+          const lr = sampleKeys(lRot, tw) as Vec3;
+          const yaw0 = (want < 0 ? startYaw : lr[1]) * DEG;
+          const base = want < 0 ? ([startPos[0] - Math.sin(startYaw * DEG) * behind, 0, startPos[2] - Math.cos(startYaw * DEG) * behind] as Vec3) : (sampleKeys(lPos, tw) as Vec3);
+          const k = smoothstep((t - a.start) / 1.2);
+          const wx = base[0] + a.offset[0] * Math.cos(yaw0) + a.offset[2] * Math.sin(yaw0);
+          const wz = base[2] - a.offset[0] * Math.sin(yaw0) + a.offset[2] * Math.cos(yaw0);
+          const leadYaw = want < 0 ? startYaw : lr[1];
+          const yawFrom = unwrapYaw(leadYaw, fromRot[1]);
+          keys.push({
+            t,
+            position: [from[0] + (wx - from[0]) * k, from[1], from[2] + (wz - from[2]) * k],
+            rotation: [(want < 0 ? 0 : lr[0]) * k + fromRot[0] * (1 - k), yawFrom + (leadYaw - yawFrom) * k, (want < 0 ? 0 : lr[2]) * k + fromRot[2] * (1 - k)],
+          });
+        }
+      } else {
+        const waypoints: Vec3[] = Array.isArray(a.to![0]) ? (a.to as Vec3[]) : [a.to as Vec3];
+        const line = smoothPath([from, ...waypoints.map((p): Vec3 => [p[0], from[1], p[2]])], a.radius);
+        const length = line[line.length - 1]!.s;
+        const duration = a.duration ?? Math.max(0.5, length / (a.speed ?? DRIVE_SPEED));
+        keys = driveKeys(line, a.start, duration, a.ease, from[1], fromRot[1]);
+        scene.routes.set(a, line.filter((_, i) => i % 8 === 0 || i === line.length - 1).map((p): Vec3 => [p.x, from[1], p.z]));
+      }
+      for (const k of keys) {
+        insertKey(pos, { t: k.t, value: k.position, ease: "linear" });
+        insertKey(rot, { t: k.t, value: k.rotation, ease: "linear" });
+      }
+      const span = scene.driven.get(a.prop);
+      scene.driven.set(a.prop, [Math.min(span?.[0] ?? Infinity, a.start), Math.max(span?.[1] ?? 0, keys[keys.length - 1]!.t)]);
+      break;
+    }
+    case "mount": {
+      const tPos = scene.tracks.get(trackKey(a.to, "position"));
+      const tRot = scene.tracks.get(trackKey(a.to, "rotation"));
+      const end = a.end ?? Math.max(a.start + 1, spec.settings.duration);
+      const world = (t: number, v: Vec3): Vec3 => {
+        const p = (tPos ? sampleKeys(tPos, t) : [0, 0, 0]) as Vec3;
+        const yaw = (tRot ? (sampleKeys(tRot, t) as Vec3)[1] : 0) * DEG;
+        return [p[0] + v[0] * Math.cos(yaw) + v[2] * Math.sin(yaw), p[1] + v[1], p[2] - v[0] * Math.sin(yaw) + v[2] * Math.cos(yaw)];
+      };
+      const cam = spec.cameras.find((x) => x.id === a.camera)!;
+      const camPos = track(a.camera, "position", cam.position);
+      const n = Math.max(1, Math.ceil((end - a.start) / KEY_STEP));
+      for (let i = 0; i <= n; i++) {
+        const t = a.start + ((end - a.start) * i) / n;
+        insertKey(camPos, { t, value: world(t, a.offset), ease: "linear" });
+      }
+      // aim at the point `look` from the target (in its frame) for the whole ride
+      const list = scene.aims.get(a.camera) ?? [];
+      list.push({ start: a.start, end, target: (t) => world(t, a.look) });
+      scene.aims.set(a.camera, list);
+      break;
+    }
     case "hold": {
       const prop = spec.props.find((x) => x.id === a.prop)!;
       const prior = scene.holds.get(a.prop) ?? [];
@@ -500,7 +624,7 @@ function actorCore(scene: CompiledScene, id: string, t: number) {
 }
 
 /** Resolve a Vec3 or "id[.part]" reference to a world point at time t. Actor parts follow the posed skeleton. */
-export function resolveTarget(scene: CompiledScene, target: Target, t: number): Vec3 {
+export function resolveTarget(scene: CompiledScene, target: AimTarget, t: number): Vec3 {
   return resolveImpl(scene, target, t, true);
 }
 
@@ -508,7 +632,8 @@ export function resolveTarget(scene: CompiledScene, target: Target, t: number): 
  * `rigAware` = false uses the fixed body layout instead of the animated skeleton. Reach IK uses that for the point it
  * reaches toward, so two actors reaching for each other can never recurse.
  */
-function resolveImpl(scene: CompiledScene, target: Target, t: number, rigAware: boolean): Vec3 {
+function resolveImpl(scene: CompiledScene, target: AimTarget, t: number, rigAware: boolean): Vec3 {
+  if (typeof target === "function") return target(t);
   if (typeof target !== "string") return target;
   const { id, part, mirror } = parseRef(target);
   if (mirror !== undefined) {
@@ -827,6 +952,13 @@ export function evaluate(scene: CompiledScene, t: number): SceneState {
 
   // props that someone holds follow their hand
   const props: Record<string, Prop> = Object.fromEntries(spec.props.map((p) => [p.id, p]));
+  const motion: Record<string, Motion> = {};
+  for (const [propId] of scene.driven) {
+    const p = props[propId];
+    if (!p) continue;
+    props[propId] = { ...p, position: sampleKeys(scene.tracks.get(trackKey(propId, "position"))!, t) as Vec3, rotation: sampleKeys(scene.tracks.get(trackKey(propId, "rotation"))!, t) as Vec3 };
+    motion[propId] = motionAt(scene.motion.get(propId), t);
+  }
   for (const [propId] of scene.holds) {
     const held = holdState(scene, propId, t);
     const prop = props[propId];
@@ -875,6 +1007,7 @@ export function evaluate(scene: CompiledScene, t: number): SceneState {
     frame: Math.round(t * spec.settings.fps),
     actors,
     props,
+    motion,
     cameras,
     activeCameraId,
     activeShotId,

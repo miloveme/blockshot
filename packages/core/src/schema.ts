@@ -159,6 +159,22 @@ export const Action = z.discriminatedUnion("type", [
   z.object({ type: z.literal("gesture"), actor: Id, gesture: GestureName, side: z.enum(["left", "right"]).optional(), duration: z.number().positive().optional(), intensity: z.number().min(0).max(1).default(1), ...timed }),
   /** hold a hand shape (fist, point, pinch, grip, open) with one or both hands for `duration` */
   z.object({ type: z.literal("handShape"), actor: Id, shape: HandShapeName, hand: z.enum(["left", "right", "both"]).default("both"), duration: z.number().positive().default(2), ...timed }),
+  /** a vehicle (or any prop) drives along a path — corners rounded by a turning radius, body leaning in turns — or trails another prop / actor `gap` metres behind it along its route */
+  z.object({
+    type: z.literal("drive"),
+    prop: Id,
+    to: z.union([Vec3, z.array(Vec3).min(1)]).optional(),
+    follow: Id.optional(),
+    gap: z.number().min(0).default(10),
+    offset: Vec3.default([0, 0, 0]),
+    speed: z.number().positive().optional(),
+    duration: z.number().positive().optional(),
+    ease: Ease.default("linear"),
+    radius: z.number().positive().default(6),
+    ...timed,
+  }),
+  /** a camera rides along with an actor or prop (chase / hood / follow cam): it keeps `offset` from the target in the target's own frame and aims at `look` */
+  z.object({ type: z.literal("mount"), camera: Id, to: Id, offset: Vec3.default([0, 1.6, -6]), look: Vec3.default([0, 1, 0]), end: z.number().positive().optional(), ...timed }),
   /** pick up a prop (a phone, a cup …) and use it: bring it to the ear / mouth / chest, then keep it in hand or put it back */
   z.object({ type: z.literal("hold"), actor: Id, prop: Id, hand: z.enum(["left", "right"]).default("right"), at: z.enum(HOLD_AT).default("carry"), duration: z.number().positive().default(4), then: z.enum(["keep", "put"]).default("keep"), ...timed }),
   /** reach a hand toward a point / object / body part (IK) — pointing, touching, handing over — and hold it for `duration` */

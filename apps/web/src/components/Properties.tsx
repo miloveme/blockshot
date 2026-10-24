@@ -94,6 +94,7 @@ export function Properties() {
             <span className="text-xs text-zinc-300">{prop.type === "model" ? `모델 · ${spec.assets.find((a) => a.id === prop.asset)?.name ?? prop.asset}` : prop.type}</span>
           </Row>
           {prop.type === "model" && prop.asset ? <ModelStatus assetId={prop.asset} /> : null}
+          {!["door", "window", "mirror", "platform", "ramp", "stairs", "plane"].includes(prop.type) ? <DriveControls propId={id} /> : null}
           <Row label="색상">
             <ColorField value={prop.color} onCommit={(v) => patch(id, { color: v })} />
           </Row>
@@ -419,6 +420,53 @@ function ActionList({ ownerId }: { ownerId: string }) {
           </button>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** A vehicle (or any prop) that drives along a drawn path: add paths with the floor-click tool, tweak speed / timing here. */
+function DriveControls({ propId }: { propId: string }) {
+  const spec = useStudio((s) => s.spec);
+  const edit = useStudio((s) => s.edit);
+  const tool = useStudio((s) => s.tool);
+  const drawing = tool?.kind === "path" && tool.actorId === propId;
+  const rows = labeledActions(spec).filter(({ action }) => action.type === "drive" && action.prop === propId);
+  return (
+    <div className="flex flex-col gap-1.5 rounded border border-white/10 p-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-medium text-zinc-300">주행 ({rows.length})</span>
+        <button
+          className={`rounded px-2 py-0.5 text-[11px] ${drawing ? "bg-amber-400 text-black" : "bg-sky-500/80 text-white hover:bg-sky-400"}`}
+          onClick={() => (drawing ? useStudio.getState().setTool(null) : startPath(propId))}
+          title="바닥(3D·탑뷰)을 차례로 클릭해 달릴 길을 만듭니다. 모서리는 곡선으로 둥글려집니다"
+        >
+          {drawing ? "경로 찍는 중…" : "🚗 주행 경로 찍기"}
+        </button>
+      </div>
+      {rows.map(({ label, index, action }) =>
+        action.type === "drive" ? (
+          <div key={index} className="flex items-center gap-1.5 text-[11px] text-zinc-400">
+            <span className="w-9 shrink-0 truncate font-mono text-[10px] text-zinc-500" title={label}>{label}</span>
+            <span className="whitespace-nowrap">{action.follow ? `추격 ${action.follow}` : "경로"}</span>
+            <div className="w-14" title="시작(초)">
+              <NumField value={action.start} min={0} step={0.1} onCommit={(v) => edit((s) => patchActionAt(s, index, { start: v }))} />
+            </div>
+            {action.follow ? (
+              <div className="w-14" title="앞차와의 거리(m)">
+                <NumField value={action.gap} min={0} step={1} onCommit={(v) => edit((s) => patchActionAt(s, index, { gap: v }))} />
+              </div>
+            ) : (
+              <div className="w-14" title="속도(m/s) — 비우면 12">
+                <NumField value={action.speed ?? 12} min={1} max={80} step={1} onCommit={(v) => edit((s) => patchActionAt(s, index, { speed: v }))} />
+              </div>
+            )}
+            <button className="ml-auto text-red-300 hover:underline" onClick={() => edit((s) => removeActionAt(s, index))}>
+              삭제
+            </button>
+          </div>
+        ) : null,
+      )}
+      {rows.length === 0 ? <p className="text-[10px] text-zinc-600">경로가 없습니다. “주행 경로 찍기” 후 바닥을 클릭하세요 (현재 시간에 시작).</p> : null}
     </div>
   );
 }

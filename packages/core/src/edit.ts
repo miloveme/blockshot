@@ -374,6 +374,22 @@ export function addStandUp(spec: BlockshotSpec, actorId: string, opts: { start: 
   return extendDuration({ ...spec, actions: [...spec.actions, action] });
 }
 
+/** Appends a drive (smooth path through the clicked points) for a vehicle / prop starting at `start`. */
+export function addDrive(spec: BlockshotSpec, propId: string, points: Vec3[], opts: { start: number; speed?: number }): BlockshotSpec {
+  if (points.length === 0 || !spec.props.some((p) => p.id === propId)) return spec;
+  const action = { type: "drive" as const, prop: propId, to: points.length === 1 ? points[0]! : points, gap: 10, offset: [0, 0, 0] as Vec3, ease: "linear" as const, radius: 6, start: roundT(Math.max(0, opts.start)), ...(opts.speed ? { speed: opts.speed } : {}) };
+  return extendDriveDuration({ ...spec, actions: [...spec.actions, action] });
+}
+
+/** Grows the project length so a drive fits (the compiled keys tell how long it takes). */
+function extendDriveDuration(spec: BlockshotSpec): BlockshotSpec {
+  let end = spec.settings.duration;
+  const scene = compile(spec);
+  for (const keys of scene.tracks.values()) end = Math.max(end, keys[keys.length - 1]?.t ?? 0);
+  const duration = Math.ceil(end * 10) / 10;
+  return duration > spec.settings.duration ? { ...spec, settings: { ...spec.settings, duration } } : spec;
+}
+
 /** Adds a body-language gesture for the actor. */
 export function addGesture(spec: BlockshotSpec, actorId: string, gesture: Gesture, opts: { start: number; duration?: number; side?: "left" | "right" }): BlockshotSpec {
   if (!spec.actors.some((a) => a.id === actorId)) return spec;

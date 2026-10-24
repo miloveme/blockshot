@@ -92,7 +92,7 @@ function Stairs({ color, rise }: { color: string; rise: number }) {
   );
 }
 
-function PropMesh({ type, color, scaleY = 1 }: { type: Prop["type"]; color: string; scaleY?: number }): ReactNode {
+function PropMesh({ id, type, color, scaleY = 1 }: { id: string; type: Prop["type"]; color: string; scaleY?: number }): ReactNode {
   const dark = "#3a3f48";
   switch (type) {
     case "box":
@@ -156,15 +156,7 @@ function PropMesh({ type, color, scaleY = 1 }: { type: Prop["type"]; color: stri
         </>
       );
     case "car":
-      return (
-        <>
-          <Box size={[1.8, 0.7, 4.4]} at={[0, 0.6, 0]} color={color} />
-          <Box size={[1.6, 0.55, 2.2]} at={[0, 1.22, -0.2]} color={color} />
-          {([[0.85, 1.4], [-0.85, 1.4], [0.85, -1.4], [-0.85, -1.4]] as const).map(([x, z], i) => (
-            <Cyl key={i} r={0.33} h={0.22} at={[x, 0.33, z]} rot={[0, 0, Math.PI / 2]} color="#111" />
-          ))}
-        </>
-      );
+      return <Car id={id} color={color} />;
     case "lamp":
       return (
         <>
@@ -200,6 +192,42 @@ function PropMesh({ type, color, scaleY = 1 }: { type: Prop["type"]; color: stri
         </>
       );
   }
+}
+
+/** A car: body + four wheels that turn with the distance driven, the front pair steering with the road. */
+const WHEELS: Array<{ x: number; z: number; front: boolean }> = [
+  { x: 0.85, z: 1.4, front: true },
+  { x: -0.85, z: 1.4, front: true },
+  { x: 0.85, z: -1.4, front: false },
+  { x: -0.85, z: -1.4, front: false },
+];
+function Car({ id, color }: { id: string; color: string }) {
+  const steer = useRef<Array<THREE.Group | null>>([]);
+  const spin = useRef<Array<THREE.Group | null>>([]);
+  useFrame(() => {
+    const m = useStudio.getState().sceneState.motion[id];
+    const dist = m?.dist ?? 0;
+    WHEELS.forEach((w, i) => {
+      if (steer.current[i]) steer.current[i]!.rotation.y = w.front ? (m?.steer ?? 0) : 0;
+      if (spin.current[i]) spin.current[i]!.rotation.x = dist / 0.33;
+    });
+  });
+  return (
+    <>
+      <Box size={[1.8, 0.7, 4.4]} at={[0, 0.6, 0]} color={color} />
+      <Box size={[1.6, 0.55, 2.2]} at={[0, 1.22, -0.2]} color={color} />
+      {/* windscreen strip so the front can be told from the back */}
+      <Box size={[1.5, 0.4, 0.05]} at={[0, 1.25, 0.88]} color="#1b2230" />
+      {WHEELS.map((w, i) => (
+        <group key={i} position={[w.x, 0.33, w.z]} ref={(g) => void (steer.current[i] = g)}>
+          <group ref={(g) => void (spin.current[i] = g)}>
+            <Cyl r={0.33} h={0.22} at={[0, 0, 0]} rot={[0, 0, Math.PI / 2]} color="#111" />
+            <Box size={[0.24, 0.06, 0.5]} at={[0, 0, 0]} color="#9aa3b2" />
+          </group>
+        </group>
+      ))}
+    </>
+  );
 }
 
 /** An imported GLB. Shows a dashed placeholder box (with the asset's size) while loading or when the file is missing here. */
@@ -264,7 +292,7 @@ export function PropObject({ prop }: { prop: Prop }) {
       rotation={[prop.rotation[0] * DEG, prop.rotation[1] * DEG, prop.rotation[2] * DEG, "YXZ"]}
       scale={prop.scale}
     >
-      {prop.type === "model" ? <ModelProp prop={prop} /> : <PropMesh type={prop.type} color={prop.color} scaleY={prop.scale[1]} />}
+      {prop.type === "model" ? <ModelProp prop={prop} /> : <PropMesh id={prop.id} type={prop.type} color={prop.color} scaleY={prop.scale[1]} />}
     </group>
   );
 }

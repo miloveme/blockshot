@@ -102,6 +102,12 @@ export function validateSpec(input: unknown): ValidationResult {
       if (!seat) errors.push({ path: `${p}.on`, message: `Unknown prop id "${a.on}". Seats: ${spec.props.filter((x) => SEATS[x.type]).map((x) => x.id).join(", ") || "(none — add a chair or sofa)"}` });
       else if (!SEATS[seat.type]) errors.push({ path: `${p}.on`, message: `"${a.on}" is a ${seat.type}; sitDown needs a chair or sofa. Seats: ${spec.props.filter((x) => SEATS[x.type]).map((x) => x.id).join(", ") || "none"}` });
     }
+    if (a.type === "drive") {
+      if (!spec.props.some((x) => x.id === a.prop)) errors.push({ path: `${p}.prop`, message: `Unknown prop id "${a.prop}". Props: ${spec.props.map((x) => x.id).join(", ") || "none"}` });
+      if (a.to === undefined && a.follow === undefined) errors.push({ path: p, message: `drive needs "to" (the path) or "follow" (another prop / actor to trail)` });
+      if (a.follow !== undefined && !ids.has(a.follow)) errors.push({ path: `${p}.follow`, message: `Unknown id "${a.follow}"` });
+    }
+    if (a.type === "mount" && !ids.has(a.to)) errors.push({ path: `${p}.to`, message: `Unknown id "${a.to}" — mount a camera on an actor or prop` });
     if (a.type === "hold") {
       const prop = spec.props.find((x) => x.id === a.prop);
       if (!prop) errors.push({ path: `${p}.prop`, message: `Unknown prop id "${a.prop}". Props: ${spec.props.map((x) => x.id).join(", ") || "none"}` });

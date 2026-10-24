@@ -128,7 +128,9 @@ function cornersOf(r: Rect): Array<[number, number]> {
 
 /** Props that block the body: solid, not decor, not a walkable surface. Their height decides whether they block, force a crouch or are stepped over. */
 export function navObstacles(spec: BlockshotSpec): Prop[] {
-  return spec.props.filter((p) => !PROP_CATALOG[p.type].passable && !isSurface(p));
+  // a prop that is driven away (a car in a chase) is not a fixed obstacle
+  const driven = new Set(spec.actions.flatMap((a) => (a.type === "drive" ? [a.prop] : [])));
+  return spec.props.filter((p) => !PROP_CATALOG[p.type].passable && !isSurface(p) && !driven.has(p.id));
 }
 
 /** Actors that never move: no walk/run/sit/stand action and no manual position track. They are solid for everyone else. */
