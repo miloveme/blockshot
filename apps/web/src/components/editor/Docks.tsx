@@ -3,7 +3,7 @@
 import { Boxes, Clapperboard, Film, FolderTree, Info, Layers, PanelLeftClose, PanelRightClose, Settings2, SlidersHorizontal, Sparkles } from "lucide-react";
 import { ASPECT_PRESETS, aspectLabel } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
-import { useUi } from "@/lib/ui";
+import { setDock, useUi } from "@/lib/ui";
 import { setAspect } from "@/lib/actions";
 import { cx, IconButton, PanelSection, TabBar } from "../ui";
 import { NumField, Row, SelectField, TextField } from "../fields";
@@ -50,13 +50,16 @@ export function ResizeHandle({ axis, onDelta }: { axis: "x" | "y"; onDelta: (d: 
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
-export function LeftDock() {
+/** In a narrow window a panel is a drawer over the viewport: never wider than the window leaves room for. */
+const drawerWidth = (w: number) => `min(${w}px, calc(100vw - 96px))`;
+
+export function LeftDock({ drawer = false }: { drawer?: boolean }) {
   const tab = useUi((s) => s.leftTab);
   const width = useUi((s) => s.leftWidth);
   const set = useUi((s) => s.set);
   return (
     <>
-      <aside className="flex shrink-0 flex-col border-r border-line bg-panel" style={{ width }}>
+      <aside className={cx("flex shrink-0 flex-col border-r border-line bg-panel", drawer && "shadow-[var(--shadow-pop)]")} style={{ width: drawer ? drawerWidth(width) : width }}>
         <TabBar
           value={tab}
           onChange={(v) => set({ leftTab: v })}
@@ -64,7 +67,7 @@ export function LeftDock() {
             { value: "outliner", label: "아웃라이너", icon: FolderTree },
             { value: "assets", label: "에셋", icon: Boxes },
           ]}
-          right={<IconButton icon={PanelLeftClose} size="sm" label="왼쪽 패널 닫기" kbd="Alt+1" onClick={() => set({ leftOpen: false })} />}
+          right={<IconButton icon={PanelLeftClose} size="sm" label="왼쪽 패널 닫기" kbd="Alt+1" onClick={() => setDock("left", false)} />}
         />
         {tab === "outliner" ? (
           <Outliner />
@@ -86,7 +89,7 @@ const RIGHT_TABS = [
   { value: "render" as const, label: "렌더", icon: Film },
 ];
 
-export function RightDock() {
+export function RightDock({ drawer = false }: { drawer?: boolean }) {
   const panel = useStudio((s) => s.panel);
   const setPanel = useStudio((s) => s.setPanel);
   const selection = useStudio((s) => s.selection);
@@ -97,8 +100,8 @@ export function RightDock() {
   return (
     <>
       <ResizeHandle axis="x" onDelta={(d) => set({ rightWidth: clamp(useUi.getState().rightWidth - d, 280, 520) })} />
-      <aside className="flex shrink-0 flex-col border-l border-line bg-panel" style={{ width }}>
-        <TabBar value={tab} onChange={setPanel} tabs={RIGHT_TABS} right={<IconButton icon={PanelRightClose} size="sm" label="오른쪽 패널 닫기" kbd="Alt+2" onClick={() => set({ rightOpen: false })} />} />
+      <aside className={cx("flex shrink-0 flex-col border-l border-line bg-panel", drawer && "shadow-[var(--shadow-pop)]")} style={{ width: drawer ? drawerWidth(width) : width }}>
+        <TabBar value={tab} onChange={setPanel} tabs={RIGHT_TABS} right={<IconButton icon={PanelRightClose} size="sm" label="오른쪽 패널 닫기" kbd="Alt+2" tipSide="bottom-end" onClick={() => setDock("right", false)} />} />
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto text-sm text-ink-2">
           {tab === "scene" ? selection ? <Properties /> : <SceneInspector /> : null}
           {tab === "shots" ? (

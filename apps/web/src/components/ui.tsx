@@ -20,7 +20,9 @@ export function Kbd({ children, className }: { children: ReactNode; className?: 
   return <kbd className={cx("inline-flex h-[18px] min-w-[18px] items-center justify-center rounded border border-line-strong bg-white/[0.04] px-1 font-mono text-[10px] leading-none text-ink-2", className)}>{children}</kbd>;
 }
 
-const tipProps = (label: string, kbd?: string, side?: "top" | "right" | "left" | "bottom") => ({
+type TipSide = "top" | "right" | "left" | "bottom" | "bottom-end" | "top-end";
+
+const tipProps = (label: string, kbd?: string, side?: TipSide) => ({
   "aria-label": label,
   "data-tip": label,
   "data-kbd-label": kbd ? `   ${kbd}` : "",
@@ -30,13 +32,14 @@ const tipProps = (label: string, kbd?: string, side?: "top" | "right" | "left" |
 export function IconButton({
   icon: Icon, label, kbd, active, disabled, onClick, tipSide, size = "md", tone = "default", className, children,
 }: {
-  icon: LucideIcon;
+  /** optional: a text glyph (children) can stand in for the icon, e.g. the { } of In / Out */
+  icon?: LucideIcon;
   label: string;
   kbd?: string;
   active?: boolean;
   disabled?: boolean;
   onClick?: () => void;
-  tipSide?: "top" | "right" | "left" | "bottom";
+  tipSide?: TipSide;
   size?: "sm" | "md" | "lg";
   tone?: "default" | "accent" | "danger";
   className?: string;
@@ -55,16 +58,16 @@ export function IconButton({
       onClick={onClick}
       disabled={disabled}
       {...tipProps(label, kbd, tipSide)}
-      className={cx("inline-flex items-center justify-center gap-1.5 rounded-md px-1.5 text-xs transition-colors disabled:pointer-events-none disabled:opacity-35", dims, tones[tone], className)}
+      className={cx("inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-1.5 text-xs transition-colors disabled:pointer-events-none disabled:opacity-35", dims, tones[tone], className)}
     >
-      <Icon size={icon} strokeWidth={1.75} />
+      {Icon ? <Icon size={icon} strokeWidth={1.75} /> : null}
       {children}
     </button>
   );
 }
 
 /** An icon button bound to a registry command: label, shortcut, checked and enabled state come from the command. */
-export function CommandButton({ id, icon, tipSide, size, tone, label, className, children }: { id: string; icon: LucideIcon; tipSide?: "top" | "right" | "left" | "bottom"; size?: "sm" | "md" | "lg"; tone?: "default" | "accent" | "danger"; label?: string; className?: string; children?: ReactNode }) {
+export function CommandButton({ id, icon, tipSide, size, tone, label, className, children }: { id: string; icon?: LucideIcon; tipSide?: TipSide; size?: "sm" | "md" | "lg"; tone?: "default" | "accent" | "danger"; label?: string; className?: string; children?: ReactNode }) {
   const c = findCommand(id);
   const live = useLive(() => (c ? `${isEnabled(c) ? 1 : 0}${c.checked?.() ? 1 : 0}${titleOf(c)}` : ""));
   if (!c) return null;
@@ -94,16 +97,17 @@ export function Button({ children, onClick, tone = "secondary", icon: Icon, disa
     danger: "bg-key/15 text-key hover:bg-key/25",
   };
   return (
-    <button type="button" title={title} onClick={onClick} disabled={disabled} className={cx("inline-flex h-7 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-xs transition disabled:pointer-events-none disabled:opacity-40", tones[tone], className)}>
+    <button type="button" title={title} onClick={onClick} disabled={disabled} className={cx("inline-flex h-7 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-xs transition disabled:pointer-events-none disabled:opacity-40", tones[tone], className)}>
       {Icon ? <Icon size={14} strokeWidth={1.75} /> : null}
       {children}
     </button>
   );
 }
 
-export function Segmented<T extends string>({ value, options, onChange, size = "md", className }: { value: T; options: ReadonlyArray<{ value: T; label?: string; icon?: LucideIcon; tip?: string; kbd?: string }>; onChange: (v: T) => void; size?: "sm" | "md"; className?: string }) {
+/** `labelClassName` lets a bar hide the labels when it gets narrow (e.g. "@max-3xl:hidden" inside a container) — icons and tooltips stay. */
+export function Segmented<T extends string>({ value, options, onChange, size = "md", className, labelClassName }: { value: T; options: ReadonlyArray<{ value: T; label?: string; icon?: LucideIcon; tip?: string; kbd?: string }>; onChange: (v: T) => void; size?: "sm" | "md"; className?: string; labelClassName?: string }) {
   return (
-    <div className={cx("inline-flex items-center rounded-lg bg-black/30 p-0.5 ring-1 ring-line", className)}>
+    <div className={cx("inline-flex shrink-0 items-center rounded-lg bg-black/30 p-0.5 ring-1 ring-line", className)}>
       {options.map((o) => {
         const on = o.value === value;
         const Icon = o.icon;
@@ -114,13 +118,13 @@ export function Segmented<T extends string>({ value, options, onChange, size = "
             onClick={() => onChange(o.value)}
             {...(o.tip ? tipProps(o.tip, o.kbd) : {})}
             className={cx(
-              "inline-flex items-center gap-1.5 rounded-md font-medium transition-colors",
+              "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-colors",
               size === "sm" ? "h-6 px-2 text-[11px]" : "h-7 px-2.5 text-xs",
               on ? "bg-raised text-ink shadow-sm ring-1 ring-line-strong" : "text-ink-3 hover:text-ink",
             )}
           >
             {Icon ? <Icon size={14} strokeWidth={1.75} className={on ? "text-accent" : undefined} /> : null}
-            {o.label}
+            {o.label ? <span className={labelClassName}>{o.label}</span> : null}
           </button>
         );
       })}
@@ -131,19 +135,23 @@ export function Segmented<T extends string>({ value, options, onChange, size = "
 /** Dock tab strip (left / right panels). */
 export function TabBar<T extends string>({ value, tabs, onChange, right }: { value: T; tabs: ReadonlyArray<{ value: T; label: string; icon?: LucideIcon }>; onChange: (v: T) => void; right?: ReactNode }) {
   return (
-    <div className="flex h-9 shrink-0 items-stretch gap-0.5 border-b border-line px-1.5">
+    // a container: in a narrow panel the tabs drop their labels and keep icon + tooltip (Premiere / Resolve panel tabs)
+    <div className="@container flex h-9 shrink-0 items-stretch gap-0.5 border-b border-line px-1.5">
       {tabs.map((t) => {
         const on = t.value === value;
+        // how narrow before the labels go: four tabs need ~19rem, two fit in ~11rem
+        const tight = tabs.length > 2 ? "@max-[19rem]:sr-only" : "@max-[11rem]:sr-only";
         const Icon = t.icon;
         return (
           <button
             key={t.value}
             type="button"
             onClick={() => onChange(t.value)}
-            className={cx("relative inline-flex items-center gap-1.5 px-2.5 text-xs font-medium transition-colors", on ? "text-ink" : "text-ink-3 hover:text-ink-2")}
+            title={t.label}
+            className={cx("relative inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 text-xs font-medium transition-colors", on ? "text-ink" : "text-ink-3 hover:text-ink-2")}
           >
             {Icon ? <Icon size={14} strokeWidth={1.75} className={on ? "text-accent" : undefined} /> : null}
-            {t.label}
+            <span className={Icon ? tight : undefined}>{t.label}</span>
             {on ? <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-accent" /> : null}
           </button>
         );

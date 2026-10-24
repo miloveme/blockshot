@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
-import { restoreUi, useUi } from "@/lib/ui";
+import { COMPACT_WIDTH, restoreUi, setDock, useUi } from "@/lib/ui";
 import { commandForEvent, eventCode, runCommand } from "@/lib/commands";
 import { installApi } from "@/lib/api";
 import { LoadingScreen } from "./LoadingScreen";
@@ -138,15 +138,25 @@ export default function Studio() {
   const leftOpen = useUi((s) => s.leftOpen);
   const rightOpen = useUi((s) => s.rightOpen);
   const bottomOpen = useUi((s) => s.bottomOpen);
+  const compact = useUi((s) => s.compact);
+  const overlay = useUi((s) => s.overlay);
 
   useEffect(() => {
     restoreUi();
+    // narrow window → side panels become drawers (and start closed, so the picture is not covered)
+    const fit = () => {
+      const compact = window.innerWidth < COMPACT_WIDTH;
+      if (compact !== useUi.getState().compact) useUi.setState({ compact, overlay: null });
+    };
+    fit();
+    window.addEventListener("resize", fit);
     let stop: (() => void) | undefined;
     let cancelled = false;
     void startAutosave().then((fn) => (cancelled ? fn() : (stop = fn)));
     const uninstall = installApi();
     return () => {
       cancelled = true;
+      window.removeEventListener("resize", fit);
       stop?.();
       uninstall();
     };
@@ -190,6 +200,12 @@ export default function Studio() {
         } else if (code.startsWith("Arrow")) e.preventDefault();
         return;
       }
+      if (code === "Escape" && ui.overlay) {
+        // a drawer (narrow window) closes before Esc deselects
+        e.preventDefault();
+        setDock(ui.overlay, false);
+        return;
+      }
       const cmd = commandForEvent(e);
       if (!cmd) return;
       e.preventDefault();
@@ -210,21 +226,29 @@ export default function Studio() {
         if (/\.glb$/i.test(f.name)) {
           // a dropped model: import it, then arm placement so the next floor click puts it down
           void importGlb(f).then((id) => id && useStudio.getState().setTool({ kind: "place", ref: { kind: "prop", type: "model", asset: id } }));
-          useUi.getState().set({ leftOpen: true, leftTab: "assets" });
+          useUi.getState().set({ leftTab: "assets" });
+          setDock("left", true);
           return;
         }
         void f.text().then((text) => loadSpecText(text, f.name));
       }}
     >
       <MenuBar />
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
         <ToolRail />
-        {leftOpen ? <LeftDock /> : null}
+        {!compact && leftOpen ? <LeftDock /> : null}
         <main className="relative flex min-w-0 flex-1 flex-col">
           <ViewportBar />
           <Stage />
         </main>
-        {rightOpen ? <RightDock /> : null}
+        {!compact && rightOpen ? <RightDock /> : null}
+        {compact && overlay ? (
+          // drawer over the viewport; a click on the dimmed picture (or the panel's close button / Alt+1·2) puts it away
+          <>
+            <div className="animate-fade absolute inset-y-0 left-11 right-0 z-30 bg-black/35" onPointerDown={() => setDock(overlay, false)} />
+            <div className={`animate-pop absolute inset-y-0 z-40 flex ${overlay === "left" ? "left-11" : "right-0"}`}>{overlay === "left" ? <LeftDock drawer /> : <RightDock drawer />}</div>
+          </>
+        ) : null}
       </div>
       {bottomOpen ? <TimelineDock /> : null}
       <StatusBar />

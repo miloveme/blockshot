@@ -53,8 +53,8 @@ export function ContextMenu() {
   }, [menu]);
   if (!menu) return null;
   // keep the menu on screen
-  const x = Math.min(menu.x, window.innerWidth - 260);
-  const y = Math.min(menu.y, window.innerHeight - 40 - menu.items.length * 30);
+  const x = Math.max(8, Math.min(menu.x, window.innerWidth - 260));
+  const y = Math.max(8, Math.min(menu.y, window.innerHeight - 40 - menu.items.length * 30));
   return (
     <div ref={ref} className="animate-pop fixed z-[70] w-64 rounded-lg bg-raised p-1 text-xs shadow-[var(--shadow-pop)]" style={{ left: x, top: y }} onContextMenu={(e) => e.preventDefault()}>
       {menu.title ? <div className="truncate px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-3">{menu.title}</div> : null}
