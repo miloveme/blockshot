@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compile, evaluate, floorHeight, needsCrouch, surfaceHeightAt, bakeNav, findPath, isBlocked, lineClear, nearestFree, routeLegs, staticActors, validateSpec, type BlockshotSpec, type Vec3 } from "../src";
+import { basePose, compile, evaluate, floorHeight, needsCrouch, surfaceHeightAt, bakeNav, findPath, isBlocked, lineClear, nearestFree, routeLegs, staticActors, validateSpec, type BlockshotSpec, type Vec3 } from "../src";
 
 const parse = (input: unknown): BlockshotSpec => {
   const r = validateSpec(input);
@@ -390,5 +390,59 @@ describe("moving people avoid each other (prioritized space-time planning)", () 
   it("is deterministic", () => {
     const spec = world([], [walk("a", [6, 0, 0]), walk("b", [-6, 0, 0], 0.2)]);
     expect(evaluate(compile(spec), 7.3)).toEqual(evaluate(compile(spec), 7.3));
+  });
+});
+
+describe("climbing stairs step by step", () => {
+  const spec = (to: Vec3, from: Vec3 = [0, 0, -4]) =>
+    parse({
+      specVersion: "0.1",
+      space: { type: "ground", size: 40 },
+      actors: [{ id: "a", position: from }],
+      props: [{ id: "st", type: "stairs", position: [0, 0, 0] }, { id: "deck", type: "platform", position: [0, 0.8, 2.2] }],
+      actions: [{ type: "walkTo", actor: "a", to, start: 0 }],
+    });
+  const sample = (s: BlockshotSpec) => {
+    const c = compile(s);
+    return Array.from({ length: 360 }, (_, i) => evaluate(c, i * 0.05).actors.a!);
+  };
+
+  it("uses the climb pose on the stairs only, at one step per 0.6 s", () => {
+    const states = sample(spec([0, 0, 2.2]));
+    const climbing = states.map((s, i) => ({ i, pose: s.pose })).filter((x) => x.pose === "climb");
+    expect(climbing.length).toBeGreaterThan(0);
+    expect(states[0]!.pose).toBe("walk");
+    expect(states.at(-1)!.pose).toBe("stand");
+    // 6–7 risers × 0.6 s on the stairs
+    expect(climbing.length * 0.05).toBeGreaterThan(3.3);
+    expect(climbing.length * 0.05).toBeLessThan(4.6);
+  });
+
+  it("the body height is a staircase: level for a while, then up one riser", () => {
+    const ys = sample(spec([0, 0, 2.2])).map((s) => s.position[1]);
+    const plateaus = ys.filter((y, i) => i > 0 && Math.abs(y - ys[i - 1]!) < 1e-6 && y > 0.05 && y < 1.19).length;
+    expect(plateaus).toBeGreaterThan(8); // level stretches between risers
+    expect(ys.at(-1)).toBeCloseTo(1.2, 1);
+    expect(Math.max(...ys.map((y, i) => (i ? Math.abs(y - ys[i - 1]!) : 0)))).toBeLessThan(0.08); // never jumps more than a fraction of a riser per 0.05 s
+    ys.forEach((y, i) => i && expect(y).toBeGreaterThanOrEqual(ys[i - 1]! - 1e-4));
+  });
+
+  it("coming down is the same climb in reverse", () => {
+    const down = sample(spec([0, 0, -4], [0, 1.2, 2.2]));
+    const ys = down.map((s) => s.position[1]);
+    expect(down.some((s) => s.pose === "climb")).toBe(true);
+    expect(ys[0]).toBeCloseTo(1.2, 1);
+    expect(ys.at(-1)).toBeCloseTo(0, 1);
+    ys.forEach((y, i) => i && expect(y).toBeLessThanOrEqual(ys[i - 1]! + 1e-4));
+  });
+
+  it("the climb pose lifts the knee high, opposite legs alternately", () => {
+    const a = basePose("climb", 0.3); // left leg mid-lift
+    const b = basePose("climb", 0.9); // right leg mid-lift
+    expect(a.rot.leftUpperLeg![0]).toBeLessThan(-0.9);
+    expect(a.rot.leftLowerLeg![0]).toBeGreaterThan(1);
+    expect(a.rot.rightUpperLeg![0]).toBeGreaterThan(-0.3);
+    expect(b.rot.rightUpperLeg![0]).toBeLessThan(-0.9);
+    expect(basePose("climb", 0.3).rot.leftUpperLeg).toEqual(a.rot.leftUpperLeg); // deterministic
   });
 });

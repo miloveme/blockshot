@@ -27,7 +27,7 @@ export type Target = z.infer<typeof Target>;
 export const Ease = z.enum(["linear", "easeIn", "easeOut", "easeInOut", "step"]);
 export type Ease = z.infer<typeof Ease>;
 
-export const POSES = ["stand", "idle", "walk", "run", "sit", "point", "talk", "crouch"] as const;
+export const POSES = ["stand", "idle", "walk", "run", "sit", "point", "talk", "crouch", "climb"] as const;
 export const Pose = z.enum(POSES);
 export type Pose = z.infer<typeof Pose>;
 

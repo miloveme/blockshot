@@ -9,7 +9,7 @@ import { commitTransform, deleteSelected, insertKeyAtCurrentTime, matchCameraToF
 import { getBridge } from "@/lib/render";
 import { ColorField, NumField, Row, SelectField, TextField, Vec3Field } from "./fields";
 
-const POSE_LABEL: Record<Pose, string> = { stand: "서기", idle: "대기", walk: "걷기", run: "달리기", sit: "앉기", point: "가리키기", talk: "말하기", crouch: "숙이기" };
+const POSE_LABEL: Record<Pose, string> = { stand: "서기", idle: "대기", walk: "걷기", run: "달리기", sit: "앉기", point: "가리키기", talk: "말하기", crouch: "숙이기", climb: "계단 오르기" };
 
 export function Outliner() {
   const spec = useStudio((s) => s.spec);

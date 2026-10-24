@@ -3,8 +3,8 @@ import { applyEase, DEG, unwrapYaw, vec, yawTowards } from "./math";
 import { verticalFov } from "./camera";
 import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
 import { seatPose } from "./catalog";
-import { planAroundMovers, type Mover } from "./nav-time";
-import { bakeNav, crouchSpans, navRadiusOf, routeLegs, staticActors, type Circle, type NavGrid } from "./nav";
+import { planAroundMovers, timeRouteOnGrid, type Mover } from "./nav-time";
+import { bakeNav, crouchSpans, surfaceSpans, navRadiusOf, routeLegs, staticActors, type Circle, type NavGrid } from "./nav";
 import { REST_HEIGHT, applyLayer, blendPoses, smoothstep, solveRig, toLocal, toWorld, type BoneName, type RigPose, type Skeleton } from "./rig";
 import { Q } from "./quat";
 import { basePose, envelope, GESTURE_DEFS, handShapeLayer, lookLayer, RELAXED_HANDS, sampleGesture, solveArm } from "./poses";
@@ -212,11 +212,11 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       const duration = a.duration ?? total / speed;
 
       // time every point at a constant pace along the route
-      let timed: TimedPoint[] = [{ p: points[0]!, t: a.start }];
-      lengths.forEach((len, i) => timed.push({ p: points[i + 1]!, t: timed[i]!.t + (len / total) * duration }));
-
       const gait: Pose = a.type === "runTo" ? "run" : "walk";
       const nav = a.direct ? null : navFor(scene, a.actor, a.start);
+      let timed: TimedPoint[] = [{ p: points[0]!, t: a.start }];
+      if (nav) timed = timeRouteOnGrid(nav.grid, points, a.start, total / duration); // stairs are climbed step by step
+      else lengths.forEach((len, i) => timed.push({ p: points[i + 1]!, t: timed[i]!.t + (len / total) * duration }));
       if (nav) {
         // people who started walking earlier have priority: step round / wait for anyone this walk would run into
         const movers = moversFor(scene, a.actor);
@@ -228,6 +228,7 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       insertKey(rot, { t: a.start, value: startRot, ease: "linear" });
       // where along the walk the body has to duck (under a beam, a low lintel …)
       const ducks = nav ? crouchSpans(nav.grid, timed.map((tp) => tp.p)) : [];
+      const climbs = nav ? surfaceSpans(nav.grid, timed.map((tp) => tp.p), 3) : [];
       let yaw = startRot[1];
       let along = 0;
       let lastPose: Pose | null = null;
@@ -244,13 +245,13 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
         insertKey(rot, { t: tp.t, value: [startRot[0], yaw, startRot[2]], ease: "linear" });
         insertKey(pos, { t: tp.t, value: tp.p, ease: "linear" });
         const mid = along + dist / 2;
-        const want: Pose = !moving ? "stand" : ducks.some(([f, t]) => mid >= f && mid <= t) ? "crouch" : gait;
+        const want: Pose = !moving ? "stand" : ducks.some(([f, t]) => mid >= f && mid <= t) ? "crouch" : climbs.some(([f, t]) => mid >= f && mid <= t) ? "climb" : gait;
         if (want !== lastPose) insertKey(pose, { t: from.t, value: want, ease: "step" });
         lastPose = want;
         along += dist;
       });
       const endT = timed[timed.length - 1]!.t;
-      insertKey(pose, { t: endT, value: prevPose === "walk" || prevPose === "run" || prevPose === "crouch" ? "stand" : prevPose, ease: "step" });
+      insertKey(pose, { t: endT, value: prevPose === "walk" || prevPose === "run" || prevPose === "crouch" || prevPose === "climb" ? "stand" : prevPose, ease: "step" });
       break;
     }
     case "turnTo": {

@@ -15,6 +15,8 @@ const set = (pose: RigPose, bone: BoneName, x = 0, y = 0, z = 0) => {
 
 /** Seated pelvis height above the floor (m) and how far the thighs slope down from horizontal (rad). */
 export const SIT_HIPS_Y = 0.58;
+/** seconds per stair when climbing — the pace the `climb` pose cycles at (two steps per cycle) */
+export const CLIMB_STEP = 0.6;
 const SIT_THIGH_DROP = 0.19;
 
 /** The built-in poses as bone data. `t` = seconds since the pose started (drives the cycles). */
@@ -73,6 +75,29 @@ export function basePose(name: Pose, t: number): RigPose {
     case "idle":
       set(p, "spine", Math.sin(t * 1.3) * 0.015);
       return p;
+    case "climb": {
+      // up (or down) a staircase: one step every 0.6 s — knee driven high to clear the riser, torso leaning in, arms counter-swinging
+      const ph = (t / CLIMB_STEP / 2) * Math.PI * 2;
+      for (const [side, off] of [["left", 0], ["right", Math.PI]] as const) {
+        const s = Math.sin(ph + off);
+        const lift = Math.max(0, s);
+        const push = Math.max(0, -s);
+        const ul = -0.2 - 0.95 * lift + 0.25 * push;
+        const ll = 0.25 + 1.25 * lift - 0.2 * push;
+        set(p, `${side}UpperLeg`, ul);
+        set(p, `${side}LowerLeg`, ll);
+        set(p, `${side}Foot`, -(ul + ll) * 0.8);
+      }
+      const arm = Math.sin(ph);
+      set(p, "leftUpperArm", -0.25 + 0.3 * arm);
+      set(p, "rightUpperArm", -0.25 - 0.3 * arm);
+      set(p, "leftLowerArm", -0.5);
+      set(p, "rightLowerArm", -0.5);
+      set(p, "spine", 0.2);
+      set(p, "head", -0.1);
+      p.hips = [0, -0.03, 0.05];
+      return p;
+    }
     case "crouch": {
       // ducking under something: deep knee bend, torso and head down, a small shuffling step cycle
       const sw = Math.sin(t * Math.PI * 2 * 1.1) * 0.22;
