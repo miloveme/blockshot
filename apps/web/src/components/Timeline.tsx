@@ -3,10 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { buildSequence, editDuration, editPoints, setShotRange } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
-import {
-  addSelectionToBin, addShotAtEnd, clearRange, copySelection, cutSelection, deleteSelection, duplicateSelection, insertClipsAt, joinSelection,
-  moveClipTo, paste, razorAt, setInPoint, setOutPoint, splitAtPlayhead,
-} from "@/lib/shotActions";
+import { Archive, ClipboardPaste, Copy, CopyPlus, Merge, MousePointer2, Plus, Scissors, Slice, SquareSplitHorizontal, Trash2, X, ZoomIn } from "lucide-react";
+import { clearRange, insertClipsAt, moveClipTo, razorAt } from "@/lib/shotActions";
+import { CommandButton } from "./ui";
 
 export const SHOT_COLORS = ["#3b82f6", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#ec4899"];
 
@@ -16,44 +15,48 @@ export function timecode(t: number, fps: number) {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}:${String(f).padStart(2, "0")}`;
 }
 
-const tool = "rounded bg-raised px-2 py-0.5 text-[11px] text-ink hover:bg-hover disabled:opacity-30";
-const on = "rounded bg-accent px-2 py-0.5 text-[11px] font-medium text-black";
-
+/**
+ * Cut-editing toolbar, Premiere / CapCut style: tools on the left, edit operations as icon buttons (each one a registry
+ * command, so tooltip, shortcut and enabled state match the menu), zoom on the right. Icons keep it on one line at any width.
+ */
 function EditTools() {
-  const razor = useStudio((s) => s.razor);
   const clipboard = useStudio((s) => s.clipboard);
   const selection = useStudio((s) => s.clipSelection);
   const inPoint = useStudio((s) => s.inPoint);
   const outPoint = useStudio((s) => s.outPoint);
   const zoom = useStudio((s) => s.editZoom);
-  const hasShots = useStudio((s) => s.spec.shots.length > 0);
-  const { setRazor, setEditZoom } = useStudio.getState();
+  const { setEditZoom } = useStudio.getState();
   const range = inPoint !== null && outPoint !== null;
+  const sep = <span className="mx-1 h-4 w-px shrink-0 bg-line" />;
+  const glyph = "font-mono text-[13px] font-semibold leading-none";
   return (
-    <div className="mb-1 flex flex-wrap items-center gap-1">
-      <button className={razor ? tool : on} onClick={() => setRazor(false)} title="선택 도구 (V) — 클릭: 선택 · Shift: 추가 선택 · 드래그: 이동">↖ 선택</button>
-      <button className={razor ? on : tool} onClick={() => setRazor(true)} title="면도날 도구 (B) — 클립을 클릭한 위치에서 자르기">✂ 면도날</button>
-      <span className="mx-0.5 h-3 w-px bg-raised" />
-      <button className={tool} disabled={!hasShots} onClick={splitAtPlayhead} title="재생 헤드에서 자르기 (Ctrl+B · Ctrl+K)">재생헤드 자르기</button>
-      <button className={tool} disabled={!hasShots} onClick={setInPoint} title="In 지점 (I)">In</button>
-      <button className={tool} disabled={!hasShots} onClick={setOutPoint} title="Out 지점 (O)">Out</button>
+    <div className="mb-1.5 flex min-w-0 items-center gap-0.5">
+      <CommandButton id="cut.select" icon={MousePointer2} size="sm" tipSide="top" />
+      <CommandButton id="cut.razor" icon={Slice} size="sm" tipSide="top" />
+      {sep}
+      <CommandButton id="cut.split" icon={SquareSplitHorizontal} size="sm" tipSide="top" />
+      <CommandButton id="cut.in" size="sm" tipSide="top" className={glyph}>{"{"}</CommandButton>
+      <CommandButton id="cut.out" size="sm" tipSide="top" className={glyph}>{"}"}</CommandButton>
       {range ? (
-        <button className={tool} onClick={clearRange} title="구간 해제 (Alt+X)">
-          구간 {Math.min(inPoint, outPoint).toFixed(1)}–{Math.max(inPoint, outPoint).toFixed(1)}s ✕
+        <button type="button" onClick={clearRange} data-tip="구간 해제" data-kbd-label="   Alt+X" data-tip-side="top" className="ml-0.5 flex h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded-md bg-accent-soft px-1.5 font-mono text-[10px] text-accent hover:bg-accent/25">
+          {Math.min(inPoint, outPoint).toFixed(1)}–{Math.max(inPoint, outPoint).toFixed(1)}s
+          <X size={11} />
         </button>
       ) : null}
-      <span className="mx-0.5 h-3 w-px bg-raised" />
-      <button className={tool} disabled={!hasShots} onClick={deleteSelection} title="삭제 (Delete) — 선택한 클립, 선택이 없으면 In/Out 구간을 잘라내고 뒤를 당김">🗑 삭제</button>
-      <button className={tool} disabled={!hasShots} onClick={cutSelection} title="잘라내기 (Ctrl+X)">잘라내기</button>
-      <button className={tool} disabled={!hasShots} onClick={copySelection} title="복사 (Ctrl+C)">복사</button>
-      <button className={tool} disabled={!clipboard.length} onClick={paste} title="재생 헤드 위치에 붙여넣기 (Ctrl+V) — 클립 중간이면 갈라서 끼워 넣음">붙여넣기</button>
-      <button className={tool} disabled={!hasShots} onClick={duplicateSelection} title="복제 (Ctrl+D)">복제</button>
-      <button className={tool} disabled={!hasShots} onClick={joinSelection} title="다음 클립과 합치기 (같은 카메라 · 이어지는 장면 시간)">합치기</button>
-      <button className={tool} disabled={!hasShots} onClick={addSelectionToBin} title="선택(또는 구간)을 보관함에 저장 — 나중에 다시 넣기">📥 보관함</button>
-      <button className={tool} onClick={addShotAtEnd}>＋ 샷</button>
-      <span className="ml-auto flex items-center gap-1 text-[10px] text-ink-3">
-        {selection.length ? `${selection.length}개 선택 · ` : ""}확대
-        <input type="range" min={1} max={20} step={0.5} value={zoom} onChange={(e) => setEditZoom(Number(e.target.value))} className="w-20 accent-[var(--color-accent)]" />
+      {sep}
+      <CommandButton id="cut.delete" icon={Trash2} size="sm" tipSide="top" label="삭제 — 선택한 클립, 없으면 In/Out 구간 (뒤가 당겨짐)" />
+      <CommandButton id="cut.cut" icon={Scissors} size="sm" tipSide="top" />
+      <CommandButton id="cut.copy" icon={Copy} size="sm" tipSide="top" />
+      <CommandButton id="cut.paste" icon={ClipboardPaste} size="sm" tipSide="top" label={clipboard.length ? "재생 헤드에 붙여넣기" : "붙여넣기 (복사한 클립 없음)"} />
+      <CommandButton id="cut.duplicate" icon={CopyPlus} size="sm" tipSide="top" />
+      <CommandButton id="cut.join" icon={Merge} size="sm" tipSide="top" />
+      <CommandButton id="cut.toBin" icon={Archive} size="sm" tipSide="top" />
+      {sep}
+      <CommandButton id="cut.addShot" icon={Plus} size="sm" tipSide="top" />
+      <span className="ml-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap pl-2 text-[10px] text-ink-3">
+        {selection.length ? <span className="max-sm:hidden">{selection.length}개 선택</span> : null}
+        <ZoomIn size={13} />
+        <input type="range" min={1} max={20} step={0.5} value={zoom} onChange={(e) => setEditZoom(Number(e.target.value))} aria-label="확대" className="w-20 accent-[var(--color-accent)] max-sm:w-14" />
       </span>
     </div>
   );

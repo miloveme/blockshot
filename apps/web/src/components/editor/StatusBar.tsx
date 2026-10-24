@@ -36,14 +36,14 @@ export function StatusBar() {
   const mode = view.kind === "shot" ? "컷 재생" : view.kind === "camera" ? `카메라 · ${spec.cameras.find((c) => c.id === view.id)?.name ?? view.id}` : "편집 시점";
 
   return (
-    <footer className="flex h-6 shrink-0 items-center gap-4 border-t border-line bg-panel px-3 text-[11px] text-ink-3">
-      <span className="flex items-center gap-1.5 text-ink-2">
+    <footer className="flex h-6 min-w-0 shrink-0 items-center gap-4 overflow-hidden whitespace-nowrap border-t border-line bg-panel px-3 text-[11px] text-ink-3">
+      <span className="flex shrink-0 items-center gap-1.5 text-ink-2">
         <ModeIcon size={12} />
         {mode}
       </span>
-      <span className="truncate">{what}</span>
-      {autoKey ? <span className="rounded bg-key/15 px-1.5 font-medium text-key">● 자동 키</span> : null}
-      <span className="hidden items-center gap-3 lg:flex">
+      <span className="min-w-0 truncate">{what}</span>
+      {autoKey ? <span className="shrink-0 rounded bg-key/15 px-1.5 font-medium text-key">● 자동 키</span> : null}
+      <span className="hidden min-w-0 items-center gap-3 overflow-hidden xl:flex">
         {hints.map(([k, d]) => (
           <span key={k + d} className="flex items-center gap-1">
             <Kbd>{k}</Kbd>
@@ -51,8 +51,8 @@ export function StatusBar() {
           </span>
         ))}
       </span>
-      <span className="ml-auto font-mono tabular-nums">
-        {time.toFixed(2)}s / {duration}s · f{Math.round(time * fps)} · {fps}fps · {resolution.join("×")}
+      <span className="ml-auto shrink-0 font-mono tabular-nums">
+        {time.toFixed(2)}s / {duration}s<span className="max-md:hidden"> · f{Math.round(time * fps)} · {fps}fps · {resolution.join("×")}</span>
       </span>
       {bottomOpen ? null : (
         // the timeline's close button sits at the right end of its transport row, just above: reopen from the same corner
@@ -61,8 +61,8 @@ export function StatusBar() {
           onClick={() => runCommand("view.bottom")}
           data-tip="타임라인 열기"
           data-kbd-label="   Alt+3"
-          data-tip-side="top"
-          className="-mr-1.5 flex h-5 items-center gap-1 rounded px-1.5 text-ink-2 hover:bg-hover hover:text-ink"
+          data-tip-side="top-end"
+          className="-mr-1.5 flex h-5 shrink-0 items-center gap-1 rounded px-1.5 text-ink-2 hover:bg-hover hover:text-ink"
         >
           <PanelBottomOpen size={13} />
           타임라인

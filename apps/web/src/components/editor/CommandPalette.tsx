@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CornerDownLeft, Search, Sparkles } from "lucide-react";
 import { useStudio } from "@/lib/store";
-import { useUi } from "@/lib/ui";
+import { setDock, useUi } from "@/lib/ui";
 import { CATEGORY_LABEL, isEnabled, runCommand, searchCommands, shortcutOf, titleOf } from "@/lib/commands";
 import { cx, Kbd } from "../ui";
 
@@ -16,7 +16,8 @@ const AI_IDEAS = [
 
 /** Opens the AI panel with a request (palette → AI). Animates the current scene when something is already placed. */
 export function askAi(request: string) {
-  useUi.getState().set({ paletteOpen: false, paletteAi: false, aiDraft: request, aiDraftSeq: useUi.getState().aiDraftSeq + 1, rightOpen: true });
+  useUi.getState().set({ paletteOpen: false, paletteAi: false, aiDraft: request, aiDraftSeq: useUi.getState().aiDraftSeq + 1 });
+  setDock("right", true);
   useStudio.getState().setPanel("ai");
 }
 

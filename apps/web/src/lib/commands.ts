@@ -2,7 +2,7 @@
 
 import { PROP_TYPES, bakeActor, duplicateEntity, keyTimes, unbakeActor, type PropType } from "@blockshot/core";
 import { useStudio } from "./store";
-import { useUi } from "./ui";
+import { dockVisible, setDock, toggleDock, useUi } from "./ui";
 import {
   addActorCmd, addCameraCmd, addCameraFromFreeView, addPropCmd, deleteSelected, insertKeyAtCurrentTime, matchCameraToFreeView, removeKeysAtCurrentTime, setLens,
 } from "./actions";
@@ -84,7 +84,7 @@ export const PROP_LABEL: Record<string, string> = {
 
 function openRight(panel: "scene" | "shots" | "ai" | "render") {
   st().setPanel(panel);
-  if (!ui().rightOpen) ui().set({ rightOpen: true });
+  setDock("right", true);
 }
 
 function jumpKey(dir: 1 | -1) {
@@ -148,7 +148,7 @@ const COMMANDS: Command[] = [
   ...PROP_TYPES.filter((t) => t !== "model").map(
     (t): Command => ({ id: `add.prop.${t}`, title: `소품 · ${PROP_LABEL[t] ?? t}`, category: "add", aliases: `prop ${t}`, run: () => addPropCmd(t as PropType) }),
   ),
-  { id: "add.assets", title: "에셋 라이브러리 열기", category: "add", aliases: "asset library model glb", run: () => ui().set({ leftOpen: true, leftTab: "assets" }) },
+  { id: "add.assets", title: "에셋 라이브러리 열기", category: "add", aliases: "asset library model glb", run: () => (ui().set({ leftTab: "assets" }), setDock("left", true)) },
 
   // ---- object
   { id: "object.move", title: "이동 도구", category: "object", keys: ["KeyW"], checked: () => st().gizmoMode === "translate", run: () => st().setGizmoMode("translate") },
@@ -288,8 +288,8 @@ const COMMANDS: Command[] = [
   { id: "view.layoutSplit", title: "레이아웃 · 3D + 탑뷰", category: "view", checked: () => st().layout === "split", run: () => st().setLayout("split") },
   { id: "view.layoutPlan", title: "레이아웃 · 탑뷰", category: "view", checked: () => st().layout === "plan", run: () => st().setLayout("plan") },
   { id: "view.cycleLayout", title: "레이아웃 전환", category: "view", keys: ["KeyT"], hidden: true, run: () => st().setLayout(st().layout === "3d" ? "split" : st().layout === "split" ? "plan" : "3d") },
-  { id: "view.left", title: "왼쪽 패널 (아웃라이너·에셋)", category: "view", keys: ["Alt+Digit1"], checked: () => ui().leftOpen, run: () => ui().set({ leftOpen: !ui().leftOpen }) },
-  { id: "view.right", title: "오른쪽 패널 (속성)", category: "view", keys: ["Alt+Digit2"], checked: () => ui().rightOpen, run: () => ui().set({ rightOpen: !ui().rightOpen }) },
+  { id: "view.left", title: "왼쪽 패널 (아웃라이너·에셋)", category: "view", keys: ["Alt+Digit1"], checked: () => dockVisible(ui(), "left"), run: () => toggleDock("left") },
+  { id: "view.right", title: "오른쪽 패널 (속성)", category: "view", keys: ["Alt+Digit2"], checked: () => dockVisible(ui(), "right"), run: () => toggleDock("right") },
   { id: "view.bottom", title: "타임라인", category: "view", keys: ["Alt+Digit3"], checked: () => ui().bottomOpen, run: () => ui().set({ bottomOpen: !ui().bottomOpen }) },
   { id: "view.palette", title: "명령 검색", category: "view", keys: ["Mod+KeyK", "F3"], aliases: "command palette search", run: () => ui().set({ paletteOpen: true, paletteAi: false }) },
 

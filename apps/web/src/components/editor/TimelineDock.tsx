@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useSyncExternalStore } from "react";
 import { describeAction, editDuration, keyTimes, type Action } from "@blockshot/core";
 import { Camera, Circle, Clapperboard, Diamond, Pause, Play, SkipBack, SkipForward, StepBack, StepForward, User, Box, PanelBottomClose } from "lucide-react";
 import { useStudio } from "@/lib/store";
@@ -14,11 +14,26 @@ import { openObjectMenu } from "./ContextMenu";
 import { ResizeHandle } from "./Docks";
 
 const LABEL_W = 184;
+
+/** true when the window is too short to give the timeline its full height (laptop with a browser bar, split screen) */
+function useShortWindow() {
+  return useSyncExternalStore(
+    (cb) => {
+      window.addEventListener("resize", cb);
+      return () => window.removeEventListener("resize", cb);
+    },
+    () => window.innerHeight < 760,
+    () => false,
+  );
+}
 const ROW_H = 24;
 
 /** Bottom dock: transport (play / step / record / auto key, timecode) and, below it, the dope sheet or the cut editor. */
 export function TimelineDock() {
-  const height = useUi((s) => s.bottomHeight);
+  const stored = useUi((s) => s.bottomHeight);
+  const short = useShortWindow();
+  // a short window keeps the picture: the timeline gives up height first
+  const height = short ? Math.min(stored, 150) : stored;
   const set = useUi((s) => s.set);
   const view = useStudio((s) => s.view);
   const cut = view.kind === "shot";
@@ -46,35 +61,37 @@ function Transport() {
   const shown = cut ? editTime : time;
   const end = cut ? editDuration(spec) : duration;
   return (
-    <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line px-2.5">
-      <div className="flex items-center gap-0.5">
+    // container: on a narrow timeline the frame counter, scene time, length field and the switch labels drop out (in that order)
+    <div className="@container flex h-10 min-w-0 shrink-0 items-center gap-2 border-b border-line px-2.5">
+      <div className="flex shrink-0 items-center gap-0.5">
         <IconButton icon={SkipBack} size="sm" label="처음으로" kbd="Home" onClick={() => (cut ? useStudio.getState().setEditTime(0) : runCommand("anim.start"))} />
-        <IconButton icon={StepBack} size="sm" label="이전 프레임" kbd="←" onClick={() => runCommand(cut ? "cut.prevFrame" : "anim.prevFrame")} />
+        <IconButton icon={StepBack} size="sm" label="이전 프레임" kbd="←" onClick={() => runCommand(cut ? "cut.prevFrame" : "anim.prevFrame")} className="@max-sm:hidden" />
         <button
           type="button"
           onClick={() => runCommand("anim.play")}
           disabled={!!recording}
           data-tip={playing ? "정지" : "재생"}
           data-kbd-label="   Space"
-          className="mx-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-accent text-black transition hover:brightness-110 disabled:opacity-40"
+          className="mx-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-black transition hover:brightness-110 disabled:opacity-40"
         >
           {playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" className="translate-x-px" />}
         </button>
-        <IconButton icon={StepForward} size="sm" label="다음 프레임" kbd="→" onClick={() => runCommand(cut ? "cut.nextFrame" : "anim.nextFrame")} />
+        <IconButton icon={StepForward} size="sm" label="다음 프레임" kbd="→" onClick={() => runCommand(cut ? "cut.nextFrame" : "anim.nextFrame")} className="@max-sm:hidden" />
         <IconButton icon={SkipForward} size="sm" label="끝으로" kbd="End" onClick={() => (cut ? useStudio.getState().setEditTime(Math.max(0, editDuration(spec) - 1e-3)) : runCommand("anim.end"))} />
       </div>
-      <span className="h-5 w-px bg-line" />
+      <span className="h-5 w-px shrink-0 bg-line" />
       <CommandButton id="anim.record" icon={Circle} size="sm" tone="danger" />
       <CommandButton id="anim.autokey" icon={Diamond} size="sm" tone="danger" />
-      <div className="ml-1 flex items-baseline gap-2">
-        <span className="font-mono text-[15px] font-medium tabular-nums text-ink">{timecode(shown, fps)}</span>
-        <span className="font-mono text-[11px] tabular-nums text-ink-3">
+      <div className="ml-1 flex shrink-0 items-baseline gap-2">
+        <span className="whitespace-nowrap font-mono text-[15px] font-medium tabular-nums text-ink">{timecode(shown, fps)}</span>
+        <span className="whitespace-nowrap font-mono text-[11px] tabular-nums text-ink-3 @max-2xl:hidden">
           f{Math.round(shown * fps)} / {Math.round(end * fps)}
         </span>
       </div>
-      <div className="mx-auto">
+      <div className="mx-auto shrink-0">
         <Segmented
           size="sm"
+          labelClassName="@max-3xl:hidden"
           value={cut ? "cut" : "scene"}
           onChange={(v) => useStudio.getState().setView(v === "cut" ? { kind: "shot" } : { kind: "free" })}
           options={[
@@ -83,15 +100,15 @@ function Transport() {
           ]}
         />
       </div>
-      {cut ? <span className="text-[11px] text-ink-3">장면 {time.toFixed(2)}s</span> : null}
-      <span className="flex items-center gap-1.5 text-[11px] text-ink-3">
+      {cut ? <span className="whitespace-nowrap text-[11px] text-ink-3 @max-4xl:hidden">장면 {time.toFixed(2)}s</span> : null}
+      <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[11px] text-ink-3 @max-xl:hidden">
         길이
         <span className="w-16">
           <NumField value={duration} min={0.5} max={600} step={0.5} digits={1} onCommit={(v) => edit((s) => ({ ...s, settings: { ...s.settings, duration: v } }))} />
         </span>
         초 · {fps}fps
       </span>
-      <IconButton icon={PanelBottomClose} size="sm" label="타임라인 닫기" kbd="Alt+3" onClick={() => useUi.getState().set({ bottomOpen: false })} />
+      <IconButton icon={PanelBottomClose} size="sm" label="타임라인 닫기" kbd="Alt+3" tipSide="left" onClick={() => useUi.getState().set({ bottomOpen: false })} />
     </div>
   );
 }

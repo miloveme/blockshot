@@ -7,6 +7,13 @@ import { create } from "zustand";
  * touch undo history; sizes and tabs survive reloads (localStorage, best effort).
  */
 export type LeftTab = "outliner" | "assets";
+export type Side = "left" | "right";
+
+/**
+ * Below this window width the side panels stop squeezing the viewport and become drawers over it (one at a time),
+ * the way Figma / VS Code / Premiere behave in a small window: the picture keeps its room, the panels are a click away.
+ */
+export const COMPACT_WIDTH = 1200;
 
 export interface MenuItemSpec {
   label: string;
@@ -27,6 +34,10 @@ interface UiState {
   rightWidth: number;
   bottomHeight: number;
   leftTab: LeftTab;
+  /** window narrower than COMPACT_WIDTH: side panels are drawers (see `overlay`) instead of docks */
+  compact: boolean;
+  /** the drawer that is open in compact mode */
+  overlay: Side | null;
   paletteOpen: boolean;
   /** palette opened in "ask AI" mode */
   paletteAi: boolean;
@@ -61,6 +72,8 @@ export const useUi = create<UiState>((set, get) => ({
   rightWidth: 320,
   bottomHeight: 196,
   leftTab: "outliner",
+  compact: false,
+  overlay: null,
   paletteOpen: false,
   paletteAi: false,
   shortcutsOpen: false,
@@ -77,3 +90,16 @@ export const useUi = create<UiState>((set, get) => ({
     }
   },
 }));
+
+/** Is that side panel on screen (a dock in a wide window, the open drawer in a narrow one)? */
+export const dockVisible = (s: Pick<UiState, "compact" | "overlay" | "leftOpen" | "rightOpen">, side: Side) =>
+  s.compact ? s.overlay === side : side === "left" ? s.leftOpen : s.rightOpen;
+
+/** Shows / hides a side panel in whichever form it has right now. */
+export function setDock(side: Side, open: boolean) {
+  const s = useUi.getState();
+  if (s.compact) s.set({ overlay: open ? side : s.overlay === side ? null : s.overlay });
+  else s.set(side === "left" ? { leftOpen: open } : { rightOpen: open });
+}
+
+export const toggleDock = (side: Side) => setDock(side, !dockVisible(useUi.getState(), side));

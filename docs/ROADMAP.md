@@ -116,6 +116,7 @@
 - [x] 인스펙터: 접히는 섹션, Blender식 드래그 숫자 필드(Shift 미세·Alt 크게), 선택 없음 → 장면 인스펙터(출력·공간)
 - [x] 복제(`duplicateEntity`, ⇧D), 이전/다음 키 이동(↓/↑), ⌘K에서 바로 AI 요청(@멘션 포함 AI 패널로 전달)
 - [x] `window.blockshot` API: commands/run/spec/load/addon/script/select/seek/play/state/link/on ([docs/EDITOR_API.md](EDITOR_API.md))
+- [x] 반응형 셸: 1200px 미만 좌우 패널 서랍화, 1024px 미만 ☰ 메뉴, 컨테이너 쿼리 우선순위 숨김(뷰포트 바·트랜스포트·탭), 짧은 창 타임라인 축소, 컷 편집 아이콘 툴바
 - [ ] 그래프 에디터(커브), 도프시트에서 키 드래그 이동·다중 선택, 사용자 단축키 재지정, 라이트 테마
 
 ## M5 이후
