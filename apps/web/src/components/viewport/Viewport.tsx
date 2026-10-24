@@ -5,9 +5,9 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, PerspectiveCamera, Text } from "@react-three/drei";
 import * as THREE from "three";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
-import { DEG, editDuration, type Vec3 } from "@blockshot/core";
+import { DEG, editDuration, type BoneName, type Vec3 } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
-import { commitCamera, commitCameraRotation, commitScale, commitTransform, snapSteps } from "@/lib/actions";
+import { commitBoneRotation, commitCamera, commitCameraRotation, commitScale, commitTransform, snapSteps } from "@/lib/actions";
 import { registerBridge } from "@/lib/render";
 import { stopRecording } from "@/lib/recorder";
 import { Mannequin } from "./Mannequin";
@@ -176,6 +176,18 @@ function SelectionGizmo() {
       const orbit = get().controls as { enabled: boolean } | null;
       if (orbit) orbit.enabled = !e.value;
       const store = useStudio.getState();
+      if (obj?.name.startsWith("bone:")) {
+        // a bone of the selected actor: rotation is keyed at the current time on release
+        const bone = obj.name.slice(5) as BoneName;
+        if (e.value) {
+          store.setDraggingBone(bone);
+          return;
+        }
+        const id = store.selection;
+        if (id) commitBoneRotation(id, bone, [obj.rotation.x * RAD, obj.rotation.y * RAD, obj.rotation.z * RAD]);
+        store.setDraggingBone(null);
+        return;
+      }
       if (e.value) {
         store.setDragging((obj?.name ?? "").replace(/^obj:/, "") || null);
         return;
@@ -214,13 +226,22 @@ function SelectionGizmo() {
   useFrame(() => {
     const tc = tcRef.current;
     if (!tc) return;
-    const { selection, recording, rendering, sceneState, tool } = useStudio.getState();
+    const { selection, recording, rendering, sceneState, tool, selectedBone } = useStudio.getState();
     const want = view.kind === "free" && !recording && !rendering && !tool ? selection : null;
     const cur = tc.object && tc.object.parent ? tc.object.name : null;
     if (want === null) {
       if (tc.object) tc.detach();
       return;
     }
+    // a picked bone of an actor takes the gizmo: rotate it in its own axes
+    const boneObj = selectedBone && sceneState.actors[want] ? scene.getObjectByName(`obj:${want}`)?.getObjectByName(`bone:${selectedBone}`) : undefined;
+    if (boneObj) {
+      if (tc.object !== boneObj) tc.attach(boneObj);
+      tc.setMode("rotate");
+      tc.setSpace("local");
+      return;
+    }
+    tc.setSpace("world");
     if (cur !== `obj:${want}`) {
       const obj = scene.getObjectByName(`obj:${want}`);
       if (obj) tc.attach(obj);

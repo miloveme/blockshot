@@ -149,7 +149,7 @@ export function Mannequin({ id }: { id: string }) {
       }
       bones.current = found;
     }
-    applyRig(bones.current, a);
+    applyRig(bones.current, a, useStudio.getState().selection === id ? useStudio.getState().draggingBone : null);
     const picked = useStudio.getState().selection === id ? useStudio.getState().selectedBone : null;
     if (markerRef.current !== picked) {
       const old = markerRef.current ? g.getObjectByName(`marker:${markerRef.current}`) : null;
@@ -192,10 +192,10 @@ export function Mannequin({ id }: { id: string }) {
 }
 
 /** Copies the evaluated rig pose onto the bone objects. */
-function applyRig(bones: Partial<Record<BoneName, THREE.Object3D>>, a: ActorState) {
+function applyRig(bones: Partial<Record<BoneName, THREE.Object3D>>, a: ActorState, skip: BoneName | null) {
   for (const b of BONES) {
     const o = bones[b];
-    if (!o) continue;
+    if (!o || b === skip) continue; // the gizmo owns a bone while it is dragged
     const r = a.rig.rot[b];
     if (r) o.rotation.set(r[0], r[1], r[2], "XYZ");
     else o.rotation.set(0, 0, 0);

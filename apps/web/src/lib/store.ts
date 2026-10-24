@@ -36,6 +36,8 @@ interface StudioState {
   selection: string | null;
   /** bone picked on the selected actor (pose editing) */
   selectedBone: BoneName | null;
+  /** bone currently being rotated with the gizmo — the mannequin stops driving it from the rig meanwhile */
+  draggingBone: BoneName | null;
   gizmoMode: GizmoMode;
   /** snap translate to 0.1 m and rotate to 15° */
   snapEnabled: boolean;
@@ -86,6 +88,7 @@ interface StudioState {
   setView(v: ViewMode): void;
   select(id: string | null): void;
   selectBone(bone: BoneName | null): void;
+  setDraggingBone(bone: BoneName | null): void;
   setGizmoMode(m: GizmoMode): void;
   setSnap(on: boolean): void;
   setAutoKey(on: boolean): void;
@@ -147,6 +150,7 @@ export const useStudio = create<StudioState>((set, get) => {
     view: { kind: "shot" },
     selection: null,
     selectedBone: null,
+    draggingBone: null,
     gizmoMode: "translate",
     snapEnabled: true,
     autoKey: false,
@@ -264,6 +268,9 @@ export const useStudio = create<StudioState>((set, get) => {
     },
     selectBone(selectedBone) {
       set({ selectedBone });
+    },
+    setDraggingBone(draggingBone) {
+      set({ draggingBone });
     },
     setGizmoMode(gizmoMode) {
       set({ gizmoMode });
