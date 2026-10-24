@@ -5,7 +5,7 @@ import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
 import { seatPose } from "./catalog";
 import { planAroundMovers, timeRouteOnGrid, type Mover } from "./nav-time";
 import { bakeNav, crouchSpans, surfaceSpans, navRadiusOf, routeLegs, staticActors, type Circle, type NavGrid } from "./nav";
-import { REST_HEIGHT, applyLayer, blendPoses, smoothstep, solveRig, toLocal, toWorld, type BoneName, type RigPose, type Skeleton } from "./rig";
+import { BONES, REST_HEIGHT, applyLayer, blendPoses, clonePose, smoothstep, solveRig, toLocal, toWorld, type BoneName, type RigPose, type Skeleton } from "./rig";
 import { Q } from "./quat";
 import { driveKeys, KEY_STEP, motionAt, motionFromKeys, smoothPath, type Motion } from "./vehicle";
 import { PROP_CATALOG } from "./catalog";
@@ -720,7 +720,44 @@ function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnTyp
       pose = applyLayer(pose, solveArm(pose, layer.hand, goal, scale).layer, w);
     }
   }
+  pose = applyBoneKeys(scene, id, t, pose);
   return { pose, skeleton: solveRig(pose, scale) };
+}
+
+const BONE_FADE = 0.25;
+
+/**
+ * Hand-keyed bones ("bone:<name>" tracks, degrees) override whatever the procedural pose did with them between their first and last
+ * key, fading in and out over BONE_FADE seconds outside that range. "hips" keys offset the pelvis (rest metres).
+ */
+function applyBoneKeys(scene: CompiledScene, id: string, t: number, pose: RigPose): RigPose {
+  let out: RigPose | null = null;
+  const weight = (keys: CKey[]) => {
+    const first = keys[0]!.t;
+    const last = keys[keys.length - 1]!.t;
+    if (t < first) return smoothstep(1 - (first - t) / BONE_FADE);
+    if (t > last) return smoothstep(1 - (t - last) / BONE_FADE);
+    return 1;
+  };
+  for (const name of BONES) {
+    const keys = scene.tracks.get(trackKey(id, `bone:${name}`));
+    if (!keys) continue;
+    const w = weight(keys);
+    if (w <= 0) continue;
+    const v = sampleKeys(keys, t) as Vec3;
+    const target: Vec3 = [v[0] * DEG, v[1] * DEG, v[2] * DEG];
+    out ??= clonePose(pose);
+    out.rot[name] = w >= 1 ? target : lerp3(out.rot[name] ?? [0, 0, 0], target, w);
+  }
+  const hips = scene.tracks.get(trackKey(id, "hips"));
+  if (hips) {
+    const w = weight(hips);
+    if (w > 0) {
+      out ??= clonePose(pose);
+      out.hips = lerp3(out.hips, sampleKeys(hips, t) as Vec3, w);
+    }
+  }
+  return out ?? pose;
 }
 
 // ---- holding props -----------------------------------------------------------------------------------

@@ -12,7 +12,8 @@
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "gen:schema": "tsx scripts/gen-schema.ts"
+    "gen:schema": "tsx scripts/gen-schema.ts",
+    "gen:sandbox": "tsx scripts/gen-sandbox.ts"
   },
   "dependencies": {
     "zod": "^4.6.7"
@@ -21,6 +22,7 @@
     "@types/node": "^24.19.2",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "esbuild": "^0.28.2"
   }
 }

@@ -64,7 +64,8 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 | `scene.reflect(ref, mirror) → ref` | `scene.reflect(man.chest, mirror)` → `"man.chest@mirror"`: 거울 속 반사 위치. 카메라 `lookAt`/`orbit`의 대상으로 쓴다 |
 | `scene.camera(id, opts) → Camera` | `opts: { name?, lens?, sensor?, at?, lookAt?, rotation? }` |
 | `scene.shot(id, { camera, start, end, description?, prompt? })` | 샷 추가 |
-| `scene.key(targetId, property, t, value, ease?)` | 저수준 키프레임 |
+| `scene.key(targetId, property, t, value, ease?)` | 저수준 키프레임 (`property`에 `bone:rightUpperArm`·`hips` 가능) |
+| `actor.bone(bone, [[t,[x°,y°,z°]],…], ease?)` | 뼈 키프레임 (오일러 도). `actor.hips([[t,[x,y,z]],…])`는 골반 |
 | `scene.toSpec()` | 현재까지의 Spec 반환(런타임이 자동 호출) |
 
 ### Actor
@@ -141,4 +142,28 @@ a.walkTo([[-2.5, 0, 0.6], [-1.6, 0, -1.2]], { start: 0.5 });   // 테이블을 �
 a.pose("sit", { start: 6 });
 scene.use("cam1").zoom(85, { start: 1, duration: 5 });
 scene.settings({ duration: 8 });
+```
+
+
+## 코드 API (Remotion 스타일 — 시간의 함수로 연기 쓰기)
+
+반복·리듬·절차적 연기는 키를 일일이 쓰지 않고 시간 함수로 쓴다. 모두 결정론적(난수는 `noise`/`rand`)이다.
+
+| 전역 / 메서드 | 설명 |
+|---|---|
+| `interpolate(x, [x0,x1,…], [v0,v1,…], { ease?, extrapolate? })` | 구간 선형 매핑(기본 범위 밖은 고정). 출력은 숫자 또는 `[x,y,z]` |
+| `spring(t, { stiffness?, damping?, mass? })` | 0→1 감쇠 스프링(오버슈트 후 안정) |
+| `noise(x, seed?)` | 부드러운 결정론적 노이즈 −1…1 (핸드헬드 흔들림·숨쉬기) |
+| `clamp(x, lo, hi)` | |
+| `scene.sequence(start, () => {…})` | 안에서 만든 액션 `start`/`end`와 키 시간이 `start`초만큼 밀린다(중첩 가능, `scene.shot`은 절대 시간) |
+| `scene.animate(id, property, { from?, to, fps?, tolerance?, ease? }, t => value)` | `t`(from 기준 초)의 함수를 샘플링해 단순화된 키로 기록. property: `position`·`rotation`·`focalLength`·`hips`·`bone:<이름>` |
+| `actor.boneFn(bone, { from?, to }, t => [x°,y°,z°])` | 뼈 하나를 시간 함수로 |
+
+```js
+const a = scene.actor("minsu", { at: [0, 0, 0] });
+scene.sequence(1, () => {
+  a.boneFn("head", { to: 4 }, (t) => [0, 25 * Math.sin(t * 2 * Math.PI * 0.5), 0]);      // 천천히 고개 젓기
+  a.boneFn("chest", { to: 4 }, (t) => [2 * noise(t * 1.5, 3), 0, 0]);                       // 숨쉬기
+});
+scene.animate("camA", "position", { from: 0, to: 3 }, (t) => [interpolate(t, [0, 3], [0, 2], { ease: "easeInOut" }), 1.6, 5 - 2 * spring(t)]);
 ```

@@ -1,3 +1,4 @@
+import type { BoneName } from "./rig";
 import {
   SPEC_VERSION,
   type Action,
@@ -15,6 +16,8 @@ import {
   type Vec3,
 } from "./schema";
 import { createRand, DEG, vec, yawTowards } from "./math";
+import { clamp, interpolate, noise, spring } from "./motion";
+import { simplifySamples, type Sample } from "./record";
 import { partPosition } from "./evaluate";
 import { actionLabels, mergeAction, patchProblem } from "./actions";
 import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
@@ -58,6 +61,12 @@ export interface ActorHandle {
   /** Reach a hand toward a point / object / body part (IK) and hold it for `duration`. */
   reach(target: Target, opts: { start: number; hand?: "left" | "right"; duration?: number }): ActorHandle;
   pose(name: Pose, opts: { start: number }): ActorHandle;
+  /** Keyframe one bone by hand: `keys` are [time, [x°, y°, z°]] (Euler XYZ degrees, 0 = rest). Between its first and last key the bone follows these keys instead of the automatic motion. */
+  bone(bone: BoneName, keys: Array<[number, Vec3]>, ease?: Ease): ActorHandle;
+  /** Bone rotation as a function of time: `fn(t)` (seconds since `from`) returns [x°,y°,z°] — breathing, a nod loop, a swing … */
+  boneFn(bone: BoneName, range: { from?: number; to: number; fps?: number; tolerance?: number }, fn: (t: number) => Vec3): ActorHandle;
+  /** Pelvis offset keys (rest metres), e.g. [[0,[0,0,0]],[1,[0,-0.1,0]]] */
+  hips(keys: Array<[number, Vec3]>, ease?: Ease): ActorHandle;
   lookAt(target: Target, opts: { start: number; end?: number }): ActorHandle;
 }
 
@@ -109,7 +118,11 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
     const taken = [...spec.actors, ...spec.props, ...spec.cameras].some((o) => o.id === id);
     if (taken) throw new Error(`Duplicate id "${id}"`);
   };
-  const action = (a: Record<string, unknown>) => spec.actions.push(a as Action);
+  // scene.sequence(start, fn) shifts everything authored inside it (action starts, keys) by `start` seconds
+  let offset = 0;
+  const shifted = (a: Record<string, unknown>) => (offset ? { ...a, ...(typeof a.start === "number" ? { start: a.start + offset } : {}), ...(typeof a.end === "number" ? { end: a.end + offset } : {}) } : a);
+  const action = (a: Record<string, unknown>) => spec.actions.push(shifted(a) as Action);
+  const SAMPLE_TOLERANCE = (property: string) => (property.startsWith("bone:") ? 0.5 : property === "hips" ? 0.005 : property === "focalLength" ? 0.2 : property === "rotation" ? 0.5 : 0.01);
 
   const resolveRough = (target: Target): Vec3 => {
     if (typeof target !== "string") return target;
@@ -139,6 +152,13 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
     return [-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)];
   };
 
+  function addKey(target: string, property: TrackProperty, t: number, value: Vec3 | number | Pose, ease?: Ease) {
+    const existing = spec.tracks.find((tr) => tr.target === target && tr.property === property);
+    const key = { t: t + offset, value, ease };
+    if (existing) existing.keys.push(key);
+    else spec.tracks.push({ target, property, keys: [key] });
+  }
+
   function makeActor(id: string): ActorHandle {
     const handle: ActorHandle = {
       id,
@@ -161,6 +181,9 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
       hold: (prop, o) => (action({ type: "hold", actor: id, prop: typeof prop === "string" ? prop : prop.id, ...o }), handle),
       reach: (target, o) => (action({ type: "reach", actor: id, target, ...o }), handle),
       lookAt: (target, o) => (action({ type: "lookAt", actor: id, target, ...o }), handle),
+      bone: (bone, keys, ease) => (keys.forEach(([t, v]) => addKey(id, `bone:${bone}`, t, v, ease)), handle),
+      boneFn: (bone, range, fn) => (scene.animate(id, `bone:${bone}`, range, fn), handle),
+      hips: (keys, ease) => (keys.forEach(([t, v]) => addKey(id, "hips", t, v, ease)), handle),
     };
     return handle;
   }
@@ -321,11 +344,35 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
       if (!spec.shots.some((s) => s.id === id)) throw new Error(`scene.removeShot("${id}"): no such shot. Available: ${spec.shots.map((s) => s.id).join(", ") || "none"}`);
       spec.shots = spec.shots.filter((s) => s.id !== id);
     },
-    key(target: string, property: TrackProperty, t: number, value: Vec3 | number | Pose, ease?: Ease) {
-      const existing = spec.tracks.find((tr) => tr.target === target && tr.property === property);
-      const key = { t, value, ease };
-      if (existing) existing.keys.push(key);
-      else spec.tracks.push({ target, property, keys: [key] });
+    key: addKey,
+    /** Everything authored inside `fn` (actions, keys, animate) starts `start` seconds later; sequences nest. Shots stay absolute. */
+    sequence(start: number, fn: () => void) {
+      offset += start;
+      try {
+        fn();
+      } finally {
+        offset -= start;
+      }
+    },
+    /**
+     * Keys a property from a function of time: `fn(t)` gets seconds since `from` (0 … to−from) and returns the value
+     * (number or [x,y,z]). Sampled at `fps` and simplified to as few keys as reproduce it.
+     * Properties: position, rotation, focalLength, hips, "bone:<name>" (degrees).
+     */
+    animate(target: string, property: TrackProperty, range: { from?: number; to: number; fps?: number; tolerance?: number; ease?: Ease }, fn: (t: number) => Vec3 | number) {
+      const from = range.from ?? 0;
+      const fps = range.fps ?? 30;
+      const len = range.to - from;
+      if (!(len > 0)) throw new Error("scene.animate: `to` must be after `from`");
+      const samples: Sample<number | Vec3>[] = [];
+      const steps = Math.max(1, Math.ceil(len * fps));
+      for (let i = 0; i <= steps; i++) {
+        const local = (len * i) / steps;
+        const v = fn(local);
+        samples.push({ t: local, value: typeof v === "number" ? v : ([v[0], v[1], v[2]] as Vec3) });
+      }
+      const tol = range.tolerance ?? SAMPLE_TOLERANCE(property);
+      for (const s of simplifySamples(samples as Sample<Vec3>[], tol)) addKey(target, property, Math.round((from + s.t) * 1000) / 1000, s.value, range.ease ?? "linear");
     },
     /** Yaw (deg) that faces from one point/ref to another — handy for `facing`. */
     facing(from: Target, to: Target) {
@@ -336,7 +383,7 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
     },
   };
 
-  return { scene, vec, rand: () => rand() };
+  return { scene, vec, rand: () => rand(), interpolate, spring, noise, clamp };
 }
 
 export type SceneBuilder = ReturnType<typeof createSceneBuilder>["scene"];
@@ -347,8 +394,8 @@ export type SceneBuilder = ReturnType<typeof createSceneBuilder>["scene"];
  * (apps/web) or QuickJS — never on the main thread with untrusted code.
  */
 export function runScript(source: string, base?: BlockshotSpecInput): BlockshotSpecInput {
-  const { scene, vec: v, rand } = createSceneBuilder(base);
-  const fn = new Function("scene", "vec", "rand", `"use strict";\n${source}`);
-  fn(scene, v, rand);
+  const { scene, vec: v, rand, interpolate: lerpTable, spring: sp, noise: nz, clamp: cl } = createSceneBuilder(base);
+  const fn = new Function("scene", "vec", "rand", "interpolate", "spring", "noise", "clamp", `"use strict";\n${source}`);
+  fn(scene, v, rand, lerpTable, sp, nz, cl);
   return scene.toSpec();
 }

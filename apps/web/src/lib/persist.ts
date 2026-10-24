@@ -1,5 +1,6 @@
 "use client";
 
+import { sharedSpecFromHash } from "./share";
 import { validateSpec, type BlockshotSpec } from "@blockshot/core";
 import example from "@blockshot/core/examples/living-room.json";
 import { useStudio } from "./store";
@@ -26,7 +27,10 @@ export async function startAutosave(): Promise<() => void> {
   if (!storageAvailable()) return () => {};
   let id: string;
   try {
-    const project = await resolveProject();
+    // a shared link opens as its own new project, so whatever the visitor was working on stays untouched
+    const shared = typeof location !== "undefined" ? await sharedSpecFromHash(location.hash) : null;
+    const project = shared ? { id: await createProject(shared), spec: shared } : await resolveProject();
+    if (shared) history.replaceState(null, "", location.pathname + location.search);
     id = project.id;
     setCurrentId(id);
     useStudio.getState().setSpec(project.spec);

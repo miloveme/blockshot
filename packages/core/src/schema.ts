@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BONES, type BoneName } from "./rig";
 
 /**
  * Blockshot Spec v0.1 — the single source of truth for a project.
@@ -191,8 +192,16 @@ export const Action = z.discriminatedUnion("type", [
 ]);
 export type Action = z.infer<typeof Action>;
 
-export const TrackProperty = z.enum(["position", "rotation", "focalLength", "lookAt", "pose"]);
+export const BASE_TRACK_PROPERTIES = ["position", "rotation", "focalLength", "lookAt", "pose"] as const;
+/** Bone rotation tracks: "bone:rightUpperArm" — Euler XYZ in DEGREES per key. "hips" is the pelvis offset in rest metres. */
+export const BONE_TRACK_PROPERTIES = BONES.map((b) => `bone:${b}` as `bone:${BoneName}`);
+export const TrackProperty = z.enum([...BASE_TRACK_PROPERTIES, "hips", ...BONE_TRACK_PROPERTIES] as [string, ...string[]]) as unknown as z.ZodType<
+  (typeof BASE_TRACK_PROPERTIES)[number] | "hips" | `bone:${BoneName}`
+>;
 export type TrackProperty = z.infer<typeof TrackProperty>;
+
+/** The bone a track property drives ("bone:head" → "head"), or null. */
+export const boneOfProperty = (p: string): BoneName | null => (p.startsWith("bone:") ? (p.slice(5) as BoneName) : null);
 
 export const Key = z.object({
   t: z.number().min(0),
@@ -205,6 +214,8 @@ export const Track = z.object({
   target: Id,
   property: TrackProperty,
   keys: z.array(Key).min(1),
+  /** written by "bake": keys sampled from actions / procedural motion (can be cleared again) */
+  baked: z.boolean().optional(),
 });
 export type Track = z.infer<typeof Track>;
 

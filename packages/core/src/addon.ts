@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Action, Camera, Id, Shot, type BlockshotSpec } from "./schema";
+import { Action, Camera, Id, Shot, Track, type BlockshotSpec } from "./schema";
 import { compile } from "./evaluate";
 import { actionLabels, findActionIndex, mergeAction, patchProblem } from "./actions";
 import type { Issue } from "./validate";
@@ -27,12 +27,14 @@ export const Addon = z.object({
   patchActions: z.array(z.object({ id: Id }).catchall(z.unknown())).optional(),
   /** ids/labels of existing actions to delete */
   removeActions: z.array(Id).optional(),
+  /** keyframe tracks (bone rotations "bone:<name>" in degrees, "hips", position …); a track replaces an existing one for the same target + property */
+  tracks: z.array(Track).optional(),
   /** remove the existing actions first, to re-animate from scratch */
   clearActions: z.boolean().optional(),
 });
 export type Addon = z.infer<typeof Addon>;
 
-const KEYS = ["actions", "cameras", "shots", "addShots", "patchShots", "removeShots", "patchActions", "removeActions", "duration", "clearActions"] as const;
+const KEYS = ["actions", "cameras", "shots", "addShots", "patchShots", "removeShots", "patchActions", "removeActions", "tracks", "duration", "clearActions"] as const;
 
 export function parseAddon(data: unknown): { ok: true; addon: Addon } | { ok: false; errors: Issue[] } {
   if (!data || typeof data !== "object" || Array.isArray(data)) return { ok: false, errors: [{ path: "", message: "Expected a JSON object with actions / cameras / shots" }] };
@@ -104,6 +106,12 @@ function editShots(spec: BlockshotSpec, addon: Addon): BlockshotSpec["shots"] {
   return shots;
 }
 
+function mergeTracks(existing: BlockshotSpec["tracks"], added: NonNullable<Addon["tracks"]>): BlockshotSpec["tracks"] {
+  if (!added.length) return existing;
+  const replaced = new Set(added.map((t) => `${t.target}/${t.property}`));
+  return [...existing.filter((t) => !replaced.has(`${t.target}/${t.property}`)), ...added.map((t) => ({ ...t, keys: [...t.keys].sort((x, y) => x.t - y.t) }))];
+}
+
 /** Merges the additions into the scene and grows the project length so the new animation fits. Run validateSpec on the result. */
 export function applyAddon(spec: BlockshotSpec, addon: Addon): BlockshotSpec {
   // labels are resolved against the actions as the LLM saw them, before anything is removed
@@ -120,6 +128,7 @@ export function applyAddon(spec: BlockshotSpec, addon: Addon): BlockshotSpec {
     actions: [...(addon.clearActions ? [] : existing), ...(addon.actions ?? [])],
     cameras: [...spec.cameras, ...(addon.cameras ?? [])],
     shots: editShots(spec, addon),
+    tracks: mergeTracks(spec.tracks, addon.tracks ?? []),
   };
   let end = Math.max(spec.settings.duration, addon.duration ?? 0, ...next.shots.map((s) => s.end));
   try {

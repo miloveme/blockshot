@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  addActor, addCamera, addProp, aspectLabel, isAnimated, kindOf, patchEntity, removeEntity, removeKeysAt, resolutionForAspect, upsertKey,
-  type BlockshotSpec, type PropType, type TrackProperty, type Vec3,
+  addActor, addCamera, setBoneRotation, addProp, aspectLabel, isAnimated, kindOf, patchEntity, removeEntity, removeKeysAt, resolutionForAspect, upsertKey,
+  type BlockshotSpec, type BoneName, type PropType, type TrackProperty, type Vec3,
 } from "@blockshot/core";
 import { useStudio } from "./store";
 
@@ -54,6 +54,11 @@ export function patch(id: string, p: Parameters<typeof patchEntity>[2]) {
  */
 export function commitTransform(id: string, position: Vec3, rotation: Vec3) {
   state().edit((s) => transformed(s, id, position, rotation, state().time));
+}
+
+/** Keys a bone's rotation (degrees) at the current time — the end of a bone gizmo drag. */
+export function commitBoneRotation(id: string, bone: BoneName, euler: Vec3) {
+  state().edit((s) => setBoneRotation(s, id, bone, state().time, euler));
 }
 
 /** Pure form of commitTransform (also used for live drags in the plan view). */

@@ -101,10 +101,19 @@ function Visual({ bone, color }: { bone: BoneName; color: string }): ReactNode {
   }
 }
 
+const isFinger = (b: BoneName) => /^(left|right)(Thumb|Index|Middle|Ring|Pinky)/.test(b);
+
 function Bone({ name, color }: { name: BoneName; color: string }) {
   return (
     <group name={`bone:${name}`} position={RIG[name].offset}>
       <Visual bone={name} color={color} />
+      {!isFinger(name) ? (
+        // joint marker shown only on the bone picked for pose editing
+        <mesh name={`marker:${name}`} visible={false} renderOrder={10} raycast={() => null}>
+          <sphereGeometry args={[0.045, 12, 8]} />
+          <meshBasicMaterial color="#fbbf24" depthTest={false} transparent opacity={0.9} />
+        </mesh>
+      ) : null}
       {children(name).map((c) => (
         <Bone key={c} name={c} color={color} />
       ))}
@@ -116,6 +125,7 @@ export function Mannequin({ id }: { id: string }) {
   const root = useRef<THREE.Group>(null);
   // Bones are looked up by name on first frame (refs are never read during render).
   const bones = useRef<Partial<Record<BoneName, THREE.Object3D>> | null>(null);
+  const markerRef = useRef<BoneName | null>(null);
   const initial = useStudio.getState().sceneState.actors[id];
   const color = initial?.color ?? "#c8ccd4";
   const width = BUILD_WIDTH[initial?.build ?? "average"];
@@ -139,7 +149,15 @@ export function Mannequin({ id }: { id: string }) {
       }
       bones.current = found;
     }
-    applyRig(bones.current, a);
+    applyRig(bones.current, a, useStudio.getState().selection === id ? useStudio.getState().draggingBone : null);
+    const picked = useStudio.getState().selection === id ? useStudio.getState().selectedBone : null;
+    if (markerRef.current !== picked) {
+      const old = markerRef.current ? g.getObjectByName(`marker:${markerRef.current}`) : null;
+      if (old) old.visible = false;
+      const mk = picked ? g.getObjectByName(`marker:${picked}`) : null;
+      if (mk) mk.visible = true;
+      markerRef.current = picked;
+    }
     const label = g.getObjectByName("label");
     if (label) label.visible = useStudio.getState().view.kind === "free";
   });
@@ -151,7 +169,12 @@ export function Mannequin({ id }: { id: string }) {
       onClick={(e) => {
         if (useStudio.getState().tool) return;
         e.stopPropagation();
-        useStudio.getState().select(id);
+        const st = useStudio.getState();
+        // clicking a limb of the already-selected actor picks that bone for pose editing
+        let o: THREE.Object3D | null = e.object;
+        while (o && !o.name.startsWith("bone:")) o = o.parent;
+        if (st.selection === id && o) st.selectBone(o.name.slice(5) as BoneName);
+        else st.select(id);
       }}
     >
       <Bone name="hips" color={color} />
@@ -169,10 +192,10 @@ export function Mannequin({ id }: { id: string }) {
 }
 
 /** Copies the evaluated rig pose onto the bone objects. */
-function applyRig(bones: Partial<Record<BoneName, THREE.Object3D>>, a: ActorState) {
+function applyRig(bones: Partial<Record<BoneName, THREE.Object3D>>, a: ActorState, skip: BoneName | null) {
   for (const b of BONES) {
     const o = bones[b];
-    if (!o) continue;
+    if (!o || b === skip) continue; // the gizmo owns a bone while it is dragged
     const r = a.rig.rot[b];
     if (r) o.rotation.set(r[0], r[1], r[2], "XYZ");
     else o.rotation.set(0, 0, 0);
