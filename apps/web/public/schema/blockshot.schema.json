@@ -1028,6 +1028,12 @@
                 "type": "number",
                 "exclusiveMinimum": 0
               },
+              "drift": {
+                "default": 0,
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
               "start": {
                 "type": "number",
                 "minimum": 0
