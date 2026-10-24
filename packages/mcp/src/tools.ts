@@ -1,4 +1,4 @@
-import { deflateRawSync } from "node:zlib";
+import { deflateRawSync, inflateRawSync } from "node:zlib";
 import {
   applyAddon, addonIssues, buildAnimatePrompt, buildPrompt, compile, describeScene, evaluate, lintLayout, parseAddon, renderPreviewSvg, validateSpec,
   type BlockshotSpec, type Issue,
@@ -53,6 +53,22 @@ export interface Platform {
   origin: string;
 }
 
+/** The scene inside a studio share link (`…/studio#s=<base64url(deflate-raw(JSON))>`), or just that payload. */
+export function specFromShareLink(input: string): { spec: BlockshotSpec } | { error: string } {
+  const text = input.trim();
+  const at = text.indexOf("#s=");
+  const payload = (at >= 0 ? text.slice(at + 3) : text).replace(/[\s"'<>)]+$/g, "");
+  if (!/^[A-Za-z0-9_-]+$/.test(payload) || payload.length < 8) return { error: "That does not look like a Blockshot studio link (…/studio#s=…). Use the studio's 링크 복사 button." };
+  let json: string;
+  try {
+    json = inflateRawSync(Buffer.from(payload, "base64url")).toString("utf8");
+  } catch {
+    return { error: "The link could not be decoded — it may have been cut off (very long links get truncated by some apps). Ask the user to save the project as a .blockshot.json file and paste that instead." };
+  }
+  const r = validateSpec(safeParse(json));
+  return r.ok ? { spec: r.spec } : { error: `The scene in the link is invalid:\n${fmtIssues(r.errors)}` };
+}
+
 function parseSpecArg(v: unknown): { spec: BlockshotSpec } | { error: string } {
   const data = typeof v === "string" ? safeParse(v) : v;
   const r = validateSpec(data);
@@ -87,6 +103,7 @@ Workflow
 3. preview { spec, t, view: "camera"|"top" } → a PNG of that moment (stick-figure skeletons + prop boxes through the real camera; top view shows facing and camera frustums). Look at it before you answer; check several times.
 4. evaluate { spec, times } → exact numbers (positions, poses, camera state) when you need to verify distances, facing, timing.
 5. open_link { spec } → the URL to give the user.
+   The user placed things by hand in the studio and wants them animated? They copy a link with the studio's 링크 복사 button; load_link { url } reads it (actors, props, cameras, ids), then add animation with run_script { base } / apply_addon without moving anything.
 6. MP4 / real 3D renders: not on this hosted server. Call local_setup: it has the exact commands to install the local server (no token needed), register it in Claude Code / Codex / other clients, switch an existing hosted registration to local, and verify it. Do it yourself if you can run shell commands (ask the user first); otherwise give the user the link — the studio exports the MP4 in their browser.
 
 Conventions: Y-up, metres, seconds, degrees. rotation.y = 0 faces +Z. An actor's local +X is the actor's LEFT. Time starts at 0.
@@ -218,6 +235,29 @@ export const BASE_TOOLS: Tool[] = [
     },
   },
   {
+    name: "load_link",
+    description:
+      "Reads a scene from a studio share link (the user's 링크 복사 button: …/studio#s=…) so you can animate what THEY placed. Returns a description of every actor / prop / camera with ids, existing actions (act1, act2 …), layout warnings and the spec JSON. Then add animation WITHOUT moving anything: run_script with base = that spec (scene.use(\"<id>\")), or apply_addon; read the rules with animate_prompt; check with preview / evaluate; give the user the new link from open_link or run_script.",
+    inputSchema: { type: "object", properties: { url: { type: "string", description: "the studio link (or just the part after #s=)" } }, required: ["url"] },
+    async run(a, plat) {
+      const r = specFromShareLink(String(a.url ?? ""));
+      if ("error" in r) return fail(r.error);
+      const warnings = lintLayout(r.spec);
+      return ok(
+        text(
+          [
+            `Loaded the user's scene: duration ${r.spec.settings.duration}s, ${r.spec.actors.length} actors, ${r.spec.props.length} props, ${r.spec.cameras.length} cameras, ${r.spec.actions.length} actions, ${r.spec.shots.length} shots.`,
+            "Next: add animation with run_script { base: <spec below>, source: ... scene.use(\"<id>\") ... } or apply_addon. Do NOT recreate or move what is placed. Call animate_prompt for the exact rules.",
+            warnings.length ? `Layout warnings:\n${fmtIssues(warnings)}` : "No layout warnings.",
+            `Scene:\n${describeScene(r.spec)}`,
+            `Re-open: ${shareLink(plat.origin, r.spec)}`,
+            `spec:\n${json(r.spec)}`,
+          ].join("\n\n"),
+        ),
+      );
+    },
+  },
+  {
     name: "open_link",
     description: "Returns the URL that opens this scene in the Blockshot studio (the scene is inside the link; nothing is stored). Give it to the user so they can play it, orbit around and hand-edit keyframes and bones.",
     inputSchema: { type: "object", properties: { spec: SPEC_PROP }, required: ["spec"] },
@@ -228,6 +268,11 @@ export const BASE_TOOLS: Tool[] = [
     },
   },
 ];
+
+/** Tool names of the local server (the shared tools + the two local-only render tools). */
+export const LOCAL_TOOL_NAMES = [...BASE_TOOLS.map((t) => t.name), "render_video", "render_still"];
+/** The hosted server lists the shared tools + local_setup + render_video / render_still stubs. */
+export const HOSTED_TOOL_COUNT = BASE_TOOLS.length + 3;
 
 /**
  * Everything an AI needs to install, register, switch to and verify the local server — without looking at the project's code.
@@ -278,9 +323,9 @@ a) File/Node sanity, works without any MCP client:
    printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\\n' | node /ABSOLUTE/PATH/.blockshot/blockshot-mcp.mjs
    → prints ONE JSON line containing the tool list and exits. If it errors: wrong Node version (<22), truncated download (re-download), or wrong path.
 b) Client sees it: claude mcp list (shows "blockshot-local … Connected"), or /mcp inside Claude Code; for Codex: codex mcp list.
-c) In the NEW session the local server must expose exactly these 10 tools:
-   get_guide, run_script, validate_spec, apply_addon, animate_prompt, evaluate, preview, open_link, render_video, render_still
-   How to tell local from hosted: the local server has NO local_setup tool, and its render_video description starts with "LOCAL ONLY". The hosted server has 11 tools (those 8 + local_setup + render_video + render_still stubs that only explain how to install).
+c) In the NEW session the local server must expose exactly these ${LOCAL_TOOL_NAMES.length} tools:
+   ${LOCAL_TOOL_NAMES.join(", ")}
+   How to tell local from hosted: the local server has NO local_setup tool, and its render_video description starts with "LOCAL ONLY". The hosted server has ${HOSTED_TOOL_COUNT} tools (the shared ones + local_setup + render_video + render_still stubs that only explain how to install).
 d) Functional test: call run_script with a tiny scene, then render_still (t=0); a PNG must come back. render_video writes a file under ~/Blockshot/renders/ (or the "output" path) and returns its path. If render_* fails with "Google Chrome was not found" → install Chrome or set BLOCKSHOT_CHROME; if it says the studio did not become ready → check the machine can reach BLOCKSHOT_URL.
 Only after (a) and (b) succeed, report success; mention if you could not run (c)/(d) in the current session.`;
 }
