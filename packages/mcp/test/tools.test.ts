@@ -61,6 +61,9 @@ describe("shared MCP tools on the node platform", () => {
       "NO token",
       "claude mcp remove",
       "tools/list",
+      // backslashes must survive the template literal (Windows path, printf newline)
+      String.raw`-OutFile $HOME\.blockshot\blockshot-mcp.mjs`,
+      String.raw`"method":"tools/list"}\n' | node`,
       "get_guide, run_script, validate_spec, apply_addon, animate_prompt, evaluate, preview, open_link, render_video, render_still",
     ]) expect(text).toContain(needle);
     const init = (await rpc("initialize", { protocolVersion: "2025-06-18" })).result.instructions as string;

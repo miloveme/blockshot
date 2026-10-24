@@ -252,7 +252,7 @@ ASK FIRST. Tell the user in one sentence what you will do: download one file fro
 macOS / Linux:
   mkdir -p ~/.blockshot && curl -fsSL ${url} -o ~/.blockshot/blockshot-mcp.mjs
 Windows (PowerShell):
-  New-Item -ItemType Directory -Force $HOME\.blockshot | Out-Null; Invoke-WebRequest ${url} -OutFile $HOME\.blockshot\blockshot-mcp.mjs
+  New-Item -ItemType Directory -Force $HOME\\.blockshot | Out-Null; Invoke-WebRequest ${url} -OutFile $HOME\\.blockshot\\blockshot-mcp.mjs
 Updating later = run the same download again. Use an ABSOLUTE path when registering (some clients do not expand ~): on macOS/Linux resolve it with: echo $HOME/.blockshot/blockshot-mcp.mjs
 
 ## 3. Register
@@ -275,7 +275,7 @@ No Authorization header, no token, no URL — it is a command, not a remote serv
 
 ## 5. Verify (do this before telling the user it worked)
 a) File/Node sanity, works without any MCP client:
-   printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n' | node /ABSOLUTE/PATH/.blockshot/blockshot-mcp.mjs
+   printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\\n' | node /ABSOLUTE/PATH/.blockshot/blockshot-mcp.mjs
    → prints ONE JSON line containing the tool list and exits. If it errors: wrong Node version (<22), truncated download (re-download), or wrong path.
 b) Client sees it: claude mcp list (shows "blockshot-local … Connected"), or /mcp inside Claude Code; for Codex: codex mcp list.
 c) In the NEW session the local server must expose exactly these 10 tools:
