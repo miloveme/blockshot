@@ -6,6 +6,10 @@
 
 MCP 클라이언트의 "원격(HTTP) 서버"에 `https://blockshot-eta.vercel.app/api/mcp`를 추가한다 (인증 없음, 공개).
 
+## 접근 토큰
+
+Vercel 프로젝트 환경변수 `mcp_token`(또는 `MCP_TOKEN`)을 설정하면 `POST /api/mcp`가 토큰을 요구한다(설정 후 **새로 배포**해야 적용). 없으면 공개(로컬 개발 기본). 토큰은 `Authorization: Bearer <토큰>` 헤더, 헤더를 못 쓰는 클라이언트는 URL `…/api/mcp?token=<토큰>`으로 보낸다. 값은 저장소에 두지 않는다.
+
 ## 도구
 
 | 도구 | 입력 | 출력 |
