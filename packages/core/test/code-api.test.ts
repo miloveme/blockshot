@@ -65,3 +65,24 @@ describe("code API in scripts", () => {
     expect(compile(s).tracks.get("cam/position")!.at(-1)!.t).toBeCloseTo(2);
   });
 });
+
+describe("authoring prompts carry the same guidance the MCP agent reads", () => {
+  it("script and JSON prompts mention drift, vehicles, code API and directing tips", async () => {
+    const { buildPrompt, buildAnimatePrompt, createBlankSpec } = await import("../src");
+    const script = buildPrompt({ request: "car chase", mode: "script" });
+    const json = buildPrompt({ request: "car chase", mode: "json" });
+    for (const needle of ["drift", "car.drive(", "c.mount(", "scene.animate(", "interpolate(", "Directing action scenes"]) expect(script).toContain(needle);
+    for (const needle of ['"drift"', '"mount"', '"tracks"', "Directing action scenes"]) expect(json).toContain(needle);
+    const anim = buildAnimatePrompt({ request: "chase", spec: createBlankSpec(), mode: "script" });
+    expect(anim).toContain("Directing action scenes");
+    expect(anim).toContain("drift");
+  });
+
+  it("a script using drift builds a valid scene", () => {
+    const out = runScript(`scene.settings({ duration: 8 }); scene.street();
+      const car = scene.prop("car", { id: "car", at: [0,0,-30] }); car.drive([[0,0,0],[-25,0,0]], { start: 0, speed: 20, drift: 0.9 });`);
+    const r = validateSpec(out);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect((r.spec.actions[0] as { drift: number }).drift).toBeCloseTo(0.9);
+  });
+});

@@ -468,7 +468,7 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
         const line = smoothPath([from, ...waypoints.map((p): Vec3 => [p[0], from[1], p[2]])], a.radius);
         const length = line[line.length - 1]!.s;
         const duration = a.duration ?? Math.max(0.5, length / (a.speed ?? DRIVE_SPEED));
-        keys = driveKeys(line, a.start, duration, a.ease, from[1], fromRot[1]);
+        keys = driveKeys(line, a.start, duration, a.ease, from[1], fromRot[1], a.drift);
         scene.routes.set(a, line.filter((_, i) => i % 8 === 0 || i === line.length - 1).map((p): Vec3 => [p.x, from[1], p.z]));
       }
       for (const k of keys) {

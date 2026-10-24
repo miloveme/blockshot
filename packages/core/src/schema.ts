@@ -172,6 +172,8 @@ export const Action = z.discriminatedUnion("type", [
     duration: z.number().positive().optional(),
     ease: Ease.default("linear"),
     radius: z.number().positive().default(6),
+    /** 0–1: slide the tail out in corners (drifting); applies to path drives (`to`) */
+    drift: z.number().min(0).max(1).default(0),
     ...timed,
   }),
   /** a camera rides along with an actor or prop (chase / hood / follow cam): it keeps `offset` from the target in the target's own frame and aims at `look` */

@@ -74,7 +74,7 @@ export interface ActorHandle {
 export interface PropHandle {
   readonly id: string;
   /** Drive along a path (corners rounded, body leaning, wheels turning): `speed` m/s (default 12), `ease` easeIn = pull away, easeOut = brake. */
-  drive(path: Vec3 | Vec3[], opts: { start: number; speed?: number; duration?: number; ease?: Ease; radius?: number }): PropHandle;
+  drive(path: Vec3 | Vec3[], opts: { start: number; speed?: number; duration?: number; ease?: Ease; radius?: number; drift?: number }): PropHandle;
   /** Trail another prop / actor `gap` metres behind it along its route (a chase). */
   follow(leader: { id: string } | string, opts: { start: number; gap?: number; offset?: Vec3; duration?: number }): PropHandle;
 }

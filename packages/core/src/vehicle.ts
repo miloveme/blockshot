@@ -127,11 +127,16 @@ const clamp = (v: number, lim: number) => Math.max(-lim, Math.min(lim, v));
  * `y` is the height the vehicle keeps, `startYaw` (degrees) its heading before the drive — it swings round to the
  * line's heading within the first moments.
  */
-export function driveKeys(line: readonly PathSample[], t0: number, duration: number, ease: Ease, y: number, startYaw: number): DriveKey[] {
+/**
+ * `drift` (0–1): slides the tail out in corners — the body yaws up to ~38° beyond the direction of travel (smoothly in and
+ * out) and rolls harder; 0 = grip driving.
+ */
+export function driveKeys(line: readonly PathSample[], t0: number, duration: number, ease: Ease, y: number, startYaw: number, drift = 0): DriveKey[] {
   const total = line[line.length - 1]!.s;
   const n = Math.max(1, Math.ceil(duration / KEY_STEP));
   const sAt = (u: number) => total * applyEase(ease, Math.max(0, Math.min(1, u)));
   const keys: DriveKey[] = [];
+  let slip = 0; // drift: how far (deg) the body points INTO the corner beyond the direction it travels, low-passed
   for (let i = 0; i <= n; i++) {
     const u = i / n;
     const t = t0 + u * duration;
@@ -143,13 +148,18 @@ export function driveKeys(line: readonly PathSample[], t0: number, duration: num
     const v2 = (sAt(u + 2 * h) - sAt(u)) / (duration * 2 * h);
     const v1 = (sAt(u) - sAt(u - 2 * h)) / (duration * 2 * h);
     const accel = (v2 - v1) / (duration * 2 * h);
-    const lean = clamp(p.kappa * v * v * 0.9, 6); // outward roll, degrees
+    const lean = clamp(p.kappa * v * v * 0.9 * (1 + 0.6 * drift), 6 + 4 * drift); // outward roll, degrees (a drifting car rolls harder)
+    if (drift > 0) {
+      const yawRate = p.kappa * v; // rad/s, + = turning left
+      const want = clamp(Math.sign(yawRate) * Math.min(1, Math.abs(yawRate) / 0.9) * 38 * drift, 45);
+      slip += (want - slip) * (1 - Math.exp(-(duration / n) / 0.18));
+    }
     const nod = clamp(-accel * 0.3, 3); // nose up when accelerating, down when braking
     const settle = clamp((t - t0) / 0.6, 1); // swing from the placed heading onto the line
     const smooth = settle * settle * (3 - 2 * settle);
     const lineYaw = p.yaw / DEG;
     const from = unwrapYaw(lineYaw, startYaw);
-    keys.push({ t, position: [p.x, y, p.z], rotation: [i === n ? 0 : nod, from + (lineYaw - from) * smooth, i === n ? 0 : lean] });
+    keys.push({ t, position: [p.x, y, p.z], rotation: [i === n ? 0 : nod, from + (lineYaw - from) * smooth + slip, i === n ? 0 : lean] });
   }
   return keys;
 }

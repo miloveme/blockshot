@@ -383,7 +383,7 @@ export function addStandUp(spec: BlockshotSpec, actorId: string, opts: { start: 
 /** Appends a drive (smooth path through the clicked points) for a vehicle / prop starting at `start`. */
 export function addDrive(spec: BlockshotSpec, propId: string, points: Vec3[], opts: { start: number; speed?: number }): BlockshotSpec {
   if (points.length === 0 || !spec.props.some((p) => p.id === propId)) return spec;
-  const action = { type: "drive" as const, prop: propId, to: points.length === 1 ? points[0]! : points, gap: 10, offset: [0, 0, 0] as Vec3, ease: "linear" as const, radius: 6, start: roundT(Math.max(0, opts.start)), ...(opts.speed ? { speed: opts.speed } : {}) };
+  const action = { type: "drive" as const, prop: propId, to: points.length === 1 ? points[0]! : points, gap: 10, offset: [0, 0, 0] as Vec3, ease: "linear" as const, radius: 6, drift: 0, start: roundT(Math.max(0, opts.start)), ...(opts.speed ? { speed: opts.speed } : {}) };
   return extendDriveDuration({ ...spec, actions: [...spec.actions, action] });
 }
 

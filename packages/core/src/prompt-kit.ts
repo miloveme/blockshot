@@ -22,6 +22,22 @@ const RULES = `Conventions:
 - "shots" in ARRAY ORDER is the edit: each shows scene time [start, end) through its camera. Shots may overlap or repeat
   scene time to cut the same performance between cameras (coverage).`;
 
+/** Remotion-style helpers — the same text the hosted MCP's script guide describes, so pasted prompts and MCP agree. */
+const CODE_API_NOTES = `Code API (like Remotion — motion as a function of time, deterministic): globals interpolate(x, [x0,x1,..], [v0,v1,..], { ease? }) (numbers or [x,y,z]), spring(t, { stiffness?, damping? }) (0→1 with overshoot), noise(x, seed) (smooth −1..1), clamp(x, lo, hi). scene.sequence(start, () => { ... }) shifts every action start / key authored inside by "start" s (nestable; shots stay absolute). scene.animate(targetId, property, { from?, to, fps? }, t => value) samples fn(t) (t = seconds since from) into simplified keys for position / rotation / focalLength / hips / "bone:<name>"; a.boneFn(bone, { from?, to }, t => [x°,y°,z°]) does it for one bone — use loops and these helpers for repeated, rhythmic or procedural acting (nodding, pacing, breathing, shaking a camera) instead of writing every key by hand.`;
+
+/** Script lines for vehicles and camera rigs (the JSON ACTION_LINES have the same actions). */
+const VEHICLE_SCRIPT_LINES = `const car = scene.prop("car", { id, at: [x,0,z], facing: yawDeg }); car.drive([[x,0,z], ...], { start, speed?, duration?, ease?, radius?, drift? }); car.follow("<leaderId>", { start, gap?, offset?, duration? });   // vehicles / props move ONLY when driven; drift 0–1 slides the tail out in corners
+c.mount("<carOrActorId>", { offset?, look?, start, end? });   // camera rides along (chase / hood cam)`;
+
+/** Directing knowledge for action scenes — what a good previz of a chase needs. */
+const ACTION_DIRECTING = `Directing action scenes (chases, drifts, fights):
+- Vehicles only move if each one has its own "drive". Give EVERY car a route of 3–6 waypoints with real corners (right-angle turns, a hairpin, a roundabout arc) instead of one straight line; make the street/space long enough (distance = speed × time; 25 m/s for 6 s is 150 m).
+- Drift: add "drift": 0.7–1 to a drive for the sharp corners (it slides the tail out and the car rolls harder); use 0 on straights. A pursuer should have its OWN drive (same corners, slightly later "start" and a little wider radius) so it can drift too; use "follow" only when it should simply trail the leader.
+- Speed and energy come from contrast: "ease": "easeIn" to launch, "easeOut" to brake, a slow beat before the burst, speeds 18–35 m/s in the chase.
+- Coverage: cut every 1.5–3 s between 3–5 cameras — a low front/side camera at the corner, a "mount" chase cam behind (offset [0,2,-8]), a hood/driver cam ([0,1.3,1.2] looking [0,1.2,12]), a wide static establishing camera, a top/crane shot. Aim fixed cameras at the moving car with cameraLookAt "<carId>" (or lookAt <car>) and let one camera pan with it.
+- Camera shake and punch-ins: keys on a camera's rotation/position from a noise function (script: scene.animate(cam, "rotation", ..., t => [0.4*noise(t*18,1), 0.4*noise(t*18,2), 0]) ) or short "zoom" moves on impacts; keep the 180-degree rule between cuts.
+- If the user asks for a style ("cinematic", "gritty", "slow-mo"), express it with real parameters: lens (24–35mm action, 85mm+ for compression), camera height (low = powerful), speed curves and shot length.`;
+
 const ACTION_LINES = `    { "type": "walkTo"|"runTo", "actor", "to": [x,0,z] | [[x,0,z], ...], "start", "duration"?, "speed"?, "direct"? },
     { "type": "turnTo", "actor", "target": ref | [x,y,z] | yawDegrees, "start", "duration"? },
     { "type": "pose", "actor", "pose", "start" },
@@ -30,7 +46,7 @@ const ACTION_LINES = `    { "type": "walkTo"|"runTo", "actor", "to": [x,0,z] | [
     { "type": "gesture", "actor", "gesture": "wave"|"nod"|"shakeHead"|"shrug"|"clap"|"crossArms"|"handsOnHips"|"think"|"bow"|"lookAround"|"cheer", "start", "duration"?, "side"?: "left"|"right", "intensity"?: 0-1 },
     { "type": "handShape", "actor", "shape": "open"|"relaxed"|"fist"|"point"|"pinch"|"grip", "hand"?: "left"|"right"|"both", "start", "duration"? },
     { "type": "hold", "actor", "prop": propId, "hand"?: "left"|"right", "at"?: "ear"|"mouth"|"chest"|"carry", "start", "duration"?, "then"?: "keep"|"put" },
-    { "type": "drive", "prop": vehicleOrPropId, "to": [x,0,z] | [[x,0,z], ...], "start", "speed"?: m/s (default 12), "duration"?, "ease"?, "radius"?: turning radius m (default 6) },
+    { "type": "drive", "prop": vehicleOrPropId, "to": [x,0,z] | [[x,0,z], ...], "start", "speed"?: m/s (default 12), "duration"?, "ease"?, "radius"?: turning radius m (default 6), "drift"?: 0-1 (slides the tail out in corners — a movie drift; 0 = grip, default) },
     { "type": "drive", "prop", "follow": otherPropOrActorId, "gap"?: metres behind it (default 10), "offset"?: [x,0,z], "start", "duration"? },
     { "type": "mount", "camera", "to": propOrActorId, "offset"?: [x,y,z] in its frame (default [0,1.6,-6] = behind and above), "look"?: [x,y,z] aim point in its frame, "start", "end"? },
     { "type": "reach", "actor", "target": ref | [x,y,z], "hand"?: "left"|"right", "start", "duration"? },
@@ -51,10 +67,11 @@ const SPEC_SUMMARY = `Blockshot Spec v${SPEC_VERSION} fields:
   "cameras": [{ "id", "name"?, "position", "lookAt"?: [x,y,z] | ref, "focalLength"? mm }],
   "actions": [
 ${ACTION_LINES} ],
+  "tracks"?: [{ "target": id, "property": "position"|"rotation"|"focalLength"|"hips"|"bone:<boneName>", "keys": [{ "t", "value", "ease"? }] }],   // optional hand keys; a track REPLACES what actions generate for that property. rotation / bone values are degrees ([x,y,z]); use for camera shake, a car's heading tricks, specific postures
   "shots": [{ "id", "camera", "start", "end", "description"?, "prompt"? }] }
 Poses: ${POSES.join(", ")}. Prop types: ${LLM_PROP_TYPES.join(", ")}. Ease: linear, easeIn, easeOut, easeInOut, step.`;
 
-const SCRIPT_SUMMARY = `Blockshot Script API (JavaScript; globals: scene, vec, rand):
+const SCRIPT_SUMMARY = `Blockshot Script API (JavaScript; globals: scene, vec, rand, interpolate, spring, noise, clamp):
 scene.settings({ fps, duration, resolution }); scene.meta({ title });
 scene.room({ width, depth, height, doors: [{ wall, offset }], windows: [{ wall, offset }] }) | scene.ground() | scene.street();
 const a = scene.actor(id, { name, color, height, at: [x,0,z], facing: yawDeg, pose });
@@ -64,6 +81,8 @@ const c = scene.camera(id, { lens, at: [x,y,z], lookAt: a.head });
 c.moveTo(pos, { start, duration, ease }); c.dolly(m, {...}); c.truck(m, {...}); c.pedestal(m, {...}); c.orbit(target, { degrees, start, duration }); c.zoom(mm, {...}); c.lookAt(target, { start });
 scene.shot(id, { camera: c, start, end, description, prompt });
 vec.polar(radius, deg, y) gives a point on a circle; rand() is seeded.
+${VEHICLE_SCRIPT_LINES}
+${CODE_API_NOTES}
 Poses: ${POSES.join(", ")}. Prop types: ${LLM_PROP_TYPES.join(", ")}.`;
 
 const catalogTable = () =>
@@ -177,6 +196,7 @@ export function buildPrompt(opts: { request: string; mode?: PromptMode; current?
     RULES,
     SET_DRESSING(),
     mode === "json" ? SPEC_SUMMARY : SCRIPT_SUMMARY,
+    ACTION_DIRECTING,
     project
       ? `Project setting — build the scene INSIDE this space and use the same "space" (change it only if the request asks for another place):\n- ${describeSpace(project.space)}\n- Output resolution ${project.settings.resolution.join("×")}, ${project.settings.fps} fps.`
       : "",
@@ -335,13 +355,14 @@ a.walkTo([x,0,z] | [[x,0,z],...], { start, duration?, speed?, direct? }); a.runT
 const car = scene.use("<propId>"); car.drive([[x,0,z], ...], { start, speed?, duration?, ease?, radius? }); car.follow("<leaderId>", { start, gap?, offset?, duration? });   // vehicles / props move only when driven
 const c = scene.camera("<new id>", { lens, at: [x,y,z], lookAt: a.chest }); // new camera; existing ones: scene.use("<cameraId>")
 c.moveTo(pos, { start, duration, ease }); c.dolly(m, {...}); c.truck(m, {...}); c.pedestal(m, {...}); c.orbit(target, { degrees, start, duration }); c.zoom(mm, {...}); c.lookAt(target, { start }); c.mount("<carOrActorId>", { offset?, look?, start, end? });
-Code API (like Remotion — motion as a function of time, deterministic): globals interpolate(x, [x0,x1,..], [v0,v1,..], { ease? }) (numbers or [x,y,z]), spring(t, { stiffness?, damping? }) (0→1 with overshoot), noise(x, seed) (smooth −1..1), clamp(x, lo, hi). scene.sequence(start, () => { ... }) shifts every action start / key authored inside by "start" s (nestable; shots stay absolute). scene.animate(targetId, property, { from?, to, fps? }, t => value) samples fn(t) (t = seconds since from) into simplified keys for position / rotation / focalLength / hips / "bone:<name>"; a.boneFn(bone, { from?, to }, t => [x°,y°,z°]) does it for one bone — use loops and these helpers for repeated, rhythmic or procedural acting (nodding, pacing, breathing, shaking a camera) instead of writing every key by hand.
+${CODE_API_NOTES}
 scene.reflect(a.chest, mirrorId) -> a reference to where that point appears inside a mirror (aim cameras at reflections with it).
 scene.clearActions(idOrHandle?) removes existing actions (of one object, or all) — prefer targeted edits: scene.patchAction("act3", { start: 2, duration: 1.5 }) changes fields of ONE existing action by the id shown in "Existing actions" (the type cannot change); scene.removeAction("act2") deletes one. Shots: scene.shot(id, { camera, start, end, description, after? }) adds one (appended, or after the shot id in "after"); scene.patchShot(id, { camera?, start?, end?, description? }) edits an existing one; scene.removeShot(id) deletes one; scene.clearShots() empties the list (rarely needed). scene.settings({ duration }).
 Poses: ${POSES.join(", ")}.`;
   return [
     "You are a previsualization animator for film. A user has already placed actors, props and cameras in a 3D scene. Animate it according to the request below.",
     ANIMATE_RULES,
+    ACTION_DIRECTING,
     RULES,
     hasMirror ? MIRROR_NOTES : "",
     format,
