@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { CopyPrompt } from "@/components/guide/CopyPrompt";
 
 export const metadata: Metadata = {
   title: "사용 설명서 — Blockshot",
@@ -17,6 +18,7 @@ const SECTIONS = [
   { id: "render", title: "렌더링과 저장" },
   { id: "ai", title: "AI와 함께 쓰기" },
   { id: "mcp", title: "MCP 연결 (원격·로컬)" },
+  { id: "mcp-prompts", title: "AI에게 MCP 연결 맡기기 (프롬프트)" },
   { id: "keys-table", title: "단축키" },
   { id: "faq", title: "자주 묻는 질문" },
 ] as const;
@@ -235,6 +237,75 @@ env = { BLOCKSHOT_URL = "https://blockshot-eta.vercel.app" }`}</Pre>
               <li>&ldquo;민수가 오른팔을 위로 들었다 내리는 동작을 뼈 키프레임으로 만들어 줘. 내가 직접 고칠 수 있게.&rdquo;</li>
               <li>&ldquo;2초와 4초 시점의 두 사람 거리와 바라보는 방향을 evaluate로 확인해 줘.&rdquo;</li>
             </UL>
+          </Section>
+
+          <Section id="mcp-prompts" title="AI에게 MCP 연결 맡기기 (프롬프트)">
+            <p>명령어를 직접 입력하지 않아도, 셸을 쓸 수 있는 AI(Claude Code, Codex 등)에게 아래 프롬프트를 붙여넣으면 설치·등록·확인까지 대신 진행합니다. 각 프롬프트는 그 자체로 완결돼 있어서, 아직 MCP가 연결되지 않은 AI에게도 쓸 수 있습니다. AI는 실행 전에 먼저 물어보도록 되어 있습니다.</p>
+            <Note>토큰을 채팅에 직접 붙여넣지 마세요. 원격 연결에는 토큰을 환경변수(예: <Code>BLOCKSHOT_TOKEN</Code>)에 넣어 두고 AI가 그 변수를 쓰게 하세요. 로컬 MCP는 토큰이 필요 없습니다. 같은 안내 전체는 <a className="text-amber-300 underline underline-offset-2" href="/docs/mcp-setup.md">/docs/mcp-setup.md</a>에도 공개돼 있어, 웹을 읽을 수 있는 AI는 이 주소만 알려 줘도 됩니다.</Note>
+
+            <CopyPrompt
+              title="① 로컬 MCP 설치하고 등록하기 (토큰 필요 없음 · MP4 렌더 가능) — 권장"
+              text={`Blockshot 로컬 MCP를 이 컴퓨터에 설치하고 등록해 줘. 실행 전에 무엇을 할지 먼저 알려 주고 내 확인을 받아.
+
+1. 먼저 확인: node -v 가 v22 이상인지, Chrome(또는 Edge/Chromium)이 설치돼 있는지.
+2. 파일 하나를 내려받아:
+   mkdir -p ~/.blockshot && curl -fsSL https://blockshot-eta.vercel.app/mcp/blockshot-mcp.mjs -o ~/.blockshot/blockshot-mcp.mjs
+3. 절대경로로 등록해 (토큰은 필요 없어):
+   claude mcp add blockshot-local -e BLOCKSHOT_URL=https://blockshot-eta.vercel.app -- node $HOME/.blockshot/blockshot-mcp.mjs
+   (Codex를 쓰는 중이면 ~/.codex/config.toml 에 [mcp_servers.blockshot-local] command="node", args=["<절대경로>/.blockshot/blockshot-mcp.mjs"], env={BLOCKSHOT_URL="https://blockshot-eta.vercel.app"} 를 추가)
+4. 확인: printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\\n' | node $HOME/.blockshot/blockshot-mcp.mjs 가 도구 목록 한 줄을 출력하는지 보고, 안 되면 원인(Node 버전·다운로드 실패·경로)을 알려 줘.
+5. 끝나면 새 세션을 열어야 도구가 보인다고 안내하고, 새 세션에서 도구 10개(get_guide, run_script, validate_spec, apply_addon, animate_prompt, evaluate, preview, open_link, render_video, render_still)가 보이면 성공이야.
+
+자세한 내용은 https://blockshot-eta.vercel.app/docs/mcp-setup.md 에 있어.`}
+            />
+
+            <CopyPrompt
+              title="② 원격 MCP 연결하기 (설치 없음 · iPad/모바일도 가능)"
+              text={`Blockshot 원격 MCP를 등록해 줘. 주소는 https://blockshot-eta.vercel.app/api/mcp 이고 HTTP(Streamable HTTP) 방식이야.
+토큰은 내 환경변수 BLOCKSHOT_TOKEN 에 들어 있어. 토큰 값을 출력하거나 대화에 적지 말고, 환경변수를 참조해서 등록해 줘:
+
+claude mcp add --transport http blockshot https://blockshot-eta.vercel.app/api/mcp --header "Authorization: Bearer $BLOCKSHOT_TOKEN"
+
+환경변수가 비어 있으면 등록하지 말고 알려 줘. 등록 후 claude mcp list 에서 blockshot 이 Connected 인지 확인하고, 새 세션에서 get_guide 도구가 보이면 성공이야. (이 클라이언트가 헤더 입력을 지원하지 않으면 주소 끝에 ?token= 을 붙이는 방법을 알려 줘.)`}
+            />
+
+            <CopyPrompt
+              title="③ 원격 등록을 로컬로 바꾸기 (토큰 없이 다시 등록)"
+              text={`지금 Blockshot MCP가 원격(토큰 방식)으로 등록돼 있는데, 토큰 없이 로컬 MCP로 다시 등록해 줘.
+Blockshot MCP의 local_setup 도구를 조회해서 그 안내를 그대로 따라 진행하고, 실행 전에 무엇을 지우고 무엇을 설치할지 먼저 알려 줘서 내 확인을 받아.
+순서: 기존 원격 blockshot 등록 찾기(주소가 /api/mcp 로 끝나는 항목) → 삭제(저장된 토큰도 함께 사라져도 돼) → 로컬 설치·등록 → 확인(tools/list 한 줄 출력) → 새 세션에서 도구 10개(render_video, render_still 포함, local_setup 없음)가 보이는지 안내. 내 토큰은 출력하지 마.`}
+            />
+
+            <CopyPrompt
+              title="④ Codex에 등록하기"
+              text={`Codex에 Blockshot MCP를 등록해 줘. 먼저 내 확인을 받고 진행해.
+
+[로컬 방식 — 토큰 필요 없음]
+1) mkdir -p ~/.blockshot && curl -fsSL https://blockshot-eta.vercel.app/mcp/blockshot-mcp.mjs -o ~/.blockshot/blockshot-mcp.mjs
+2) ~/.codex/config.toml 에 추가 (경로는 절대경로로):
+   [mcp_servers.blockshot-local]
+   command = "node"
+   args = ["/Users/<내 이름>/.blockshot/blockshot-mcp.mjs"]
+   env = { BLOCKSHOT_URL = "https://blockshot-eta.vercel.app" }
+3) codex를 다시 시작한 뒤 codex mcp list 로 blockshot-local 이 보이는지 확인하고, 도구 10개가 보이면 성공이야. Node 22 이상과 Chrome이 필요해.
+
+(원격 방식을 원하면 url = "https://blockshot-eta.vercel.app/api/mcp" 와 환경변수 BLOCKSHOT_TOKEN 을 쓰는 설정을 Codex 문서에 맞춰 만들어 줘. 토큰 값은 파일이나 대화에 적지 마.)`}
+            />
+
+            <CopyPrompt
+              title="⑤ 연결이 잘 됐는지 점검하기"
+              text={`Blockshot MCP 연결 상태를 점검해 줘.
+1) claude mcp list(Codex면 codex mcp list)에서 blockshot 항목이 Connected 인지.
+2) 연결된 서버가 로컬인지 원격인지: 로컬은 도구가 10개이고 local_setup 이 없고 render_video 설명이 "LOCAL ONLY"로 시작해. 원격은 11개이고 local_setup 이 있어.
+3) 작은 장면 하나를 run_script 로 만들고 preview 로 PNG가 오는지, 로컬이면 render_still 로 3D PNG가 오는지 확인해.
+문제가 있으면 원인과 고치는 방법을 알려 줘. 토큰은 출력하지 마.`}
+            />
+
+            <CopyPrompt
+              title="⑥ 연결 후 첫 작업 시키기"
+              text={`Blockshot MCP의 get_guide 로 사용법을 읽고, 거실에서 두 사람이 마주 보고 이야기하다가 한 명이 일어나 창가로 걸어가는 6초 장면을 만들어 줘.
+preview 로 카메라 시점과 탑뷰를 각각 확인하고 어색한 건 고친 다음, open_link 로 열어볼 링크를 줘. (로컬 MCP가 연결돼 있으면 끝에 render_video 로 MP4도 만들어 줘.)`}
+            />
           </Section>
 
           <Section id="keys-table" title="단축키">
