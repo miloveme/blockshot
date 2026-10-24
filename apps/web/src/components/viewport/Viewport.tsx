@@ -6,6 +6,7 @@ import { OrbitControls, PerspectiveCamera, Text } from "@react-three/drei";
 import * as THREE from "three";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { DEG, editDuration, type BoneName, type Vec3 } from "@blockshot/core";
+import { openObjectMenu } from "../editor/ContextMenu";
 import { useStudio } from "@/lib/store";
 import { commitBoneRotation, commitCamera, commitCameraRotation, commitScale, commitTransform, snapSteps } from "@/lib/actions";
 import { registerBridge } from "@/lib/render";
@@ -112,6 +113,12 @@ function CameraGizmo({ id }: { id: string }) {
         if (useStudio.getState().view.kind !== "free" || useStudio.getState().tool) return;
         e.stopPropagation();
         useStudio.getState().select(id);
+      }}
+      onContextMenu={(e) => {
+        if (useStudio.getState().tool) return;
+        e.stopPropagation();
+        e.nativeEvent.preventDefault();
+        openObjectMenu(e.nativeEvent, id);
       }}
     >
       <mesh>

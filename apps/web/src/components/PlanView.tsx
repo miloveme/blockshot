@@ -327,11 +327,11 @@ export function PlanView({ className = "" }: { className?: string }) {
       </svg>
 
       <div className="absolute left-2 top-2 flex gap-1 text-[11px]">
-        <button className="rounded bg-black/60 px-2 py-1 text-zinc-200 hover:bg-black/80" onClick={() => setView({ dx: 0, dz: 0, zoom: 1 })} title="공간 전체가 보이게 맞춤">
+        <button className="rounded bg-black/60 px-2 py-1 text-ink hover:bg-black/80" onClick={() => setView({ dx: 0, dz: 0, zoom: 1 })} title="공간 전체가 보이게 맞춤">
           맞춤
         </button>
         <button
-          className={`rounded px-2 py-1 ${axis ? "bg-amber-400 text-black" : "bg-black/60 text-zinc-200 hover:bg-black/80"}`}
+          className={`rounded px-2 py-1 ${axis ? "bg-accent text-black" : "bg-black/60 text-ink hover:bg-black/80"}`}
           onClick={() => setAxis((v) => !v)}
           disabled={actors.length < 2}
           title="180도 규칙: 두 인물을 잇는 축선. 카메라가 같은 쪽이면 초록, 반대쪽이면 빨강"
@@ -339,14 +339,14 @@ export function PlanView({ className = "" }: { className?: string }) {
           축선 {actors.length < 2 ? "(인물 2명 필요)" : ""}
         </button>
         <button
-          className={`rounded px-2 py-1 ${navOn ? "bg-amber-400 text-black" : "bg-black/60 text-zinc-200 hover:bg-black/80"}`}
+          className={`rounded px-2 py-1 ${navOn ? "bg-accent text-black" : "bg-black/60 text-ink hover:bg-black/80"}`}
           onClick={() => setNavOn((v) => !v)}
           title="내비게이션 베이크: 걸어 다닐 수 없는 곳(가구·벽 + 몸 반경)을 붉게, 가만히 서 있는 인물(장애물)은 빨간 원, 움직이는 인물은 파란 점선 원으로 표시. 걷기 경로는 이 격자 위에서 자동으로 길을 찾습니다"
         >
           내비 베이크
         </button>
       </div>
-      <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/50 px-2 py-0.5 text-[10px] text-zinc-400">
+      <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/50 px-2 py-0.5 text-[10px] text-ink-2">
         탑뷰 · 북쪽이 위 · 휠: 확대 · 드래그: 이동 · 회전 핸들: 노란 점
       </div>
     </div>

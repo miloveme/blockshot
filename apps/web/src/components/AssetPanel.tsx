@@ -23,27 +23,27 @@ export function AssetPanel() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="에셋 검색 (의자, sofa…)"
-        className="w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-xs outline-none focus:border-amber-400"
+        className="w-full rounded border border-line bg-black/30 px-2 py-1.5 text-xs outline-none focus:border-accent/70"
       />
       <div className="flex flex-wrap gap-1">
         {(["all", ...CATEGORIES] as const).map((c) => (
           <button
             key={c}
             onClick={() => setCategory(c)}
-            className={`rounded-full px-2.5 py-0.5 text-[11px] ${category === c ? "bg-amber-400 text-black" : "bg-white/10 text-zinc-300 hover:bg-white/20"}`}
+            className={`rounded-full px-2.5 py-0.5 text-[11px] ${category === c ? "bg-accent text-black" : "bg-raised text-ink-2 hover:bg-hover"}`}
           >
             {c === "all" ? "전체" : CATEGORY_LABEL[c]}
           </button>
         ))}
       </div>
-      <p className="text-[11px] leading-relaxed text-zinc-500">
-        카드를 고른 뒤 <b className="text-zinc-300">바닥을 클릭</b>(Shift+클릭: 연속 배치)하거나, 카드를 <b className="text-zinc-300">장면으로 끌어다 놓으세요</b>. 방에서는 가구가 가까운 벽에 붙고, 문·창·거울은 벽에 걸립니다.
+      <p className="text-[11px] leading-relaxed text-ink-3">
+        카드를 고른 뒤 <b className="text-ink-2">바닥을 클릭</b>(Shift+클릭: 연속 배치)하거나, 카드를 <b className="text-ink-2">장면으로 끌어다 놓으세요</b>. 방에서는 가구가 가까운 벽에 붙고, 문·창·거울은 벽에 걸립니다.
       </p>
       <ul className="grid grid-cols-2 gap-2">
         {items.map((a) => (
           <AssetCard key={a.key} item={a} armed={!!armed && sameRef(armed, a.ref)} />
         ))}
-        {items.length === 0 ? <li className="col-span-2 text-xs text-zinc-500">검색 결과가 없습니다</li> : null}
+        {items.length === 0 ? <li className="col-span-2 text-xs text-ink-3">검색 결과가 없습니다</li> : null}
       </ul>
       <MyModels armed={armed} query={q} />
     </div>
@@ -72,15 +72,15 @@ export function AssetCard({ item, armed }: { item: Pick<AssetItem, "label" | "ic
           notify(`${item.label}: 바닥을 클릭하세요 (Shift+클릭 연속 · Esc 취소)`);
         }}
         className={`flex w-full flex-col items-center gap-1 rounded border p-2.5 text-center transition ${
-          armed ? "border-amber-400 bg-amber-400/15" : "border-white/10 bg-black/20 hover:border-white/30 hover:bg-white/5"
+          armed ? "border-amber-400 bg-accent/15" : "border-line bg-black/20 hover:border-white/30 hover:bg-white/[0.04]"
         }`}
         title={`${item.label} — 클릭 후 바닥 클릭, 또는 드래그`}
       >
         <span className="text-2xl leading-none" aria-hidden>
           {item.icon}
         </span>
-        <span className="text-xs text-zinc-200">{item.label}</span>
-        <span className="text-[10px] text-zinc-500">{item.dims}</span>
+        <span className="text-xs text-ink">{item.label}</span>
+        <span className="text-[10px] text-ink-3">{item.dims}</span>
       </button>
     </li>
   );
@@ -102,10 +102,10 @@ function MyModels({ armed, query }: { armed: AssetRef | null; query: string }) {
   };
 
   return (
-    <div className="flex flex-col gap-2 border-t border-white/10 pt-3">
+    <div className="flex flex-col gap-2 border-t border-line pt-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">내 모델 (GLB)</h3>
-        <button className="rounded bg-white/10 px-2 py-1 text-[11px] hover:bg-white/20 disabled:opacity-40" disabled={busy} onClick={() => fileRef.current?.click()}>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-3">내 모델 (GLB)</h3>
+        <button className="rounded bg-raised px-2 py-1 text-[11px] hover:bg-hover disabled:opacity-40" disabled={busy} onClick={() => fileRef.current?.click()}>
           {busy ? "불러오는 중…" : "＋ GLB 불러오기"}
         </button>
         <input
@@ -120,7 +120,7 @@ function MyModels({ armed, query }: { armed: AssetRef | null; query: string }) {
           }}
         />
       </div>
-      <p className="text-[11px] leading-relaxed text-zinc-500">
+      <p className="text-[11px] leading-relaxed text-ink-3">
         .glb 파일을 이 패널이나 장면에 끌어다 놓아도 됩니다. 모델은 이 브라우저에만 저장되며, 바닥 중앙이 기준점이 됩니다.
       </p>
       <ul className="grid grid-cols-2 gap-2">
@@ -130,7 +130,7 @@ function MyModels({ armed, query }: { armed: AssetRef | null; query: string }) {
             <div key={a.id} className="relative">
               <AssetCard item={{ label: a.name, icon: "🧊", dims: `${a.size[0]} × ${a.size[2]} m · 높이 ${a.size[1]}`, ref }} armed={!!armed && sameRef(armed, ref)} />
               <button
-                className="absolute right-1 top-1 rounded bg-black/60 px-1.5 text-[11px] text-zinc-300 hover:text-red-300"
+                className="absolute right-1 top-1 rounded bg-black/60 px-1.5 text-[11px] text-ink-2 hover:text-red-300"
                 title="이 모델과 장면의 사본을 모두 삭제"
                 onClick={() => window.confirm(`"${a.name}" 모델과 장면에 놓인 사본을 모두 삭제할까요?`) && deleteAsset(a.id)}
               >
@@ -139,7 +139,7 @@ function MyModels({ armed, query }: { armed: AssetRef | null; query: string }) {
             </div>
           );
         })}
-        {assets.length === 0 ? <li className="col-span-2 text-xs text-zinc-600">아직 불러온 모델이 없습니다</li> : null}
+        {assets.length === 0 ? <li className="col-span-2 text-xs text-ink-3">아직 불러온 모델이 없습니다</li> : null}
       </ul>
     </div>
   );

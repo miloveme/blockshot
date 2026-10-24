@@ -70,7 +70,7 @@ claude mcp add blockshot-local -e BLOCKSHOT_URL=https://blockshot-eta.vercel.app
 
 ## 내가 배치한 장면에 애니메이션 추가 (링크 방식)
 
-서버는 아무것도 저장하지 않으므로 장면은 링크로 넘긴다: 스튜디오 툴바 **🔗 링크 복사**(`/studio#s=…` — 장면 전체가 URL 조각에 들어 있음) → AI에게 "이 링크 장면에 애니메이션 추가해 줘: <링크>" → AI가 `load_link`로 읽고 `run_script`(`base` + `scene.use(id)`) / `apply_addon`으로 동작·카메라·샷만 추가 → `preview`로 확인 → `open_link`/`run_script`가 주는 새 링크를 열면 새 프로젝트로 들어온다. 링크가 매우 길면(수만 자) 일부 앱에서 잘리므로 그때는 `.blockshot.json`을 붙여넣는다. `/guide` 프롬프트 ⑦ 참고.
+서버는 아무것도 저장하지 않으므로 장면은 링크로 넘긴다: 스튜디오 메뉴바 **링크** 버튼(파일 → 링크 복사)(`/studio#s=…` — 장면 전체가 URL 조각에 들어 있음) → AI에게 "이 링크 장면에 애니메이션 추가해 줘: <링크>" → AI가 `load_link`로 읽고 `run_script`(`base` + `scene.use(id)`) / `apply_addon`으로 동작·카메라·샷만 추가 → `preview`로 확인 → `open_link`/`run_script`가 주는 새 링크를 열면 새 프로젝트로 들어온다. 링크가 매우 길면(수만 자) 일부 앱에서 잘리므로 그때는 `.blockshot.json`을 붙여넣는다. `/guide` 프롬프트 ⑦ 참고.
 
 ## 구현 메모
 

@@ -60,18 +60,18 @@ export function SpaceEditor() {
           </Row>
 
           <div className="mt-1 flex items-center justify-between">
-            <span className="text-[11px] text-zinc-500">문 · 창 ({space.openings.length})</span>
+            <span className="text-[11px] text-ink-3">문 · 창 ({space.openings.length})</span>
             <div className="flex gap-1">
-              <button className="rounded bg-white/10 px-2 py-0.5 text-[11px] hover:bg-white/20" onClick={() => edit((s) => addOpening(s, "door"))}>
+              <button className="rounded bg-raised px-2 py-0.5 text-[11px] hover:bg-hover" onClick={() => edit((s) => addOpening(s, "door"))}>
                 ＋ 문
               </button>
-              <button className="rounded bg-white/10 px-2 py-0.5 text-[11px] hover:bg-white/20" onClick={() => edit((s) => addOpening(s, "window"))}>
+              <button className="rounded bg-raised px-2 py-0.5 text-[11px] hover:bg-hover" onClick={() => edit((s) => addOpening(s, "window"))}>
                 ＋ 창
               </button>
             </div>
           </div>
           {space.openings.map((o, i) => (
-            <div key={i} className="flex flex-col gap-1.5 rounded border border-white/10 p-2">
+            <div key={i} className="flex flex-col gap-1.5 rounded border border-line p-2">
               <div className="flex items-center gap-2">
                 <span className="text-xs">{o.kind === "door" ? "🚪 문" : "🪟 창"}</span>
                 <div className="flex-1">
@@ -81,7 +81,7 @@ export function SpaceEditor() {
                   삭제
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-1.5 text-[11px] text-zinc-500">
+              <div className="grid grid-cols-2 gap-1.5 text-[11px] text-ink-3">
                 <label className="flex items-center gap-1 whitespace-nowrap">
                   위치
                   <NumField value={o.offset} step={0.1} onCommit={(v) => edit((s) => patchOpening(s, i, { offset: v }))} />
@@ -103,7 +103,7 @@ export function SpaceEditor() {
               </div>
             </div>
           ))}
-          <p className="text-[10px] text-zinc-600">위치: 벽 중앙에서 벽을 따라 이동하는 거리(m). 탑뷰에서 노란 선(문)·파란 선(창)으로 보입니다.</p>
+          <p className="text-[10px] text-ink-3">위치: 벽 중앙에서 벽을 따라 이동하는 거리(m). 탑뷰에서 노란 선(문)·파란 선(창)으로 보입니다.</p>
         </>
       ) : null}
     </div>

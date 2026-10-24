@@ -1,16 +1,42 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0f1115;
-  --foreground: #ededed;
+  --background: #0b0c0f;
+  --foreground: #e6e8ec;
   color-scheme: dark;
 }
 
+/*
+ * Editor design tokens. Surfaces get lighter as they come forward (app → panel → raised control → hover),
+ * borders are hairlines, the amber accent marks the active / selected thing, red is reserved for recording & keys.
+ */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --color-app: #0b0c0f;
+  --color-panel: #13151a;
+  --color-panel-2: #171a20;
+  --color-raised: #1e2129;
+  --color-hover: #262a33;
+  --color-active: #2e333e;
+  --color-line: rgb(255 255 255 / 0.07);
+  --color-line-strong: rgb(255 255 255 / 0.13);
+  --color-ink: #e6e8ec;
+  --color-ink-2: #a7adb8;
+  --color-ink-3: #6b7280;
+  --color-accent: #f5b83d;
+  --color-accent-soft: rgb(245 184 61 / 0.14);
+  --color-key: #ef4b4b;
+  --color-cam: #5b9dff;
+  --color-ok: #34c58a;
+  --color-axis-x: #f0605a;
+  --color-axis-y: #7ccf5b;
+  --color-axis-z: #5b9dff;
+
+  --shadow-pop: 0 12px 32px -8px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.08);
 }
 
 body {
@@ -23,3 +49,47 @@ body {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(300%); }
 }
+
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+.animate-pop { animation: pop-in 120ms ease-out; }
+
+/* thin, unobtrusive scrollbars inside the editor */
+.scroll-thin { scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / 0.14) transparent; }
+.scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll-thin::-webkit-scrollbar-thumb { background: rgb(255 255 255 / 0.12); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+
+/*
+ * Tooltips: <button data-tip="Move" data-kbd="W">. Pure CSS so hundreds of controls cost nothing; side via data-tip-side.
+ */
+[data-tip] { position: relative; }
+[data-tip]:hover::after,
+[data-tip]:focus-visible::after {
+  content: attr(data-tip) attr(data-kbd-label);
+  position: absolute;
+  z-index: 60;
+  white-space: nowrap;
+  pointer-events: none;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: #e6e8ec;
+  background: #23272f;
+  box-shadow: var(--shadow-pop);
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+  animation: pop-in 90ms ease-out 250ms both;
+}
+[data-tip-side="right"]:hover::after { left: calc(100% + 8px); top: 50%; transform: translateY(-50%); }
+[data-tip-side="top"]:hover::after { top: auto; bottom: calc(100% + 6px); }
+[data-tip-side="left"]:hover::after { left: auto; right: calc(100% + 8px); top: 50%; transform: translateY(-50%); }
+
+/* number fields: hide native spinners, the label drags the value instead */
+.no-spin::-webkit-outer-spin-button,
+.no-spin::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.no-spin { -moz-appearance: textfield; appearance: textfield; }

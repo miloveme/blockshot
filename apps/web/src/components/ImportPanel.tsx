@@ -3,15 +3,20 @@
 import { useState } from "react";
 import { mentionables, addonFromSpec, addonIssues, applyAddon, buildAnimatePrompt, buildFixPrompt, buildLayoutFixPrompt, buildPrompt, detectPasted, lintLayout, parseAddon, validateSpec, type Issue, type PromptMode } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
+import { useUi } from "@/lib/ui";
 import { MentionTextarea } from "./MentionTextarea";
 import { runScriptInWorker } from "@/lib/run-script";
 
 /** AI prompt kit (copy) + paste-back import with self-correction (docs/AI_PROMPT_KIT.md). */
 export function ImportPanel({ onClose }: { onClose: () => void }) {
-  const [request, setRequest] = useState("");
+  // a request handed over from the command palette / context menu (the panel is remounted per hand-over)
+  const [request, setRequest] = useState(() => useUi.getState().aiDraft ?? "");
   const [mode, setMode] = useState<PromptMode>("json");
   /** "new": the LLM builds the whole scene. "animate": the scene stays as placed and the LLM only adds animation. */
-  const [target, setTarget] = useState<"new" | "animate">("new");
+  const [target, setTarget] = useState<"new" | "animate">(() => {
+    const s = useStudio.getState().spec;
+    return useUi.getState().aiDraft && s.actors.length + s.props.length > 0 ? "animate" : "new";
+  });
   const [pasted, setPasted] = useState("");
   const [errors, setErrors] = useState<Issue[]>([]);
   const [layoutIssues, setLayoutIssues] = useState<Issue[]>([]);
@@ -107,27 +112,27 @@ export function ImportPanel({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="flex flex-col gap-4 text-sm text-zinc-200">
-      <div className="flex overflow-hidden rounded bg-white/10 text-xs">
+    <div className="flex flex-col gap-4 text-sm text-ink">
+      <div className="flex overflow-hidden rounded bg-raised text-xs">
         {([["new", "🆕 새 장면 만들기"], ["animate", "🎬 배치한 장면에 애니메이션"]] as const).map(([id, label]) => (
-          <button key={id} onClick={() => setTarget(id)} className={`flex-1 whitespace-nowrap px-2 py-1.5 ${target === id ? "bg-amber-400 font-medium text-black" : "text-zinc-200 hover:bg-white/10"}`}>
+          <button key={id} onClick={() => setTarget(id)} className={`flex-1 whitespace-nowrap px-2 py-1.5 ${target === id ? "bg-accent font-medium text-black" : "text-ink hover:bg-hover"}`}>
             {label}
           </button>
         ))}
       </div>
       {target === "new" ? (
-        <p className="text-xs text-zinc-500">외부 LLM(ChatGPT·Claude·Gemini)에 장면 전체를 맡기는 곳입니다. 결과는 현재 장면을 교체하며 Ctrl+Z로 되돌릴 수 있습니다.</p>
+        <p className="text-xs text-ink-3">외부 LLM(ChatGPT·Claude·Gemini)에 장면 전체를 맡기는 곳입니다. 결과는 현재 장면을 교체하며 Ctrl+Z로 되돌릴 수 있습니다.</p>
       ) : (
-        <p className="text-xs text-zinc-500">
-          에셋 탭 등으로 <b className="text-zinc-300">직접 배치한 장면은 그대로 두고</b>, LLM이 움직임·카메라·샷만 추가합니다. 프롬프트에 배치된 오브젝트의 id·위치·크기가 자동으로 들어가고, 결과는 <b className="text-zinc-300">추가분만</b> 합쳐집니다 (Ctrl+Z로 되돌리기).
+        <p className="text-xs text-ink-3">
+          에셋 탭 등으로 <b className="text-ink-2">직접 배치한 장면은 그대로 두고</b>, LLM이 움직임·카메라·샷만 추가합니다. 프롬프트에 배치된 오브젝트의 id·위치·크기가 자동으로 들어가고, 결과는 <b className="text-ink-2">추가분만</b> 합쳐집니다 (Ctrl+Z로 되돌리기).
         </p>
       )}
 
       <section className="flex flex-col gap-2">
-        <h3 className="font-medium text-amber-300">① 프롬프트 만들기</h3>
+        <h3 className="font-medium text-accent">① 프롬프트 만들기</h3>
         {target === "animate" ? (
           <MentionTextarea
-            className="h-28 w-full rounded border border-white/10 bg-black/30 p-2 font-mono text-xs"
+            className="h-28 w-full rounded border border-line bg-black/30 p-2 font-mono text-xs"
             placeholder="어떻게 움직일지 입력하세요. @를 누르면 배치한 인물·소품·카메라·동작을 골라 넣을 수 있어요. 예) @man1이 문 쪽에서 @sofa1로 걸어와 앉는다. 카메라는 천천히 줌인. 6초."
             value={request}
             onChange={setRequest}
@@ -135,20 +140,20 @@ export function ImportPanel({ onClose }: { onClose: () => void }) {
           />
         ) : (
           <textarea
-            className="h-28 rounded border border-white/10 bg-black/30 p-2 font-mono text-xs"
+            className="h-28 rounded border border-line bg-black/30 p-2 font-mono text-xs"
             placeholder="대본이나 연출 요청을 입력하세요. 예) 밤 골목, 여자가 뒤를 돌아보며 뛰고 남자가 쫓아온다. 6초, 3컷."
             value={request}
             onChange={(e) => setRequest(e.target.value)}
           />
         )}
-        {target === "animate" ? <p className="text-xs text-zinc-500">💡 <b className="text-zinc-300">@</b>를 입력하면 장면의 에셋 목록이 나옵니다. 정확한 id가 프롬프트에 들어가 LLM이 엉뚱한 오브젝트를 고르지 않아요. 기존 동작(@act3)도 지목할 수 있어요.</p> : null}
+        {target === "animate" ? <p className="text-xs text-ink-3">💡 <b className="text-ink-2">@</b>를 입력하면 장면의 에셋 목록이 나옵니다. 정확한 id가 프롬프트에 들어가 LLM이 엉뚱한 오브젝트를 고르지 않아요. 기존 동작(@act3)도 지목할 수 있어요.</p> : null}
         <div className="flex flex-wrap items-center gap-2">
-          <select className="w-full rounded bg-white/10 px-2 py-1" value={mode} onChange={(e) => setMode(e.target.value as PromptMode)}>
+          <select className="w-full rounded bg-raised px-2 py-1" value={mode} onChange={(e) => setMode(e.target.value as PromptMode)}>
             <option value="json">출력: Blockshot JSON</option>
             <option value="script">출력: Blockshot Script</option>
           </select>
           <button
-            className="rounded bg-amber-400 px-3 py-1 font-medium text-black hover:bg-amber-300 disabled:opacity-40"
+            className="rounded bg-accent px-3 py-1 font-medium text-black hover:brightness-110 disabled:opacity-40"
             disabled={!request.trim()}
             onClick={() =>
               copy(
@@ -163,7 +168,7 @@ export function ImportPanel({ onClose }: { onClose: () => void }) {
           </button>
           {target === "new" ? (
             <button
-              className="rounded bg-white/10 px-3 py-1 hover:bg-white/20 disabled:opacity-40"
+              className="rounded bg-raised px-3 py-1 hover:bg-hover disabled:opacity-40"
               disabled={!request.trim()}
               onClick={() => copy(buildPrompt({ request, mode, current: useStudio.getState().spec }), "수정 프롬프트")}
               title="현재 장면을 포함해 수정 요청"
@@ -172,13 +177,13 @@ export function ImportPanel({ onClose }: { onClose: () => void }) {
             </button>
           ) : null}
         </div>
-        <p className="text-xs text-zinc-500">ChatGPT · Claude · Gemini 등 아무 LLM에 붙여넣고, 결과 코드블록을 아래에 붙여넣으세요.</p>
+        <p className="text-xs text-ink-3">ChatGPT · Claude · Gemini 등 아무 LLM에 붙여넣고, 결과 코드블록을 아래에 붙여넣으세요.</p>
       </section>
 
       <section className="flex flex-col gap-2">
-        <h3 className="font-medium text-amber-300">② 결과 붙여넣기</h3>
+        <h3 className="font-medium text-accent">② 결과 붙여넣기</h3>
         <textarea
-          className="h-48 rounded border border-white/10 bg-black/30 p-2 font-mono text-xs"
+          className="h-48 rounded border border-line bg-black/30 p-2 font-mono text-xs"
           placeholder={target === "animate" ? '```json\n{ "actions": [ ... ], "cameras": [], "shots": [] }\n```\n또는 scene.use("인물id").walkTo(...) 스크립트' : '```json\n{ "specVersion": "0.1", ... }\n```\n또는 scene.room({...}) 스크립트'}
           value={pasted}
           onChange={(e) => setPasted(e.target.value)}
@@ -200,7 +205,7 @@ export function ImportPanel({ onClose }: { onClose: () => void }) {
             ))}
           </ul>
           <button
-            className="self-start rounded bg-white/10 px-3 py-1 text-xs hover:bg-white/20"
+            className="self-start rounded bg-raised px-3 py-1 text-xs hover:bg-hover"
             onClick={() => copy(buildFixPrompt(errors, lastFormat, target === "animate"), "수정 요청 프롬프트")}
           >
             LLM에 보낼 수정 요청 복사
@@ -208,18 +213,18 @@ export function ImportPanel({ onClose }: { onClose: () => void }) {
         </section>
       )}
       {layoutIssues.length > 0 && (
-        <section className="flex flex-col gap-2 rounded border border-amber-400/40 bg-amber-400/10 p-3">
-          <h3 className="font-medium text-amber-300">배치 경고 {layoutIssues.length}건</h3>
+        <section className="flex flex-col gap-2 rounded border border-amber-400/40 bg-accent/10 p-3">
+          <h3 className="font-medium text-accent">배치 경고 {layoutIssues.length}건</h3>
           <ul className="list-disc pl-5 text-xs text-amber-100">
             {layoutIssues.map((e, i) => (
               <li key={i}>{e.message}</li>
             ))}
           </ul>
           <div className="flex gap-2">
-            <button className="rounded bg-amber-400 px-3 py-1 text-xs font-medium text-black hover:bg-amber-300" onClick={() => copy(buildLayoutFixPrompt(layoutIssues, lastFormat, target === "animate"), "배치 수정 요청 프롬프트")}>
+            <button className="rounded bg-accent px-3 py-1 text-xs font-medium text-black hover:brightness-110" onClick={() => copy(buildLayoutFixPrompt(layoutIssues, lastFormat, target === "animate"), "배치 수정 요청 프롬프트")}>
               LLM에 보낼 배치 수정 요청 복사
             </button>
-            <button className="rounded bg-white/10 px-3 py-1 text-xs hover:bg-white/20" onClick={onClose}>
+            <button className="rounded bg-raised px-3 py-1 text-xs hover:bg-hover" onClick={onClose}>
               이대로 사용
             </button>
           </div>

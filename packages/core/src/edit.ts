@@ -74,6 +74,30 @@ export function addProp(spec: BlockshotSpec, type: PropType): { spec: BlockshotS
   return { spec: { ...spec, props: [...spec.props, prop] }, id };
 }
 
+/**
+ * Copies an actor / prop / camera next to the original (`offset` metres along +X) under a fresh id. Only the object is
+ * copied — its actions and keyframes are not (an exact second performance is rarely what a blocking needs).
+ */
+export function duplicateEntity(spec: BlockshotSpec, id: string, offset = 0.6): { spec: BlockshotSpec; id: string } | null {
+  const shift = (p: Vec3): Vec3 => [p[0] + offset, p[1], p[2]];
+  const actor = spec.actors.find((a) => a.id === id);
+  if (actor) {
+    const nid = uniqueId(spec, id.replace(/\d+$/, "") || "actor");
+    return { spec: { ...spec, actors: [...spec.actors, { ...actor, id: nid, name: actor.name ? `${actor.name} 복사` : undefined, position: shift(actor.position) }] }, id: nid };
+  }
+  const prop = spec.props.find((p) => p.id === id);
+  if (prop) {
+    const nid = uniqueId(spec, id.replace(/\d+$/, "") || prop.type);
+    return { spec: { ...spec, props: [...spec.props, { ...prop, id: nid, position: shift(prop.position) }] }, id: nid };
+  }
+  const cam = spec.cameras.find((c) => c.id === id);
+  if (cam) {
+    const nid = uniqueId(spec, id.replace(/\d+$/, "") || "cam");
+    return { spec: { ...spec, cameras: [...spec.cameras, { ...cam, id: nid, name: cam.name ? `${cam.name} 복사` : undefined, position: shift(cam.position) }] }, id: nid };
+  }
+  return null;
+}
+
 export function addCamera(spec: BlockshotSpec): { spec: BlockshotSpec; id: string } {
   const id = uniqueId(spec, "cam");
   const camera: Camera = {
