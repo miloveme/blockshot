@@ -17,7 +17,7 @@ Blockshot Spec은 프로젝트의 **유일한 진실 원천** 이다. UI 편집,
 | 정면(forward) | 인물/소품의 `rotation.y = 0` 일 때 **+Z 방향** 을 바라본다 (기본 카메라가 +Z 쪽에 있으므로 "카메라를 보는" 상태) |
 | 색 | `#rrggbb` |
 | ID | `^[a-zA-Z][a-zA-Z0-9_-]*$`, 문서 안에서 유일 |
-| 참조 | 문자열 `"actorId"` 또는 `"actorId.part"` (part: `head`, `chest`, `pelvis`, `hand_l`, `hand_r`, `foot_l`, `foot_r`) |
+| 참조 | 문자열 `"actorId"` 또는 `"actorId.part"` (part: `head`, `chest`, `pelvis`, `hand_l`, `hand_r`, `foot_l`, `foot_r`, `ear_l`, `ear_r`, `mouth`) |
 
 ## 2. 최상위 구조
 
@@ -135,6 +135,7 @@ LLM과 사람이 가장 많이 쓰는 레이어. 로드 시 `compile()`이 `trac
 | `sitDown` | `actor, on: 의자/소파 소품 id, start, duration?(1), offset?(0)` | 좌석 앞(열린 쪽, 0.6 m)으로 돌아 걸어간 뒤 좌석까지 들어가(이동 키; 등받이 뒤/옆에서 출발해도 통과하지 않음) 좌석이 향한 방향으로 돌고 마지막 0.35초에 `sit`으로 내려앉는다. 소파는 `offset`(m, 소파 폭 방향)으로 여러 명이 나눠 앉는다. `on`은 `chair`/`sofa`여야 한다(검증 오류) |
 | `gesture` | `actor, gesture, start, duration?, side?, intensity?(1)` | 몸짓 레이어를 현재 포즈 위에 얹는다(0.25초 페이드). `gesture`: wave, nod, shakeHead, shrug, clap, crossArms, handsOnHips, think, bow, lookAround, cheer. 한 손 제스처는 `side`로 손을 고른다 |
 | `handShape` | `actor, shape, hand?(both), start, duration?(2)` | 손가락 모양을 잡는다: `open`·`relaxed`·`fist`·`point`·`pinch`·`grip`. 기본 손은 `relaxed` |
+| `hold` | `actor, prop, hand?(right), at?(carry), start, duration?(4), then?(keep)` | 소품(전화기·컵 등)을 집어 **손에 들고 사용**한다. `at`: `ear`(통화) · `mouth`(마시기) · `chest`(문자/읽기) · `carry`(들고만). 가까이(≈1 m 이내) 있으면 손을 뻗어 집고 들어 올려 유지한 뒤 내리고, 멀리 있으면 처음부터 손에 든 것으로 본다. `then: keep`이면 손에 계속 들고(팔은 내림), `put`이면 원래 자리에 되돌려 놓는다. 소품은 손을 따라 움직이고(전화기는 화면이 얼굴을 향해 세로로), 걸으며 계단을 올라도 유지된다 |
 | `reach` | `actor, target, hand?(right), start, duration?(1.5)` | 손을 점/소품/인물 부위로 뻗는다(2본 IK, 팔 길이를 넘으면 최대한 뻗음). 집기·가리키기·악수에 사용 |
 | `standUp` | `actor, start, duration?(0.8), to?` | `stand`로 일어나 바라보는 방향으로 0.6 m(또는 `to`) 걸어 나온다 |
 | `lookAt` | `actor, target, start, end?` | 머리 방향 |

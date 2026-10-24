@@ -1,6 +1,6 @@
 "use client";
 
-import { GESTURES, HAND_SHAPES, LENS_PRESETS, POSES, SEATS, addGesture, addHandShape, addReach, addSitDown, addStandUp, describeAction, labeledActions, patchActionAt, keyTimes, kindOf, movesOf, patchMoveAt, removeActionAt, type Gesture, type HandShape, type Pose } from "@blockshot/core";
+import { GESTURES, HAND_SHAPES, LENS_PRESETS, POSES, SEATS, addGesture, addHandShape, addHold, addReach, addSitDown, addStandUp, describeAction, labeledActions, patchActionAt, keyTimes, kindOf, movesOf, patchMoveAt, removeActionAt, type Gesture, type HandShape, type Pose } from "@blockshot/core";
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { hasModel, importGlb } from "@/lib/models";
@@ -334,6 +334,10 @@ function ActingControls({ actorId }: { actorId: string }) {
   const [target, setTarget] = useState("");
   const [hand, setHand] = useState<"left" | "right">("right");
   const [shape, setShape] = useState<HandShape>("fist");
+  const [heldProp, setHeldProp] = useState("");
+  const [useAt, setUseAt] = useState<"ear" | "mouth" | "chest" | "carry">("ear");
+  const holdable = spec.props.filter((q) => !["door", "window", "mirror", "platform", "ramp", "stairs"].includes(q.type));
+  const chosenProp = holdable.find((q) => q.id === heldProp)?.id ?? holdable.find((q) => q.type === "phone")?.id ?? holdable[0]?.id ?? "";
   const targets = [
     ...spec.props.map((p) => ({ value: p.id, label: `${p.type} · ${p.id}` })),
     ...spec.actors.filter((a) => a.id !== actorId).flatMap((a) => [{ value: `${a.id}.hand_r`, label: `${a.name ?? a.id} 오른손` }, { value: `${a.id}.hand_l`, label: `${a.name ?? a.id} 왼손` }, { value: `${a.id}.head`, label: `${a.name ?? a.id} 머리` }]),
@@ -358,6 +362,19 @@ function ActingControls({ actorId }: { actorId: string }) {
           ✊ 손 모양
         </button>
       </div>
+      {holdable.length > 0 ? (
+        <div className="flex items-center gap-1.5">
+          <div className="min-w-0 flex-1">
+            <SelectField value={chosenProp} options={holdable.map((q) => ({ value: q.id, label: `${q.type} · ${q.id}` }))} onCommit={setHeldProp} />
+          </div>
+          <div className="w-16">
+            <SelectField value={useAt} options={[{ value: "ear", label: "귀(통화)" }, { value: "mouth", label: "입(마시기)" }, { value: "chest", label: "가슴(보기)" }, { value: "carry", label: "들고만" }]} onCommit={setUseAt} />
+          </div>
+          <button className="whitespace-nowrap rounded bg-white/10 px-2 py-1 text-[11px] hover:bg-white/20" title="소품을 집어 들고 사용합니다 (가까이 있으면 손을 뻗어 집고, 멀면 이미 손에 있는 것으로 시작)" onClick={() => edit((s) => addHold(s, actorId, chosenProp, { start: useStudio.getState().time, at: useAt, hand }))}>
+            📱 들기
+          </button>
+        </div>
+      ) : null}
       {targets.length > 0 ? (
         <div className="flex items-center gap-1.5">
           <div className="min-w-0 flex-1">

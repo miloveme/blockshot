@@ -49,6 +49,7 @@ export function describeAction(a: Action): string {
     a.type === "gesture" ? a.gesture
     : a.type === "reach" ? `→ ${typeof a.target === "string" ? a.target : "point"}`
     : a.type === "sitDown" ? `on ${a.on}`
+    : a.type === "hold" ? `${a.prop} → ${a.at}`
     : a.type === "pose" ? a.pose
     : a.type === "lookAt" || a.type === "cameraLookAt" || a.type === "turnTo" ? `→ ${typeof a.target === "string" ? a.target : Array.isArray(a.target) ? "point" : `${a.target}°`}`
     : "";

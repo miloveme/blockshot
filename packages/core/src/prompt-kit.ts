@@ -29,6 +29,7 @@ const ACTION_LINES = `    { "type": "walkTo"|"runTo", "actor", "to": [x,0,z] | [
     { "type": "standUp", "actor", "start", "duration"?, "to"? },
     { "type": "gesture", "actor", "gesture": "wave"|"nod"|"shakeHead"|"shrug"|"clap"|"crossArms"|"handsOnHips"|"think"|"bow"|"lookAround"|"cheer", "start", "duration"?, "side"?: "left"|"right", "intensity"?: 0-1 },
     { "type": "handShape", "actor", "shape": "open"|"relaxed"|"fist"|"point"|"pinch"|"grip", "hand"?: "left"|"right"|"both", "start", "duration"? },
+    { "type": "hold", "actor", "prop": propId, "hand"?: "left"|"right", "at"?: "ear"|"mouth"|"chest"|"carry", "start", "duration"?, "then"?: "keep"|"put" },
     { "type": "reach", "actor", "target": ref | [x,y,z], "hand"?: "left"|"right", "start", "duration"? },
     { "type": "lookAt", "actor", "target", "start", "end"? },
     { "type": "cameraMove", "camera", "to": [x,y,z], "start", "duration", "ease"? },
@@ -54,7 +55,7 @@ const SCRIPT_SUMMARY = `Blockshot Script API (JavaScript; globals: scene, vec, r
 scene.settings({ fps, duration, resolution }); scene.meta({ title });
 scene.room({ width, depth, height, doors: [{ wall, offset }], windows: [{ wall, offset }] }) | scene.ground() | scene.street();
 const a = scene.actor(id, { name, color, height, at: [x,0,z], facing: yawDeg, pose });
-a.walkTo([x,0,z] | [[x,0,z],...], { start, duration }); a.turnTo(target, { start }); a.pose(name, { start }); a.sitDown(chair, { start, duration?, offset? }); a.standUp({ start, to? }); a.gesture(name, { start, duration?, side?, intensity? }); a.reach(target, { start, hand?, duration? }); a.handShape(shape, { start, hand?, duration? }); a.lookAt(b.head, { start });
+a.walkTo([x,0,z] | [[x,0,z],...], { start, duration }); a.turnTo(target, { start }); a.pose(name, { start }); a.sitDown(chair, { start, duration?, offset? }); a.standUp({ start, to? }); a.gesture(name, { start, duration?, side?, intensity? }); a.reach(target, { start, hand?, duration? }); a.hold(prop, { start, at?, hand?, duration?, then? }); a.handShape(shape, { start, hand?, duration? }); a.lookAt(b.head, { start });
 scene.prop(type, { id, at, facing, scale, color });
 const c = scene.camera(id, { lens, at: [x,y,z], lookAt: a.head });
 c.moveTo(pos, { start, duration, ease }); c.dolly(m, {...}); c.truck(m, {...}); c.pedestal(m, {...}); c.orbit(target, { degrees, start, duration }); c.zoom(mm, {...}); c.lookAt(target, { start });
@@ -80,7 +81,7 @@ ${catalogTable()}
 - Facing: yaw 0 faces +Z, yaw 90 faces +X, yaw 180 faces -Z, yaw -90 faces -X. Furniture backs go against walls, so a prop standing against:
   north wall (z = -depth/2) → yaw 0 · south wall (z = +depth/2) → yaw 180 · west wall (x = -width/2) → yaw 90 · east wall (x = +width/2) → yaw -90.
   Keep each footprint inside the walls (center at least half its size away from every wall).
-- Seat chairs/sofas toward what people look at (a table, a TV, each other). Seat people with sitDown actions on the chair/sofa id (a seated actor at the start may use pose "sit" placed on the seat). Put cups/phones ON surfaces: set position y to the surface height (table top = 0.76 × scale y).
+- Seat chairs/sofas toward what people look at (a table, a TV, each other). Seat people with sitDown actions on the chair/sofa id (a seated actor at the start may use pose "sit" placed on the seat). Put cups/phones ON surfaces: set position y to the surface height (table top = 0.76 × scale y). When someone uses one (phone call, drinking), add a "hold" action for it ("at": "ear" | "mouth" | "chest" | "carry") instead of animating the hand alone.
 - No two props may overlap on the floor (stacked items excepted). Keep walking paths ≥ 0.8 m wide (the engine paths round furniture automatically, but a gap narrower than a body is a dead end).
 - Place actors on free floor, standing near what they interact with; seated actors (pose "sit") go on a sofa/chair footprint. Keep doors and windows unblocked.
 - Put the cameras where the audience would stand; keep every shot's subject inside the frame.
@@ -290,6 +291,7 @@ const ANIMATE_RULES = `Hard rules:
 - Use the exact ids listed below. Add ONLY animation: movement (walkTo/runTo/turnTo), poses, looks, camera moves/zooms/orbits, and — only if the request needs them — new cameras and the shot list.
 - Walking is path-finded by the engine: give walkTo / runTo the DESTINATION (or a few meaningful stops) and it walks round furniture, walls and standing people by itself, climbs ramps and stairs and goes up onto platforms, ducks under low beams / lintels, and steps round or waits for other people who are walking (earlier-starting actions have priority). Only add "direct": true to deliberately cut straight. A destination inside a prop (e.g. the table's center) ends beside it; a destination on a platform just needs its x,z. Doors are walkable openings; walls are not.
 - To seat someone use a sitDown action on the chair/sofa id (it walks them onto the seat, turns them and lowers them; "offset" slides along a sofa's width so several people can sit); use standUp to rise. It aligns position, facing and height with the seat and walks round to its open side, so never hand-place walkTo points or poses to sit. Do not fake sitting with only a "sit" pose at a standing position.
+- Props never move by themselves. To make someone USE a small prop — phone call ("at": "ear"), drinking ("mouth"), reading / texting ("chest"), or just carrying it ("carry") — add a "hold" action with the prop's id: they reach for it (when it is within about 1 m of them, otherwise it is already in their hand), lift it into place, hold it, and then keep it in hand or put it back ("then"). Never fake it with reach/gestures and a prop left floating where it was placed.
 - Direct the acting like a director: give people body language with "gesture" (wave, nod, shakeHead, shrug, clap, crossArms, handsOnHips, think, bow, lookAround, cheer) and use "reach" to put a hand on or toward an object / another person's body part (picking up, touching, pointing, handing over). Use "handShape" for the fingers (fist, point, pinch, grip …). Combine them with lookAt so people look at what they react to.
 - When asked to change part of the existing animation, edit ONLY the actions concerned (patchActions / removeActions by id) and leave the rest alone; use clearActions only to re-animate everything.
 - Times are scene seconds from 0. Make the animation fit the length, or set "duration" when it needs more.

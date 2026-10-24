@@ -39,6 +39,9 @@ export interface ActorHandle {
   readonly pelvis: string;
   readonly handL: string;
   readonly handR: string;
+  readonly earL: string;
+  readonly earR: string;
+  readonly mouth: string;
   walkTo(to: Vec3 | Vec3[], opts: { start: number; duration?: number; speed?: number; direct?: boolean }): ActorHandle;
   runTo(to: Vec3 | Vec3[], opts: { start: number; duration?: number; speed?: number; direct?: boolean }): ActorHandle;
   turnTo(target: Target | number, opts: { start: number; duration?: number }): ActorHandle;
@@ -50,6 +53,8 @@ export interface ActorHandle {
   gesture(name: Gesture, opts: { start: number; duration?: number; side?: "left" | "right"; intensity?: number }): ActorHandle;
   /** Shape the fingers (fist, point, pinch, grip, open, relaxed) of one or both hands for `duration`. */
   handShape(shape: HandShape, opts: { start: number; hand?: "left" | "right" | "both"; duration?: number }): ActorHandle;
+  /** Pick up a prop and use it: `at` "ear" (phone call), "mouth" (drinking), "chest" (reading / texting) or "carry"; `then` keeps it in hand or puts it back. */
+  hold(prop: { id: string } | string, opts: { start: number; at?: "ear" | "mouth" | "chest" | "carry"; hand?: "left" | "right"; duration?: number; then?: "keep" | "put" }): ActorHandle;
   /** Reach a hand toward a point / object / body part (IK) and hold it for `duration`. */
   reach(target: Target, opts: { start: number; hand?: "left" | "right"; duration?: number }): ActorHandle;
   pose(name: Pose, opts: { start: number }): ActorHandle;
@@ -131,6 +136,9 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
       pelvis: `${id}.pelvis`,
       handL: `${id}.hand_l`,
       handR: `${id}.hand_r`,
+      earL: `${id}.ear_l`,
+      earR: `${id}.ear_r`,
+      mouth: `${id}.mouth`,
       walkTo: (to, o) => (action({ type: "walkTo", actor: id, to, ...o }), handle),
       runTo: (to, o) => (action({ type: "runTo", actor: id, to, ...o }), handle),
       turnTo: (target, o) => (action({ type: "turnTo", actor: id, target, ...o }), handle),
@@ -139,6 +147,7 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
       standUp: (o) => (action({ type: "standUp", actor: id, ...o }), handle),
       gesture: (gesture, o) => (action({ type: "gesture", actor: id, gesture, ...o }), handle),
       handShape: (shape, o) => (action({ type: "handShape", actor: id, shape, ...o }), handle),
+      hold: (prop, o) => (action({ type: "hold", actor: id, prop: typeof prop === "string" ? prop : prop.id, ...o }), handle),
       reach: (target, o) => (action({ type: "reach", actor: id, target, ...o }), handle),
       lookAt: (target, o) => (action({ type: "lookAt", actor: id, target, ...o }), handle),
     };

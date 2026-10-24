@@ -388,6 +388,13 @@ export function addHandShape(spec: BlockshotSpec, actorId: string, shape: HandSh
   return extendDuration({ ...spec, actions: [...spec.actions, action] });
 }
 
+/** Has the actor pick up a prop and use it (phone call at the ear, drink at the mouth …). */
+export function addHold(spec: BlockshotSpec, actorId: string, propId: string, opts: { start: number; at?: "ear" | "mouth" | "chest" | "carry"; hand?: "left" | "right"; duration?: number; then?: "keep" | "put" }): BlockshotSpec {
+  if (!spec.actors.some((a) => a.id === actorId) || !spec.props.some((p) => p.id === propId)) return spec;
+  const action = { type: "hold" as const, actor: actorId, prop: propId, hand: opts.hand ?? "right", at: opts.at ?? "carry", duration: opts.duration ?? 4, then: opts.then ?? "keep", start: roundT(Math.max(0, opts.start)) };
+  return extendDuration({ ...spec, actions: [...spec.actions, action] });
+}
+
 /** Adds a hand reach (IK) toward a point / object / body part. */
 export function addReach(spec: BlockshotSpec, actorId: string, target: Target, opts: { start: number; hand?: "left" | "right"; duration?: number }): BlockshotSpec {
   if (!spec.actors.some((a) => a.id === actorId)) return spec;

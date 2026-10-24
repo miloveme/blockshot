@@ -95,6 +95,7 @@
 - [x] 손가락 30본 + 발끝 본(`handShape` 액션, 걷기 발목 굴림), 액션 라벨(`act1`…)과 `patchActions`/`removeActions`·`scene.patchAction/removeAction`, 속성 패널 동작 목록(시간·길이 수정/삭제)
 - [x] 내비게이션: 장면 베이크(가구·벽·문, 몸 반경) + A* + 시야선 평활 → `walkTo`/`runTo`/`sitDown` 자동 우회, 정지/이동 인물 구분, 탑뷰 "내비 베이크" 오버레이, 도달 불가 lint ([docs/NAVIGATION.md](NAVIGATION.md))
 - [x] 이동 인물끼리 회피(우선순위 시공간 A*: 비키기·속도 늦추기·기다리기), 높이 기반 통과(머리 위 간격 → 숙여 지나가기 `crouch`, 낮은 문), 다층·경사(`platform`/`ramp`/`stairs`, 2.5D 레이어 격자)
+- [x] 소품 들기(`hold`): 전화 통화(귀)·마시기(입)·보기(가슴)·들고 다니기, 소품이 손을 따라 움직임, 귀/입 부위 참조, 손목 롤 IK
 - [ ] ORCA식 군중 시뮬레이션, 계단 발 디딤 IK, 복잡한 지형(Recast 내비메시)
 - [x] 애니메이션 프롬프트 `@` 멘션: 입력 중 `@`로 에셋/카메라/동작 목록을 띄워 정확한 id를 삽입 (MentionTextarea, core `mentionables`)
 - [ ] R2: 리깅된 GLB 캐릭터(본 이름 매핑·리타깃), GLB 애니메이션 클립 재생(`play`)

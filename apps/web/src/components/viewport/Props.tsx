@@ -1,6 +1,7 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useFrame } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
 import * as THREE from "three";
 import { Reflector } from "three/examples/jsm/objects/Reflector.js";
@@ -188,7 +189,16 @@ function PropMesh({ type, color, scaleY = 1 }: { type: Prop["type"]; color: stri
     case "model":
       return null; // rendered by ModelProp (needs the asset id)
     case "phone":
-      return <Box size={[0.075, 0.008, 0.155]} at={[0, 0.004, 0]} color={dark} />;
+      return (
+        <>
+          <Box size={[0.075, 0.008, 0.155]} at={[0, 0.004, 0]} color={dark} />
+          {/* the screen side, so the way a held phone faces can be seen */}
+          <mesh position={[0, 0.0085, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[0.065, 0.14]} />
+            <meshStandardMaterial color="#9fb7d4" emissive="#4a6a96" emissiveIntensity={0.5} />
+          </mesh>
+        </>
+      );
   }
 }
 
@@ -228,8 +238,22 @@ function ModelProp({ prop }: { prop: Prop }) {
 }
 
 export function PropObject({ prop }: { prop: Prop }) {
+  const group = useRef<THREE.Group>(null);
+  // a prop somebody picked up follows their hand: take its position from the evaluated scene every frame
+  useFrame(() => {
+    const g = group.current;
+    const st = useStudio.getState();
+    const now = st.sceneState.props[prop.id];
+    if (!g || !now || st.dragging === prop.id) return;
+    const held = now !== prop; // the evaluated scene hands out a fresh object only for a prop that is in somebody's hand
+    if (!held && !g.userData.wasHeld) return;
+    g.userData.wasHeld = held;
+    g.position.set(...now.position);
+    g.rotation.set(now.rotation[0] * DEG, now.rotation[1] * DEG, now.rotation[2] * DEG, "YXZ");
+  });
   return (
     <group
+      ref={group}
       name={`obj:${prop.id}`}
       onClick={(e) => {
         if (useStudio.getState().tool) return;

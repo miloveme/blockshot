@@ -1,4 +1,4 @@
-import type { Action, BodyPart, Gesture, HandShape, Key, Pose, BlockshotSpec, Prop, Target, TrackProperty, Vec3 } from "./schema";
+import type { Action, BodyPart, Gesture, HandShape, HoldAt, Key, Pose, BlockshotSpec, Prop, Target, TrackProperty, Vec3 } from "./schema";
 import { applyEase, DEG, unwrapYaw, vec, yawTowards } from "./math";
 import { verticalFov } from "./camera";
 import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
@@ -7,13 +7,16 @@ import { planAroundMovers, timeRouteOnGrid, type Mover } from "./nav-time";
 import { bakeNav, crouchSpans, surfaceSpans, navRadiusOf, routeLegs, staticActors, type Circle, type NavGrid } from "./nav";
 import { REST_HEIGHT, applyLayer, blendPoses, smoothstep, solveRig, toLocal, toWorld, type BoneName, type RigPose, type Skeleton } from "./rig";
 import { Q } from "./quat";
-import { basePose, envelope, GESTURE_DEFS, handShapeLayer, lookLayer, RELAXED_HANDS, sampleGesture, solveArm } from "./poses";
+import { PROP_CATALOG } from "./catalog";
+import { basePose, envelope, GESTURE_DEFS, handLayer, handShapeLayer, lookLayer, RELAXED_HANDS, sampleGesture, solveArm } from "./poses";
 
 const WALK_SPEED = 1.3;
 const RUN_SPEED = 3.5;
 const TURN_TIME = 0.3;
 const ORBIT_SAMPLES_PER_SEC = 12;
 /** seconds to blend from the previous pose into a new one */
+/** an actor this close (m, on the floor) to a prop picks it up; farther away it is already in their hand */
+const HOLD_REACH = 1.1;
 export const POSE_BLEND = 0.35;
 /** how far in front of a seat the actor lines up before stepping in (m) */
 const SEAT_APPROACH = 0.5;
@@ -46,6 +49,8 @@ export interface CompiledScene {
   routes: Map<Action, Vec3[]>;
   /** walk / run actions with a leg no route exists for (walled off) */
   unreachable: Set<Action>;
+  /** prop id → the hold actions that use it, in time order */
+  holds: Map<string, HoldLayer[]>;
   /** actions compiled so far (the walk planner only knows those) */
   compiled: Set<Action>;
   /** baked navigation grids by body radius */
@@ -56,7 +61,24 @@ export interface CompiledScene {
 export type ActLayer =
   | { kind: "gesture"; gesture: Gesture; start: number; end: number; side: "left" | "right"; intensity: number }
   | { kind: "reach"; target: Target; hand: "left" | "right"; start: number; end: number }
-  | { kind: "hand"; shape: HandShape; hand: "left" | "right" | "both"; start: number; end: number };
+  | { kind: "hand"; shape: HandShape; hand: "left" | "right" | "both"; start: number; end: number }
+  | HoldLayer;
+
+/** An actor picks up a prop and uses it (see the `hold` action). */
+export interface HoldLayer {
+  kind: "hold";
+  actor: string;
+  prop: string;
+  hand: "left" | "right";
+  at: HoldAt;
+  start: number;
+  end: number;
+  then: "keep" | "put";
+  /** true: reach for the prop first; false: it is already in hand (carried from before / pocket) */
+  grab: boolean;
+  /** where the prop rests when not held (world, its base) */
+  home: { position: Vec3; rotation: Vec3 };
+}
 
 export interface ActorState {
   id: string;
@@ -145,7 +167,7 @@ function compileUncached(spec: BlockshotSpec): CompiledScene {
   const looks = new Map<string, Segment[]>();
   const aims = new Map<string, Segment[]>();
   const acts = new Map<string, ActLayer[]>();
-  const scene: CompiledScene = { spec, tracks, looks, aims, acts, routes: new Map(), unreachable: new Set(), compiled: new Set(), navCache: new Map() };
+  const scene: CompiledScene = { spec, tracks, looks, aims, acts, routes: new Map(), unreachable: new Set(), holds: new Map(), compiled: new Set(), navCache: new Map() };
 
   const track = (id: string, prop: TrackProperty, initial: KeyValue): CKey[] => {
     const k = trackKey(id, prop);
@@ -355,6 +377,21 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       scene.acts.set(a.actor, list);
       break;
     }
+    case "hold": {
+      const prop = spec.props.find((x) => x.id === a.prop)!;
+      const prior = scene.holds.get(a.prop) ?? [];
+      const last = prior[prior.length - 1];
+      const carried = !!last && (last.then === "keep" || a.start < last.end);
+      const from = sampleKeys(track(a.actor, "position", spec.actors.find((x) => x.id === a.actor)!.position), a.start) as Vec3;
+      // within arm's reach of the prop: pick it up; far away (or already in hand): it is simply in the actor's hand
+      const near = Math.hypot(from[0] - prop.position[0], from[2] - prop.position[2]) <= HOLD_REACH && Math.abs(from[1] - prop.position[1]) < 1.6;
+      const layer: HoldLayer = { kind: "hold", actor: a.actor, prop: a.prop, hand: a.hand, at: a.at, start: a.start, end: a.start + a.duration, then: a.then, grab: !carried && near, home: { position: prop.position, rotation: prop.rotation } };
+      const list = scene.acts.get(a.actor) ?? [];
+      list.push(layer);
+      scene.acts.set(a.actor, list);
+      scene.holds.set(a.prop, [...prior, layer]);
+      break;
+    }
     case "reach": {
       const list = scene.acts.get(a.actor) ?? [];
       list.push({ kind: "reach", target: a.target, hand: a.hand, start: a.start, end: a.start + a.duration });
@@ -418,8 +455,8 @@ function activeSegment(list: Segment[] | undefined, t: number): Segment | undefi
 
 /** Height ratios (of actor height) and lateral/forward offsets per body part. */
 const PART_LAYOUT: Record<"stand" | "sit", Record<BodyPart, [y: number, side: number, forward: number]>> = {
-  stand: { head: [0.93, 0, 0], chest: [0.72, 0, 0], pelvis: [0.53, 0, 0], hand_l: [0.48, 0.2, 0], hand_r: [0.48, -0.2, 0], foot_l: [0.03, 0.1, 0.05], foot_r: [0.03, -0.1, 0.05] },
-  sit: { head: [0.7, 0, 0.05], chest: [0.5, 0, 0], pelvis: [0.27, 0, 0], hand_l: [0.33, 0.18, 0.25], hand_r: [0.33, -0.18, 0.25], foot_l: [0.03, 0.1, 0.45], foot_r: [0.03, -0.1, 0.45] },
+  stand: { head: [0.93, 0, 0], chest: [0.72, 0, 0], pelvis: [0.53, 0, 0], hand_l: [0.48, 0.2, 0], hand_r: [0.48, -0.2, 0], foot_l: [0.03, 0.1, 0.05], foot_r: [0.03, -0.1, 0.05], ear_l: [0.93, 0.1, 0], ear_r: [0.93, -0.1, 0], mouth: [0.9, 0, 0.1] },
+  sit: { head: [0.7, 0, 0.05], chest: [0.5, 0, 0], pelvis: [0.27, 0, 0], hand_l: [0.33, 0.18, 0.25], hand_r: [0.33, -0.18, 0.25], foot_l: [0.03, 0.1, 0.45], foot_r: [0.03, -0.1, 0.45], ear_l: [0.7, 0.1, 0.05], ear_r: [0.7, -0.1, 0.05], mouth: [0.67, 0, 0.15] },
 };
 
 /** World position of an actor body part. Local +X is the actor's left (actor faces +Z at yaw 0). */
@@ -499,6 +536,9 @@ const offsetIn = (bone: Skeleton[BoneName], v: Vec3, scale: number): Vec3 => {
   return [bone.pos[0] + r[0], bone.pos[1] + r[1], bone.pos[2] + r[2]];
 };
 
+/** Offset of the left ear from the head bone (rest metres): the head sphere is r 0.11 centred 0.09 above the bone. */
+const EAR_L: Vec3 = [0.105, 0.085, -0.005];
+
 /** World position of a body part, read from the posed skeleton. */
 function rigPart(sk: Skeleton, part: BodyPart, scale: number, position: Vec3, rotation: Vec3): Vec3 {
   let local: Vec3;
@@ -510,6 +550,9 @@ function rigPart(sk: Skeleton, part: BodyPart, scale: number, position: Vec3, ro
     case "hand_r": local = offsetIn(sk.rightHand, [0, -0.04, 0], scale); break;
     case "foot_l": local = offsetIn(sk.leftFoot, [0, 0.01, 0.05], scale); break;
     case "foot_r": local = offsetIn(sk.rightFoot, [0, 0.01, 0.05], scale); break;
+    case "ear_l": local = offsetIn(sk.head, EAR_L, scale); break;
+    case "ear_r": local = offsetIn(sk.head, [-EAR_L[0], EAR_L[1], EAR_L[2]], scale); break;
+    case "mouth": local = offsetIn(sk.head, [0, 0.05, 0.1], scale); break;
   }
   return toWorld(local, position, rotation);
 }
@@ -529,6 +572,11 @@ function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnTyp
     const local = toLocal(lookTarget, core.position, core.rotation);
     pose = applyLayer(pose, lookLayer(local, solveRig(pose, scale)), 1);
   }
+  // fingers close around whatever the actor is holding right now
+  for (const prop of scene.holds.keys()) {
+    const held = holdState(scene, prop, t);
+    if (held && held.layer.actor === id) pose = applyLayer(pose, handLayer("grip", held.layer.hand), 1);
+  }
   for (const layer of scene.acts.get(id) ?? []) {
     const u = t - layer.start;
     if (u < 0 || t > layer.end) continue;
@@ -538,6 +586,8 @@ function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnTyp
       pose = applyLayer(pose, g.layer, g.weight);
     } else if (layer.kind === "hand") {
       pose = applyLayer(pose, handShapeLayer(layer.shape, layer.hand), envelope(u, d, true));
+    } else if (layer.kind === "hold") {
+      pose = applyHold(pose, layer, u, scale, core);
     } else {
       const w = envelope(u, d, true);
       if (w <= 0) continue;
@@ -546,6 +596,172 @@ function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnTyp
     }
   }
   return { pose, skeleton: solveRig(pose, scale) };
+}
+
+// ---- holding props -----------------------------------------------------------------------------------
+
+const GRAB_TIME = 0.8;
+const RAISE_TIME = 0.7;
+const LOWER_TIME = 0.7;
+const ATTACH_BLEND = 0.25;
+
+/** Seconds spent reaching for the prop, raising it, and lowering it again (squeezed when the action is short). */
+function holdPhases(layer: HoldLayer): { g: number; r: number; l: number; d: number } {
+  const d = layer.end - layer.start;
+  const g = layer.grab ? GRAB_TIME : 0;
+  const r = layer.at === "carry" ? 0.5 : RAISE_TIME;
+  const need = g + r + LOWER_TIME + 0.3;
+  const f = Math.min(1, d / need);
+  return { g: g * f, r: r * f, l: LOWER_TIME * f, d };
+}
+
+/** Which hold has a prop in hand at time t (and how firmly: 0 = still on its resting place, 1 = fully in hand). */
+function holdState(scene: CompiledScene, propId: string, t: number): { layer: HoldLayer; blend: number } | null {
+  let cur: { layer: HoldLayer; blend: number } | null = null;
+  for (const h of scene.holds.get(propId) ?? []) {
+    if (h.start > t) break;
+    const ph = holdPhases(h);
+    const attachAt = h.start + Math.max(0, ph.g - ATTACH_BLEND);
+    if (t < attachAt) break; // still reaching for it: the prop has not moved yet
+    const blendIn = ph.g > 0 ? smoothstep((t - attachAt) / ATTACH_BLEND) : 1;
+    if (t <= h.end) {
+      // putting it back: it settles onto its place in the last moments
+      const blendOut = h.then === "put" ? smoothstep((h.end - t) / ATTACH_BLEND) : 1;
+      cur = { layer: h, blend: Math.min(blendIn, blendOut) };
+    } else cur = h.then === "keep" ? { layer: h, blend: 1 } : null;
+  }
+  return cur;
+}
+
+const norm3 = (v: Vec3): Vec3 => {
+  const l = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / l, v[1] / l, v[2] / l];
+};
+const lerp3 = (a: Vec3, b: Vec3, k: number): Vec3 => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+
+/** Poses the arm for a hold layer at `u` seconds in: reach the prop, bring it to the ear / mouth / chest, hold, then lower or put it back. */
+function applyHold(base: RigPose, layer: HoldLayer, u: number, scale: number, core: ReturnType<typeof actorCore>): RigPose {
+  const ph = holdPhases(layer);
+  const sideSign = layer.hand === "left" ? 1 : -1;
+  const raiseEnd = ph.g + ph.r;
+  const lowerStart = ph.d - ph.l;
+  const carry = layer.at === "carry";
+  let armW = 0;
+  let mix = 0; // 0 = at the prop's resting place, 1 = at the place of use
+  if (u < ph.g) {
+    armW = smoothstep(u / Math.min(0.4, ph.g));
+  } else if (u < raiseEnd) {
+    const k = smoothstep((u - ph.g) / Math.max(ph.r, 1e-6));
+    armW = carry ? 1 - k : ph.g > 0 ? 1 : k;
+    mix = carry ? 0 : k;
+  } else if (u < lowerStart) {
+    armW = carry ? 0 : 1;
+    mix = carry ? 0 : 1;
+  } else {
+    const k = smoothstep((u - lowerStart) / Math.max(ph.l, 1e-6));
+    if (layer.then === "put") {
+      armW = carry ? smoothstep(k / 0.6) : k < 0.7 ? 1 : 1 - smoothstep((k - 0.7) / 0.3);
+      mix = carry ? 0 : 1 - k;
+    } else {
+      armW = carry ? 0 : 1 - k;
+      mix = carry ? 0 : 1;
+    }
+  }
+  if (armW <= 0) return base;
+
+  // head leans toward the phone / cup / screen first, so the ear and mouth are where they will really be
+  const use = armW * mix;
+  let pose = base;
+  if (layer.at === "ear") pose = applyLayer(pose, { head: [0, 0, -sideSign * 0.16], neck: [0, 0, -sideSign * 0.06] }, use);
+  else if (layer.at === "chest") pose = applyLayer(pose, { head: [0.28, 0, 0], neck: [0.1, 0, 0] }, use);
+  else if (layer.at === "mouth") pose = applyLayer(pose, { head: [-0.12, 0, 0] }, use);
+  const sk = solveRig(pose, scale);
+
+  const homeLocal = toLocal([layer.home.position[0], layer.home.position[1] + 0.05, layer.home.position[2]], core.position, core.rotation);
+  const grasp: Vec3 = [homeLocal[0], homeLocal[1] + 0.07 * scale, homeLocal[2]];
+  const headC = offsetIn(sk.head, [0, 0.09, 0], scale);
+  let place: Vec3 = grasp;
+  let palm: Vec3 = [0, -1, 0];
+  if (layer.at === "ear") {
+    const ear = offsetIn(sk.head, [sideSign * 0.105, 0.085, -0.005], scale); // ear on the hand's side
+    place = [ear[0] + sideSign * 0.03 * scale, ear[1] - 0.13 * scale, ear[2]];
+    palm = norm3([headC[0] - ear[0], headC[1] - ear[1], headC[2] - ear[2]]);
+  } else if (layer.at === "mouth") {
+    const m = offsetIn(sk.head, [0, 0.05, 0.1], scale);
+    place = [m[0], m[1] - 0.1 * scale, m[2] + 0.02 * scale];
+    palm = norm3([0, 0.5, -0.9]);
+  } else if (layer.at === "chest") {
+    const c = offsetIn(sk.chest, [0, 0.03, 0], scale);
+    place = [c[0] - sideSign * 0.06 * scale, c[1] - 0.08 * scale, c[2] + 0.3 * scale];
+    palm = norm3([0, 0.75, -0.65]);
+  }
+  const target = lerp3(grasp, place, mix);
+  const palmNow = norm3(lerp3([0, -1, 0], palm, mix));
+  // elbow low and forward while the hand is up at the head (it cannot fold across the chest); the default hint for reaching out
+  const pole: Vec3 | undefined = mix > 0.3 && layer.at !== "carry" ? [sideSign * 0.25, -0.5, 0.85] : undefined;
+  let out = applyLayer(pose, solveArm(pose, layer.hand, target, scale, palmNow, pole).layer, armW);
+
+  // wrist: the hand follows the phone's orientation (vertical against the ear), not the forearm's
+  if (layer.at === "ear" || layer.at === "chest") {
+    const frame = holdFrame(layer, solveRig(out, scale), scale);
+    const forearm = solveRig(out, scale)[layer.hand === "left" ? "leftLowerArm" : "rightLowerArm"].rot;
+    const want = Q.fromBasis([-sideSign * frame.palm[0], -sideSign * frame.palm[1], -sideSign * frame.palm[2]], [-frame.long[0], -frame.long[1], -frame.long[2]], frame.side);
+    const local = Q.mul(Q.inv(forearm), want);
+    out = applyLayer(out, { [layer.hand === "left" ? "leftHand" : "rightHand"]: Q.toEuler(local) }, armW * mix);
+  }
+  return out;
+}
+
+/**
+ * Orientation of a hand around a phone: `long` runs along the fingers, `palm` is where the palm faces (toward the face),
+ * `side` completes the right-handed frame for the hand's X axis (X = Y × Z of the hand frame).
+ */
+function holdFrame(layer: HoldLayer, sk: Skeleton, scale: number): { long: Vec3; palm: Vec3; side: Vec3 } {
+  const sideSign = layer.hand === "left" ? 1 : -1;
+  let long: Vec3;
+  let palm: Vec3;
+  if (layer.at === "ear") {
+    const up = Q.rotate(sk.head.rot, [0, 1, 0]);
+    long = norm3([up[0], up[1], up[2] + 0.25]); // top of the phone by the ear, the mouthpiece a little forward
+    const ear = offsetIn(sk.head, [sideSign * 0.105, 0.085, -0.005], scale);
+    const headC = offsetIn(sk.head, [0, 0.09, 0], scale);
+    palm = [headC[0] - ear[0], headC[1] - ear[1], headC[2] - ear[2]];
+  } else {
+    long = norm3([0, 0.55, 0.85]);
+    palm = [0, 0.8, -0.6];
+  }
+  // palm ⟂ long
+  const d = palm[0] * long[0] + palm[1] * long[1] + palm[2] * long[2];
+  palm = norm3([palm[0] - long[0] * d, palm[1] - long[1] * d, palm[2] - long[2] * d]);
+  // hand frame: Y = -long, X = -sideSign · palm, Z = X × Y
+  const x: Vec3 = [-sideSign * palm[0], -sideSign * palm[1], -sideSign * palm[2]];
+  const y: Vec3 = [-long[0], -long[1], -long[2]];
+  const z: Vec3 = [x[1] * y[2] - x[2] * y[1], x[2] * y[0] - x[0] * y[2], x[0] * y[1] - x[1] * y[0]];
+  return { long, palm, side: z };
+}
+
+/** World position and orientation (degrees, YXZ) of a held prop, from the actor's posed hand. */
+function heldTransform(prop: Prop, layer: HoldLayer, actor: ActorState, sk: Skeleton): { position: Vec3; rotation: Vec3 } {
+  const scale = actor.height / REST_HEIGHT;
+  const hand = layer.hand === "left" ? sk.leftHand : sk.rightHand;
+  const sideSign = layer.hand === "left" ? 1 : -1;
+  const u = Q.rotate(hand.rot, [0, -1, 0]); // along the fingers
+  const p = Q.rotate(hand.rot, [-sideSign, 0, 0]); // the palm's direction
+  const yaw = Q.fromEuler(actor.rotation[0] * DEG, actor.rotation[1] * DEG, actor.rotation[2] * DEG, "YXZ");
+  if (prop.type === "phone") {
+    // screen toward the palm side, long edge along the fingers
+    const center: Vec3 = [hand.pos[0] + (u[0] * 0.1 + p[0] * 0.014) * scale, hand.pos[1] + (u[1] * 0.1 + p[1] * 0.014) * scale, hand.pos[2] + (u[2] * 0.1 + p[2] * 0.014) * scale];
+    const z = norm3(u);
+    const x = norm3([p[1] * z[2] - p[2] * z[1], p[2] * z[0] - p[0] * z[2], p[0] * z[1] - p[1] * z[0]]);
+    const y: Vec3 = [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]];
+    const q = Q.mul(yaw, Q.fromBasis(x, y, z));
+    const e = Q.toEulerYXZ(q);
+    return { position: toWorld([center[0], center[1] - 0.004 * scale, center[2]], actor.position, actor.rotation), rotation: [e[0] / DEG, e[1] / DEG, e[2] / DEG] };
+  }
+  // anything else is carried upright, resting in the palm
+  const half = (PROP_CATALOG[prop.type].size[1] * Math.abs(prop.scale[1])) / 2;
+  const center: Vec3 = [hand.pos[0] + u[0] * 0.07 * scale, hand.pos[1] + u[1] * 0.07 * scale + 0.02 * scale, hand.pos[2] + u[2] * 0.07 * scale];
+  return { position: toWorld([center[0], center[1] - half, center[2]], actor.position, actor.rotation), rotation: [0, actor.rotation[1], 0] };
 }
 
 type TimedPoint = import("./nav-time").TimedPoint;
@@ -609,6 +825,25 @@ export function evaluate(scene: CompiledScene, t: number): SceneState {
     };
   }
 
+  // props that someone holds follow their hand
+  const props: Record<string, Prop> = Object.fromEntries(spec.props.map((p) => [p.id, p]));
+  for (const [propId] of scene.holds) {
+    const held = holdState(scene, propId, t);
+    const prop = props[propId];
+    if (!held || !prop) continue;
+    const actor = actors[held.layer.actor]!;
+    const sk = solveRig(actor.rig, actor.height / REST_HEIGHT);
+    const at = heldTransform(prop, held.layer, actor, sk);
+    const home = held.layer.home;
+    const yawFrom = unwrapYaw(home.rotation[1], at.rotation[1]);
+    const mix = held.blend;
+    props[propId] = {
+      ...prop,
+      position: lerp3(home.position, at.position, mix),
+      rotation: mix >= 1 ? at.rotation : lerp3(home.rotation, [at.rotation[0], yawFrom, at.rotation[2]], mix),
+    };
+  }
+
   const cameras: Record<string, CameraState> = {};
   for (const c of spec.cameras) {
     const focalLength = sampleKeys(scene.tracks.get(trackKey(c.id, "focalLength"))!, t) as number;
@@ -639,9 +874,10 @@ export function evaluate(scene: CompiledScene, t: number): SceneState {
     t,
     frame: Math.round(t * spec.settings.fps),
     actors,
-    props: Object.fromEntries(spec.props.map((p) => [p.id, p])),
+    props,
     cameras,
     activeCameraId,
     activeShotId,
   };
 }
+

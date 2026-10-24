@@ -1,6 +1,6 @@
 import { BlockshotSpec, type Target } from "./schema";
 import { parseRef } from "./mirror";
-import { SEATS } from "./catalog";
+import { PROP_CATALOG, SEATS } from "./catalog";
 
 export interface Issue {
   path: string;
@@ -101,6 +101,11 @@ export function validateSpec(input: unknown): ValidationResult {
       const seat = spec.props.find((x) => x.id === a.on);
       if (!seat) errors.push({ path: `${p}.on`, message: `Unknown prop id "${a.on}". Seats: ${spec.props.filter((x) => SEATS[x.type]).map((x) => x.id).join(", ") || "(none — add a chair or sofa)"}` });
       else if (!SEATS[seat.type]) errors.push({ path: `${p}.on`, message: `"${a.on}" is a ${seat.type}; sitDown needs a chair or sofa. Seats: ${spec.props.filter((x) => SEATS[x.type]).map((x) => x.id).join(", ") || "none"}` });
+    }
+    if (a.type === "hold") {
+      const prop = spec.props.find((x) => x.id === a.prop);
+      if (!prop) errors.push({ path: `${p}.prop`, message: `Unknown prop id "${a.prop}". Props: ${spec.props.map((x) => x.id).join(", ") || "none"}` });
+      else if (PROP_CATALOG[prop.type].surface || prop.type === "door" || prop.type === "window" || prop.type === "mirror") errors.push({ path: `${p}.prop`, message: `"${a.prop}" is a ${prop.type}; hold needs something small enough to pick up (phone, cup, box …)` });
     }
     if ("camera" in a) checkCamera(a.camera, `${p}.camera`);
     if ("target" in a) checkTarget(a.target, `${p}.target`);
