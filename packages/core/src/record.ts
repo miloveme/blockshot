@@ -70,7 +70,7 @@ export function dedupePoses(samples: Sample<Pose>[]): Sample<Pose>[] {
   return samples.filter((s, i) => i === 0 || s.value !== samples[i - 1]!.value);
 }
 
-const TOLERANCE: Record<Exclude<TrackProperty, "pose" | "lookAt">, number> = { position: 0.01, rotation: 0.5, focalLength: 0.2 };
+const TOLERANCE: Record<"position" | "rotation" | "focalLength", number> = { position: 0.01, rotation: 0.5, focalLength: 0.2 };
 
 /**
  * Writes a take into the manual tracks of `id`, replacing keys inside [t0, t1].

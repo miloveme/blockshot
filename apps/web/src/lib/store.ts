@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { compile, editDuration, editTimeOf, evaluate, locateEdit, validateSpec, type BlockshotSpec, type CompiledScene, type ClipData, type PropType, type SceneState, type Vec3 } from "@blockshot/core";
+import { compile, editDuration, editTimeOf, evaluate, locateEdit, validateSpec, type BlockshotSpec, type BoneName, type CompiledScene, type ClipData, type PropType, type SceneState, type Vec3 } from "@blockshot/core";
 import example from "@blockshot/core/examples/living-room.json";
 
 export type ViewMode = { kind: "free" } | { kind: "shot" } | { kind: "camera"; id: string };
@@ -34,6 +34,8 @@ interface StudioState {
   view: ViewMode;
   /** id of the selected actor / prop / camera */
   selection: string | null;
+  /** bone picked on the selected actor (pose editing) */
+  selectedBone: BoneName | null;
   gizmoMode: GizmoMode;
   /** snap translate to 0.1 m and rotate to 15° */
   snapEnabled: boolean;
@@ -83,6 +85,7 @@ interface StudioState {
   setPlaying(p: boolean): void;
   setView(v: ViewMode): void;
   select(id: string | null): void;
+  selectBone(bone: BoneName | null): void;
   setGizmoMode(m: GizmoMode): void;
   setSnap(on: boolean): void;
   setAutoKey(on: boolean): void;
@@ -143,6 +146,7 @@ export const useStudio = create<StudioState>((set, get) => {
     playing: false,
     view: { kind: "shot" },
     selection: null,
+    selectedBone: null,
     gizmoMode: "translate",
     snapEnabled: true,
     autoKey: false,
@@ -256,7 +260,10 @@ export const useStudio = create<StudioState>((set, get) => {
       set({ gestureBase: null });
     },
     select(selection) {
-      set({ selection });
+      set({ selection, selectedBone: null });
+    },
+    selectBone(selectedBone) {
+      set({ selectedBone });
     },
     setGizmoMode(gizmoMode) {
       set({ gizmoMode });

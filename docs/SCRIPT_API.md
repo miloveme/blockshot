@@ -64,7 +64,8 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 | `scene.reflect(ref, mirror) → ref` | `scene.reflect(man.chest, mirror)` → `"man.chest@mirror"`: 거울 속 반사 위치. 카메라 `lookAt`/`orbit`의 대상으로 쓴다 |
 | `scene.camera(id, opts) → Camera` | `opts: { name?, lens?, sensor?, at?, lookAt?, rotation? }` |
 | `scene.shot(id, { camera, start, end, description?, prompt? })` | 샷 추가 |
-| `scene.key(targetId, property, t, value, ease?)` | 저수준 키프레임 |
+| `scene.key(targetId, property, t, value, ease?)` | 저수준 키프레임 (`property`에 `bone:rightUpperArm`·`hips` 가능) |
+| `actor.bone(bone, [[t,[x°,y°,z°]],…], ease?)` | 뼈 키프레임 (오일러 도). `actor.hips([[t,[x,y,z]],…])`는 골반 |
 | `scene.toSpec()` | 현재까지의 Spec 반환(런타임이 자동 호출) |
 
 ### Actor

@@ -1,3 +1,4 @@
+import type { BoneName } from "./rig";
 import {
   SPEC_VERSION,
   type Action,
@@ -58,6 +59,10 @@ export interface ActorHandle {
   /** Reach a hand toward a point / object / body part (IK) and hold it for `duration`. */
   reach(target: Target, opts: { start: number; hand?: "left" | "right"; duration?: number }): ActorHandle;
   pose(name: Pose, opts: { start: number }): ActorHandle;
+  /** Keyframe one bone by hand: `keys` are [time, [x°, y°, z°]] (Euler XYZ degrees, 0 = rest). Between its first and last key the bone follows these keys instead of the automatic motion. */
+  bone(bone: BoneName, keys: Array<[number, Vec3]>, ease?: Ease): ActorHandle;
+  /** Pelvis offset keys (rest metres), e.g. [[0,[0,0,0]],[1,[0,-0.1,0]]] */
+  hips(keys: Array<[number, Vec3]>, ease?: Ease): ActorHandle;
   lookAt(target: Target, opts: { start: number; end?: number }): ActorHandle;
 }
 
@@ -139,6 +144,13 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
     return [-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)];
   };
 
+  function addKey(target: string, property: TrackProperty, t: number, value: Vec3 | number | Pose, ease?: Ease) {
+    const existing = spec.tracks.find((tr) => tr.target === target && tr.property === property);
+    const key = { t, value, ease };
+    if (existing) existing.keys.push(key);
+    else spec.tracks.push({ target, property, keys: [key] });
+  }
+
   function makeActor(id: string): ActorHandle {
     const handle: ActorHandle = {
       id,
@@ -161,6 +173,8 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
       hold: (prop, o) => (action({ type: "hold", actor: id, prop: typeof prop === "string" ? prop : prop.id, ...o }), handle),
       reach: (target, o) => (action({ type: "reach", actor: id, target, ...o }), handle),
       lookAt: (target, o) => (action({ type: "lookAt", actor: id, target, ...o }), handle),
+      bone: (bone, keys, ease) => (keys.forEach(([t, v]) => addKey(id, `bone:${bone}`, t, v, ease)), handle),
+      hips: (keys, ease) => (keys.forEach(([t, v]) => addKey(id, "hips", t, v, ease)), handle),
     };
     return handle;
   }
@@ -321,12 +335,7 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
       if (!spec.shots.some((s) => s.id === id)) throw new Error(`scene.removeShot("${id}"): no such shot. Available: ${spec.shots.map((s) => s.id).join(", ") || "none"}`);
       spec.shots = spec.shots.filter((s) => s.id !== id);
     },
-    key(target: string, property: TrackProperty, t: number, value: Vec3 | number | Pose, ease?: Ease) {
-      const existing = spec.tracks.find((tr) => tr.target === target && tr.property === property);
-      const key = { t, value, ease };
-      if (existing) existing.keys.push(key);
-      else spec.tracks.push({ target, property, keys: [key] });
-    },
+    key: addKey,
     /** Yaw (deg) that faces from one point/ref to another — handy for `facing`. */
     facing(from: Target, to: Target) {
       return yawTowards(resolveRough(from), resolveRough(to));

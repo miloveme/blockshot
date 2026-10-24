@@ -1,6 +1,6 @@
 "use client";
 
-import { GESTURES, HAND_SHAPES, LENS_PRESETS, POSES, SEATS, addGesture, addHandShape, addHold, addReach, addSitDown, addStandUp, describeAction, labeledActions, patchActionAt, keyTimes, kindOf, movesOf, patchMoveAt, removeActionAt, type Gesture, type HandShape, type Pose } from "@blockshot/core";
+import { GESTURES, HAND_SHAPES, LENS_PRESETS, POSES, SEATS, addGesture, addHandShape, addHold, addReach, addSitDown, addStandUp, describeAction, labeledActions, patchActionAt, keyTimes, kindOf, BODY_BONES, bakeActor, clearBoneKeys, hasBakedKeys, hasBoneKeys, keyBones, keyCurrentPose, mirrorBonePose, setBoneRotation, snapshotPose, unbakeActor, type BoneName, type BonePose, movesOf, patchMoveAt, removeActionAt, type Gesture, type HandShape, type Pose } from "@blockshot/core";
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { hasModel, importGlb } from "@/lib/models";
@@ -274,6 +274,7 @@ function MovePaths({ actorId }: { actorId: string }) {
       {moves.length === 0 ? <p className="text-[10px] text-zinc-600">경로가 없습니다. “경로 찍기”를 누르고 바닥을 클릭하세요 (현재 시간에 시작).</p> : null}
       <SitControls actorId={actorId} />
       <ActingControls actorId={actorId} />
+      <PoseEditor actorId={actorId} />
     </div>
   );
 }
@@ -467,6 +468,72 @@ function DriveControls({ propId }: { propId: string }) {
         ) : null,
       )}
       {rows.length === 0 ? <p className="text-[10px] text-zinc-600">경로가 없습니다. “주행 경로 찍기” 후 바닥을 클릭하세요 (현재 시간에 시작).</p> : null}
+    </div>
+  );
+}
+
+const RAD = 180 / Math.PI;
+
+/** Pose editing: pick a bone (click a limb in the viewport or choose it here), type its rotation, key poses, bake motion into keys. */
+function PoseEditor({ actorId }: { actorId: string }) {
+  const spec = useStudio((s) => s.spec);
+  const ss = useStudio((s) => s.sceneState);
+  const bone = useStudio((s) => s.selectedBone);
+  const selectBone = useStudio((s) => s.selectBone);
+  const edit = useStudio((s) => s.edit);
+  const notify = useStudio((s) => s.notify);
+  const [clip, setClip] = useState<BonePose | null>(null);
+  const rig = ss.actors[actorId]?.rig;
+  const cur = bone && rig ? (([0, 1, 2] as const).map((i) => (rig.rot[bone]?.[i] ?? 0) * RAD) as [number, number, number]) : null;
+  const time = () => useStudio.getState().time;
+  const keyed = hasBoneKeys(spec, actorId);
+  const baked = hasBakedKeys(spec, actorId);
+  const btn = "rounded bg-white/10 px-2 py-1 text-[11px] hover:bg-white/20 disabled:opacity-30";
+  return (
+    <div className="mt-1 flex flex-col gap-1.5 border-t border-white/10 pt-2">
+      <span className="text-[11px] font-medium text-zinc-300">포즈 편집 (뼈 키프레임)</span>
+      <p className="text-[10px] text-zinc-600">뷰포트에서 선택된 인물의 팔·다리를 클릭하거나 아래에서 뼈를 고르세요. 값을 바꾸면 현재 시간에 키가 찍힙니다.</p>
+      <SelectField value={(bone ?? "") as BoneName | ""} options={[{ value: "" as const, label: "뼈 선택…" }, ...BODY_BONES.map((b) => ({ value: b, label: b }))]} onCommit={(v) => selectBone(v === "" ? null : v)} />
+      {bone && cur ? (
+        <Row label="회전°">
+          <Vec3Field value={cur} step={5} digits={1} onCommit={(v) => edit((s) => setBoneRotation(s, actorId, bone, time(), v))} />
+        </Row>
+      ) : null}
+      <div className="flex flex-wrap gap-1">
+        <button className={btn} title="지금 보이는 전신 포즈를 현재 시간에 키로 찍습니다" onClick={() => edit((s) => keyCurrentPose(s, actorId, time()))}>
+          🦴 포즈 키
+        </button>
+        <button className={btn} disabled={!bone} onClick={() => bone && edit((s) => keyBones(s, actorId, time(), { [bone]: snapshotPose(s, actorId, time(), [bone])[bone]! }))}>
+          선택 뼈만 키
+        </button>
+        <button className={btn} onClick={() => setClip(snapshotPose(spec, actorId, time()))}>
+          복사
+        </button>
+        <button className={btn} disabled={!clip} onClick={() => clip && edit((s) => keyBones(s, actorId, time(), clip))}>
+          붙여넣기
+        </button>
+        <button className={btn} disabled={!clip} onClick={() => clip && edit((s) => keyBones(s, actorId, time(), mirrorBonePose(clip)))}>
+          좌우 반전 붙여넣기
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        <button
+          className="rounded bg-violet-500/80 px-2 py-1 text-[11px] text-white hover:bg-violet-400"
+          title="걷기·제스처 등 자동 모션을 전 구간 뼈 키프레임으로 굳혀 하나씩 고칠 수 있게 합니다"
+          onClick={() => {
+            edit((s) => bakeActor(s, actorId));
+            notify("모션을 뼈 키프레임으로 굳혔습니다. 타임라인의 ◆에서 이동해 뼈를 고치세요");
+          }}
+        >
+          🧊 키프레임으로 굳히기
+        </button>
+        <button className={btn} disabled={!baked} title="굳힌 키만 지웁니다 (직접 고친 뼈는 유지)" onClick={() => edit((s) => unbakeActor(s, actorId))}>
+          굳힌 키 지우기
+        </button>
+        <button className={`${btn} text-red-300`} disabled={!keyed} onClick={() => edit((s) => clearBoneKeys(s, actorId))}>
+          뼈 키 모두 지우기
+        </button>
+      </div>
     </div>
   );
 }

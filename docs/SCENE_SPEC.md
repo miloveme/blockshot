@@ -154,9 +154,24 @@ LLM과 사람이 가장 많이 쓰는 레이어. 로드 시 `compile()`이 `trac
             { "t": 3, "value": [1.2, 1.6, 2], "ease": "easeInOut" } ] }
 ```
 
-- `property`: `position`, `rotation`, `focalLength`, `lookAt`(Vec3만), `pose`(문자열, step 보간)
+- `property`: `position`, `rotation`, `focalLength`, `lookAt`(Vec3만), `pose`(문자열, step 보간), **`bone:<본이름>`**, `hips`(아래)
+- 선택 필드 `baked: true` — "키프레임으로 굳히기"가 쓴 트랙(지우면 다시 자동 모션). 직접 고친 트랙에서는 자동으로 빠진다
 - `ease`는 **해당 키로 들어오는 구간** 에 적용: `linear`(기본), `easeIn`, `easeOut`, `easeInOut`, `step`
 - 같은 대상·속성에 action과 track이 겹치면 **track이 우선** (사용자의 수동 보정)
+
+### 뼈 키프레임 (`bone:*`, `hips`)
+
+인물의 어떤 관절이든 손으로 키를 잡을 수 있다. 값은 **오일러 XYZ(도)**, `[0,0,0]`이 이완된 기본 자세. `hips`는 골반 오프셋(리그 기준 m).
+
+```jsonc
+{ "target": "minsu", "property": "bone:rightUpperArm",
+  "keys": [ { "t": 1, "value": [0, 0, -10], "ease": "easeInOut" }, { "t": 2, "value": [0, 0, -90] } ] }
+```
+
+- 오른팔 `upperArm [-90,0,0]` = 앞으로, `[0,0,-90]` = 옆으로, `[0,0,-150]` = 머리 위 (왼팔은 z 부호 반대). `lowerArm [-90,0,0]` = 팔꿈치 굽힘. 척추/목/머리 x+ = 앞으로 숙임. `upperLeg x−` = 다리 앞으로, `lowerLeg x+` = 무릎 굽힘
+- **오버라이드 규칙**: 트랙의 첫 키 ~ 마지막 키 사이에서는 그 뼈가 키 값을 따르고(자동 포즈·제스처·IK보다 우선), 그 밖에서는 0.25초 동안 서서히 자동 모션으로 돌아온다. 키 없는 뼈는 그대로 자동 모션
+- 들고 있는 소품은 최종 손 위치를 따라가므로 손 뼈를 키잡으면 소품도 따라온다
+- 편집기에서는 팔다리를 클릭/목록에서 뼈를 고르고 회전값을 입력(현재 시간에 키), `🧊 키프레임으로 굳히기`로 걷기·제스처 등 자동 모션을 전 구간 뼈 키로 바꿔 한 관절씩 고칠 수 있다(`core/bake.ts`)
 
 ## 10. shots — 편집(컷) 시퀀스
 
