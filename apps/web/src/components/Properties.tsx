@@ -5,9 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { hasModel, importGlb } from "@/lib/models";
 import { startPath } from "@/lib/placement";
-import { commitTransform, deleteSelected, insertKeyAtCurrentTime, matchCameraToFreeView, patch, removeKeysAtTime, setLens, setPoseCmd } from "@/lib/actions";
+import { commitTransform, insertKeyAtCurrentTime, matchCameraToFreeView, patch, removeKeysAtTime, setLens, setPoseCmd } from "@/lib/actions";
 import { getBridge } from "@/lib/render";
 import { ColorField, NumField, Row, SelectField, TextField, Vec3Field } from "./fields";
+import { CommandButton, PanelSection } from "./ui";
+import { Accessibility, Armchair, Box, Camera as CameraIcon, Car, Copy, Footprints, Move3d, PersonStanding, Sparkles, Trash2, User } from "lucide-react";
 
 const POSE_LABEL: Record<Pose, string> = { stand: "서기", idle: "대기", walk: "걷기", run: "달리기", sit: "앉기", point: "가리키기", talk: "말하기", crouch: "숙이기", climb: "계단 오르기" };
 
@@ -19,12 +21,12 @@ export function Outliner() {
     <li key={id}>
       <button
         onClick={() => select(id)}
-        className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs ${selection === id ? "bg-amber-400/20 text-amber-200" : "text-zinc-300 hover:bg-white/5"}`}
+        className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs ${selection === id ? "bg-accent/20 text-accent" : "text-ink-2 hover:bg-white/[0.04]"}`}
       >
         <span className="w-4 text-center">{icon}</span>
         {swatch ? <span className="h-2.5 w-2.5 rounded-full" style={{ background: swatch }} /> : null}
         <span className="truncate">{label}</span>
-        <span className="ml-auto font-mono text-[10px] text-zinc-600">{id}</span>
+        <span className="ml-auto font-mono text-[10px] text-ink-3">{id}</span>
       </button>
     </li>
   );
@@ -33,7 +35,7 @@ export function Outliner() {
       {spec.actors.map((a) => item(a.id, a.name ?? a.id, "🧍", a.color))}
       {spec.props.map((p) => item(p.id, p.id, "📦"))}
       {spec.cameras.map((c) => item(c.id, c.name ?? c.id, "📷"))}
-      {spec.actors.length + spec.props.length + spec.cameras.length === 0 ? <li className="px-2 text-xs text-zinc-500">비어 있습니다 — 위의 추가 메뉴를 사용하세요</li> : null}
+      {spec.actors.length + spec.props.length + spec.cameras.length === 0 ? <li className="px-2 text-xs text-ink-3">비어 있습니다 — 위의 추가 메뉴를 사용하세요</li> : null}
     </ul>
   );
 }
@@ -42,7 +44,7 @@ export function Properties() {
   const spec = useStudio((s) => s.spec);
   const ss = useStudio((s) => s.sceneState);
   const id = useStudio((s) => s.selection);
-  if (!id) return <p className="text-xs text-zinc-500">뷰포트나 목록에서 오브젝트를 선택하세요</p>;
+  if (!id) return <p className="text-xs text-ink-3">뷰포트나 목록에서 오브젝트를 선택하세요</p>;
   const kind = kindOf(spec, id);
   const actor = spec.actors.find((a) => a.id === id);
   const prop = spec.props.find((p) => p.id === id);
@@ -56,20 +58,28 @@ export function Properties() {
 
   const refs = [...spec.actors.map((a) => ({ value: a.id, label: `🧍 ${a.name ?? a.id}` })), ...spec.props.map((p) => ({ value: p.id, label: `📦 ${p.id}` }))];
 
+  const Icon = actor ? User : cam ? CameraIcon : prop?.type === "car" ? Car : Box;
+  const title = actor?.name ?? cam?.name ?? id;
+  const drivable = !!prop && !["door", "window", "mirror", "platform", "ramp", "stairs", "plane"].includes(prop.type);
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-[11px] text-zinc-500">
-          {kind} · {id}
-        </span>
-        <button onClick={deleteSelected} className="rounded bg-red-500/20 px-2 py-0.5 text-[11px] text-red-300 hover:bg-red-500/30" title="Delete">
-          삭제
-        </button>
+    <div className="flex flex-col">
+      <div className="flex items-center gap-2.5 border-b border-line px-3 py-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1 ring-line" style={{ background: actor ? `${actor.color}26` : cam ? "rgb(91 157 255 / 0.14)" : "var(--color-raised)" }}>
+          <Icon size={17} strokeWidth={1.75} style={{ color: actor ? actor.color : cam ? "var(--color-cam)" : "var(--color-ink-2)" }} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-semibold text-ink">{title}</div>
+          <div className="truncate font-mono text-[10px] text-ink-3">
+            {kind === "actor" ? "인물" : kind === "camera" ? "카메라" : prop?.type === "model" ? "모델" : `소품 · ${prop?.type}`} · {id}
+          </div>
+        </div>
+        <CommandButton id="edit.duplicate" icon={Copy} size="sm" />
+        <CommandButton id="edit.delete" icon={Trash2} size="sm" tone="danger" />
       </div>
 
-      {actor ? (
-        <>
-          <MovePaths actorId={id} />
+      <PanelSection id="obj" title={actor ? "인물" : cam ? "카메라" : "소품"} icon={actor ? PersonStanding : cam ? CameraIcon : Box}>
+        {actor ? (
+          <>
           <Row label="이름">
             <TextField value={actor.name ?? ""} onCommit={(v) => patch(id, { name: v || undefined })} />
           </Row>
@@ -85,36 +95,33 @@ export function Properties() {
           <Row label="포즈">
             <SelectField value={aState?.pose ?? actor.pose} options={POSES.map((p) => ({ value: p, label: POSE_LABEL[p] }))} onCommit={(v) => setPoseCmd(id, v)} />
           </Row>
-        </>
-      ) : null}
-
-      {prop ? (
-        <>
+          </>
+        ) : null}
+        {prop ? (
+          <>
           <Row label="종류">
-            <span className="text-xs text-zinc-300">{prop.type === "model" ? `모델 · ${spec.assets.find((a) => a.id === prop.asset)?.name ?? prop.asset}` : prop.type}</span>
+            <span className="text-xs text-ink-2">{prop.type === "model" ? `모델 · ${spec.assets.find((a) => a.id === prop.asset)?.name ?? prop.asset}` : prop.type}</span>
           </Row>
           {prop.type === "model" && prop.asset ? <ModelStatus assetId={prop.asset} /> : null}
-          {!["door", "window", "mirror", "platform", "ramp", "stairs", "plane"].includes(prop.type) ? <DriveControls propId={id} /> : null}
           <Row label="색상">
             <ColorField value={prop.color} onCommit={(v) => patch(id, { color: v })} />
           </Row>
           <Row label="크기">
             <Vec3Field value={prop.scale} step={0.1} onCommit={(v) => patch(id, { scale: v })} />
           </Row>
-        </>
-      ) : null}
-
-      {cam ? (
-        <>
+          </>
+        ) : null}
+        {cam ? (
+          <>
           <Row label="이름">
             <TextField value={cam.name ?? ""} onCommit={(v) => patch(id, { name: v || undefined })} />
           </Row>
           <Row label="렌즈(mm)">
             <NumField value={cState?.focalLength ?? cam.focalLength} min={4} max={600} step={1} digits={1} onCommit={(v) => setLens(id, v)} />
           </Row>
-          <div className="flex flex-wrap gap-1 pl-16">
+          <div className="flex flex-wrap gap-1 pl-[80px]">
             {LENS_PRESETS.map((mm) => (
-              <button key={mm} onClick={() => setLens(id, mm)} className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] hover:bg-white/20">
+              <button key={mm} onClick={() => setLens(id, mm)} className="rounded bg-raised px-1.5 py-0.5 text-[11px] hover:bg-hover">
                 {mm}
               </button>
             ))}
@@ -137,9 +144,9 @@ export function Properties() {
               }}
             />
           </Row>
-          <div className="flex flex-wrap gap-1 pl-16">
+          <div className="flex flex-wrap gap-1 pl-[80px]">
             <button
-              className="rounded bg-white/10 px-2 py-0.5 text-[11px] hover:bg-white/20"
+              className="rounded bg-raised px-2 py-0.5 text-[11px] hover:bg-hover"
               title="자유 시점에서 보고 있는 위치·방향을 이 카메라에 그대로 적용"
               onClick={() => {
                 const view = getBridge()?.freeView();
@@ -149,20 +156,45 @@ export function Properties() {
             >
               📐 현재 자유 시점으로 맞추기
             </button>
-            <button className="rounded bg-white/10 px-2 py-0.5 text-[11px] hover:bg-white/20" onClick={() => useStudio.getState().setView({ kind: "camera", id })}>
+            <button className="rounded bg-raised px-2 py-0.5 text-[11px] hover:bg-hover" onClick={() => useStudio.getState().setView({ kind: "camera", id })}>
               👁 이 카메라로 보기
             </button>
           </div>
+          </>
+        ) : null}
+      </PanelSection>
+
+      <PanelSection id="transform" title="트랜스폼" icon={Move3d}>
+        <Row label="위치 (m)">
+          <Vec3Field value={pos} onCommit={(v) => commitTransform(id, v, rot)} />
+        </Row>
+        <Row label="회전 (°)">
+          <Vec3Field value={rot} step={5} digits={1} onCommit={(v) => commitTransform(id, pos, v)} />
+        </Row>
+        {actor || cam ? <KeyButtons id={id} /> : null}
+      </PanelSection>
+
+      {actor ? (
+        <>
+          <PanelSection id="moves" title="이동 경로" icon={Footprints}>
+            <MovePaths actorId={id} />
+          </PanelSection>
+          <PanelSection id="sit" title="앉기 · 일어서기" icon={Armchair} defaultOpen={false}>
+            <SitControls actorId={id} />
+          </PanelSection>
+          <PanelSection id="acting" title="연기" icon={Sparkles}>
+            <ActingControls actorId={id} />
+          </PanelSection>
+          <PanelSection id="pose" title="포즈 · 뼈 키프레임" icon={Accessibility} defaultOpen={false}>
+            <PoseEditor actorId={id} />
+          </PanelSection>
         </>
       ) : null}
-
-      <Row label="위치">
-        <Vec3Field value={pos} onCommit={(v) => commitTransform(id, v, rot)} />
-      </Row>
-      <Row label="회전°">
-        <Vec3Field value={rot} step={5} digits={1} onCommit={(v) => commitTransform(id, pos, v)} />
-      </Row>
-      {actor || cam ? <KeyButtons id={id} /> : null}
+      {drivable ? (
+        <PanelSection id="drive" title="주행" icon={Car}>
+          <DriveControls propId={id} />
+        </PanelSection>
+      ) : null}
     </div>
   );
 }
@@ -173,21 +205,21 @@ function KeyButtons({ id }: { id: string }) {
   const time = useStudio((s) => s.time);
   const here = keyTimes(spec, id).find((k) => Math.abs(k.t - time) <= 0.02);
   return (
-    <div className="flex flex-col gap-1 pl-16">
-      <div className="flex gap-1">
-        <button className="rounded bg-amber-400/90 px-2 py-0.5 text-[11px] font-medium text-black hover:bg-amber-300" onClick={insertKeyAtCurrentTime} title="K">
-          ◆ 이 시간에 키 추가
+    <div className="flex flex-col gap-1.5 pt-1">
+      <div className="flex gap-1.5">
+        <button className="inline-flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md bg-key/90 px-2 text-[11px] font-medium text-white hover:bg-key" onClick={insertKeyAtCurrentTime} title="K">
+          ◆ 키 추가
         </button>
         <button
-          className="rounded bg-white/10 px-2 py-0.5 text-[11px] text-red-300 hover:bg-white/20 disabled:opacity-30"
+          className="inline-flex h-7 flex-1 items-center justify-center rounded-md border border-line bg-raised px-2 text-[11px] text-ink-2 hover:bg-hover disabled:opacity-30"
           disabled={!here}
           onClick={() => removeKeysAtTime(id, time)}
           title={here ? `${time.toFixed(2)}s의 키 삭제 (Alt+K)` : "현재 시간에 키가 없습니다 — 타임라인의 ◆를 클릭해 이동하세요"}
         >
-          ◇ 이 시간 키 삭제
+          ◇ 키 삭제
         </button>
       </div>
-      <p className="text-[10px] text-zinc-600">
+      <p className="text-[10px] text-ink-3">
         {here ? `${time.toFixed(2)}s에 ${here.manual ? "수동" : "액션"} 키가 있습니다` : "키가 있는 값은 움직이면 현재 시간에 키가 추가됩니다"}
       </p>
     </div>
@@ -209,7 +241,7 @@ function ModelStatus({ assetId }: { assetId: string }) {
   return (
     <div className="flex flex-col gap-1 rounded border border-red-500/40 bg-red-500/10 p-2 pl-3 text-[11px] text-red-200">
       <span>이 브라우저에 모델 파일이 없습니다 (다른 기기에서 열었거나 저장소를 지웠을 수 있어요).</span>
-      <button className="self-start rounded bg-white/10 px-2 py-0.5 hover:bg-white/20" onClick={() => fileRef.current?.click()}>
+      <button className="self-start rounded bg-raised px-2 py-0.5 hover:bg-hover" onClick={() => fileRef.current?.click()}>
         GLB 파일 다시 불러오기
       </button>
       <input
@@ -235,11 +267,11 @@ function MovePaths({ actorId }: { actorId: string }) {
   const moves = movesOf(spec, actorId);
   const drawing = tool?.kind === "path" && tool.actorId === actorId;
   return (
-    <div className="flex flex-col gap-1.5 rounded border border-white/10 p-2">
+    <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-medium text-zinc-300">이동 경로 ({moves.length})</span>
+        <span className="text-[11px] text-ink-3">{moves.length}개 경로</span>
         <button
-          className={`rounded px-2 py-0.5 text-[11px] ${drawing ? "bg-amber-400 text-black" : "bg-sky-500/80 text-white hover:bg-sky-400"}`}
+          className={`rounded px-2 py-0.5 text-[11px] ${drawing ? "bg-accent text-black" : "bg-sky-500/80 text-white hover:bg-sky-400"}`}
           onClick={() => (drawing ? useStudio.getState().setTool(null) : startPath(actorId))}
           title="바닥을 차례로 클릭해 걷는 경로를 만듭니다 (3D·탑뷰 모두)"
         >
@@ -249,9 +281,9 @@ function MovePaths({ actorId }: { actorId: string }) {
       {moves.map(({ index, action }) => {
         const count = Array.isArray(action.to[0]) ? action.to.length : 1;
         return (
-          <div key={index} className="flex items-center gap-1.5 text-[11px] text-zinc-400">
+          <div key={index} className="flex items-center gap-1.5 text-[11px] text-ink-2">
             <button
-              className="rounded bg-white/10 px-1.5 py-0.5 hover:bg-white/20"
+              className="rounded bg-raised px-1.5 py-0.5 hover:bg-hover"
               title="걷기 ↔ 달리기"
               onClick={() => edit((s) => patchMoveAt(s, index, { run: action.type === "walkTo" }))}
             >
@@ -271,10 +303,7 @@ function MovePaths({ actorId }: { actorId: string }) {
           </div>
         );
       })}
-      {moves.length === 0 ? <p className="text-[10px] text-zinc-600">경로가 없습니다. “경로 찍기”를 누르고 바닥을 클릭하세요 (현재 시간에 시작).</p> : null}
-      <SitControls actorId={actorId} />
-      <ActingControls actorId={actorId} />
-      <PoseEditor actorId={actorId} />
+      {moves.length === 0 ? <p className="text-[10px] text-ink-3">경로가 없습니다. “경로 찍기”를 누르고 바닥을 클릭하세요 (현재 시간에 시작).</p> : null}
     </div>
   );
 }
@@ -288,10 +317,10 @@ function SitControls({ actorId }: { actorId: string }) {
   const seat = seats.find((p) => p.id === picked)?.id ?? seats[0]?.id ?? "";
   const sitting = spec.actions.filter((a) => a.type === "sitDown" && a.actor === actorId).length;
   return (
-    <div className="mt-1 flex flex-col gap-1.5 border-t border-white/10 pt-2">
-      <span className="text-[11px] font-medium text-zinc-300">앉기 / 일어서기 (현재 시간)</span>
+    <div className="mt-1 flex flex-col gap-1.5 border-t border-line pt-2">
+      <span className="text-[11px] font-medium text-ink-2">앉기 / 일어서기 (현재 시간)</span>
       {seats.length === 0 ? (
-        <p className="text-[10px] text-zinc-600">의자나 소파를 먼저 배치하세요.</p>
+        <p className="text-[10px] text-ink-3">의자나 소파를 먼저 배치하세요.</p>
       ) : (
         <div className="flex items-center gap-1.5">
           <div className="min-w-0 flex-1">
@@ -313,10 +342,10 @@ function SitControls({ actorId }: { actorId: string }) {
           </button>
         </div>
       )}
-      <button className="self-start rounded bg-white/10 px-2 py-1 text-[11px] hover:bg-white/20" onClick={() => edit((s) => addStandUp(s, actorId, { start: useStudio.getState().time }))}>
+      <button className="self-start rounded bg-raised px-2 py-1 text-[11px] hover:bg-hover" onClick={() => edit((s) => addStandUp(s, actorId, { start: useStudio.getState().time }))}>
         🧍 일어서기
       </button>
-      {sitting > 0 ? <p className="text-[10px] text-zinc-600">앉기 {sitting}회 등록됨 — 위치와 자세는 액션이 계산합니다</p> : null}
+      {sitting > 0 ? <p className="text-[10px] text-ink-3">앉기 {sitting}회 등록됨 — 위치와 자세는 액션이 계산합니다</p> : null}
     </div>
   );
 }
@@ -346,8 +375,8 @@ function ActingControls({ actorId }: { actorId: string }) {
   ];
   const chosen = targets.find((t) => t.value === target)?.value ?? targets[0]?.value ?? "";
   return (
-    <div className="mt-1 flex flex-col gap-1.5 border-t border-white/10 pt-2">
-      <span className="text-[11px] font-medium text-zinc-300">연기 (현재 시간)</span>
+    <div className="mt-1 flex flex-col gap-1.5 border-t border-line pt-2">
+      <span className="text-[11px] font-medium text-ink-2">연기 (현재 시간)</span>
       <div className="flex items-center gap-1.5">
         <div className="min-w-0 flex-1">
           <SelectField value={gesture} options={GESTURES.map((g) => ({ value: g, label: GESTURE_LABEL[g] }))} onCommit={setGesture} />
@@ -360,7 +389,7 @@ function ActingControls({ actorId }: { actorId: string }) {
         <div className="min-w-0 flex-1">
           <SelectField value={shape} options={HAND_SHAPES.map((h) => ({ value: h, label: HAND_LABEL[h] }))} onCommit={setShape} />
         </div>
-        <button className="whitespace-nowrap rounded bg-white/10 px-2 py-1 text-[11px] hover:bg-white/20" title="현재 시간부터 양손 손가락 모양을 바꿉니다" onClick={() => edit((s) => addHandShape(s, actorId, shape, { start: useStudio.getState().time }))}>
+        <button className="whitespace-nowrap rounded bg-raised px-2 py-1 text-[11px] hover:bg-hover" title="현재 시간부터 양손 손가락 모양을 바꿉니다" onClick={() => edit((s) => addHandShape(s, actorId, shape, { start: useStudio.getState().time }))}>
           ✊ 손 모양
         </button>
       </div>
@@ -372,7 +401,7 @@ function ActingControls({ actorId }: { actorId: string }) {
           <div className="w-16">
             <SelectField value={useAt} options={[{ value: "ear", label: "귀(통화)" }, { value: "mouth", label: "입(마시기)" }, { value: "chest", label: "가슴(보기)" }, { value: "carry", label: "들고만" }]} onCommit={setUseAt} />
           </div>
-          <button className="whitespace-nowrap rounded bg-white/10 px-2 py-1 text-[11px] hover:bg-white/20" title="소품을 집어 들고 사용합니다 (가까이 있으면 손을 뻗어 집고, 멀면 이미 손에 있는 것으로 시작)" onClick={() => edit((s) => addHold(s, actorId, chosenProp, { start: useStudio.getState().time, at: useAt, hand }))}>
+          <button className="whitespace-nowrap rounded bg-raised px-2 py-1 text-[11px] hover:bg-hover" title="소품을 집어 들고 사용합니다 (가까이 있으면 손을 뻗어 집고, 멀면 이미 손에 있는 것으로 시작)" onClick={() => edit((s) => addHold(s, actorId, chosenProp, { start: useStudio.getState().time, at: useAt, hand }))}>
             📱 들기
           </button>
         </div>
@@ -385,7 +414,7 @@ function ActingControls({ actorId }: { actorId: string }) {
           <div className="w-14">
             <SelectField value={hand} options={[{ value: "right", label: "오른손" }, { value: "left", label: "왼손" }]} onCommit={setHand} />
           </div>
-          <button className="whitespace-nowrap rounded bg-white/10 px-2 py-1 text-[11px] hover:bg-white/20" title="손을 대상 쪽으로 뻗습니다 (IK)" onClick={() => edit((s) => addReach(s, actorId, chosen, { start: useStudio.getState().time, hand }))}>
+          <button className="whitespace-nowrap rounded bg-raised px-2 py-1 text-[11px] hover:bg-hover" title="손을 대상 쪽으로 뻗습니다 (IK)" onClick={() => edit((s) => addReach(s, actorId, chosen, { start: useStudio.getState().time, hand }))}>
             🤚 뻗기
           </button>
         </div>
@@ -403,10 +432,10 @@ function ActionList({ ownerId }: { ownerId: string }) {
   if (rows.length === 0) return null;
   return (
     <div className="flex flex-col gap-1 pt-1">
-      <span className="text-[10px] text-zinc-500">동작 목록 — AI에게 “act3 수정해줘”처럼 id로 지목할 수 있어요</span>
+      <span className="text-[10px] text-ink-3">동작 목록 — AI에게 “act3 수정해줘”처럼 id로 지목할 수 있어요</span>
       {rows.map(({ label, index, action }) => (
-        <div key={index} className="flex items-center gap-1.5 text-[11px] text-zinc-400">
-          <span className="w-10 shrink-0 truncate font-mono text-[10px] text-zinc-500" title={label}>{label}</span>
+        <div key={index} className="flex items-center gap-1.5 text-[11px] text-ink-2">
+          <span className="w-10 shrink-0 truncate font-mono text-[10px] text-ink-3" title={label}>{label}</span>
           <span className="min-w-0 flex-1 truncate" title={describeAction(action)}>{describeAction(action).replace(/ @.*$/, "")}</span>
           <div className="w-14" title="시작(초)">
             <NumField value={action.start} min={0} step={0.1} onCommit={(v) => edit((s) => patchActionAt(s, index, { start: v }))} />
@@ -433,11 +462,11 @@ function DriveControls({ propId }: { propId: string }) {
   const drawing = tool?.kind === "path" && tool.actorId === propId;
   const rows = labeledActions(spec).filter(({ action }) => action.type === "drive" && action.prop === propId);
   return (
-    <div className="flex flex-col gap-1.5 rounded border border-white/10 p-2">
+    <div className="flex flex-col gap-1.5 rounded border border-line p-2">
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-medium text-zinc-300">주행 ({rows.length})</span>
+        <span className="text-[11px] font-medium text-ink-2">주행 ({rows.length})</span>
         <button
-          className={`rounded px-2 py-0.5 text-[11px] ${drawing ? "bg-amber-400 text-black" : "bg-sky-500/80 text-white hover:bg-sky-400"}`}
+          className={`rounded px-2 py-0.5 text-[11px] ${drawing ? "bg-accent text-black" : "bg-sky-500/80 text-white hover:bg-sky-400"}`}
           onClick={() => (drawing ? useStudio.getState().setTool(null) : startPath(propId))}
           title="바닥(3D·탑뷰)을 차례로 클릭해 달릴 길을 만듭니다. 모서리는 곡선으로 둥글려집니다"
         >
@@ -446,8 +475,8 @@ function DriveControls({ propId }: { propId: string }) {
       </div>
       {rows.map(({ label, index, action }) =>
         action.type === "drive" ? (
-          <div key={index} className="flex items-center gap-1.5 text-[11px] text-zinc-400">
-            <span className="w-9 shrink-0 truncate font-mono text-[10px] text-zinc-500" title={label}>{label}</span>
+          <div key={index} className="flex items-center gap-1.5 text-[11px] text-ink-2">
+            <span className="w-9 shrink-0 truncate font-mono text-[10px] text-ink-3" title={label}>{label}</span>
             <span className="whitespace-nowrap">{action.follow ? `추격 ${action.follow}` : "경로"}</span>
             <div className="w-14" title="시작(초)">
               <NumField value={action.start} min={0} step={0.1} onCommit={(v) => edit((s) => patchActionAt(s, index, { start: v }))} />
@@ -467,7 +496,7 @@ function DriveControls({ propId }: { propId: string }) {
           </div>
         ) : null,
       )}
-      {rows.length === 0 ? <p className="text-[10px] text-zinc-600">경로가 없습니다. “주행 경로 찍기” 후 바닥을 클릭하세요 (현재 시간에 시작).</p> : null}
+      {rows.length === 0 ? <p className="text-[10px] text-ink-3">경로가 없습니다. “주행 경로 찍기” 후 바닥을 클릭하세요 (현재 시간에 시작).</p> : null}
     </div>
   );
 }
@@ -488,11 +517,11 @@ function PoseEditor({ actorId }: { actorId: string }) {
   const time = () => useStudio.getState().time;
   const keyed = hasBoneKeys(spec, actorId);
   const baked = hasBakedKeys(spec, actorId);
-  const btn = "rounded bg-white/10 px-2 py-1 text-[11px] hover:bg-white/20 disabled:opacity-30";
+  const btn = "rounded bg-raised px-2 py-1 text-[11px] hover:bg-hover disabled:opacity-30";
   return (
-    <div className="mt-1 flex flex-col gap-1.5 border-t border-white/10 pt-2">
-      <span className="text-[11px] font-medium text-zinc-300">포즈 편집 (뼈 키프레임)</span>
-      <p className="text-[10px] text-zinc-600">자유 시점에서 선택된 인물의 팔·다리를 클릭하거나 아래에서 뼈를 고르면 회전 기즈모가 붙고, 놓으면 현재 시간에 키가 찍힙니다. 인물을 다시 옮기려면 “뼈 선택…”으로 해제하세요.</p>
+    <div className="mt-1 flex flex-col gap-1.5 border-t border-line pt-2">
+      <span className="text-[11px] font-medium text-ink-2">포즈 편집 (뼈 키프레임)</span>
+      <p className="text-[10px] text-ink-3">자유 시점에서 선택된 인물의 팔·다리를 클릭하거나 아래에서 뼈를 고르면 회전 기즈모가 붙고, 놓으면 현재 시간에 키가 찍힙니다. 인물을 다시 옮기려면 “뼈 선택…”으로 해제하세요.</p>
       <SelectField value={(bone ?? "") as BoneName | ""} options={[{ value: "" as const, label: "뼈 선택…" }, ...BODY_BONES.map((b) => ({ value: b, label: b }))]} onCommit={(v) => selectBone(v === "" ? null : v)} />
       {bone && cur ? (
         <Row label="회전°">

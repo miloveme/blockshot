@@ -6,8 +6,8 @@ import { editDuration, planFrames } from "@blockshot/core";
 import { downloadBlob, renderStill, renderVideo, type RenderPass, type RenderResult } from "@/lib/render";
 import { viewedCameraId } from "./viewport/util";
 
-const label = "mb-1 block text-[11px] font-medium text-zinc-400";
-const select = "w-full rounded border border-white/10 bg-black/30 px-2 py-1 text-xs";
+const label = "mb-1 block text-[11px] font-medium text-ink-2";
+const select = "w-full rounded border border-line bg-black/30 px-2 py-1 text-xs";
 
 const slug = (s: string) => s.replace(/[^\p{L}\p{N}_-]+/gu, "_") || "blockshot";
 
@@ -69,7 +69,7 @@ export function RenderPanel() {
 
   return (
     <div className="flex flex-col gap-3 text-xs">
-      <p className="text-zinc-500">브라우저에서 바로 렌더링합니다 (서버 전송 없음). 편집 보조 요소(그리드·카메라·이름표)는 출력에 나오지 않습니다.</p>
+      <p className="text-ink-3">브라우저에서 바로 렌더링합니다 (서버 전송 없음). 편집 보조 요소(그리드·카메라·이름표)는 출력에 나오지 않습니다.</p>
 
       <div>
         <span className={label}>구간</span>
@@ -119,25 +119,25 @@ export function RenderPanel() {
       {pass === "depth" ? (
         <div>
           <span className={label}>Depth 최대 거리: {depthFar}m (이보다 멀면 검정)</span>
-          <input type="range" min={3} max={60} step={1} value={depthFar} onChange={(e) => setDepthFar(Number(e.target.value))} className="w-full accent-amber-400" />
+          <input type="range" min={3} max={60} step={1} value={depthFar} onChange={(e) => setDepthFar(Number(e.target.value))} className="w-full accent-[var(--color-accent)]" />
         </div>
       ) : null}
 
       <div className="flex gap-2">
-        <button className="flex-1 rounded bg-amber-400 px-3 py-1.5 font-medium text-black hover:bg-amber-300 disabled:opacity-40" onClick={run} disabled={rendering}>
+        <button className="flex-1 rounded bg-accent px-3 py-1.5 font-medium text-black hover:brightness-110 disabled:opacity-40" onClick={run} disabled={rendering}>
           🎞 영상 렌더 ({seconds.toFixed(1)}s)
         </button>
-        <button className="rounded bg-white/10 px-3 py-1.5 hover:bg-white/20 disabled:opacity-40" onClick={still} disabled={rendering} title="현재 시간의 프레임 (image-to-video 첫 프레임용)">
+        <button className="rounded bg-raised px-3 py-1.5 hover:bg-hover disabled:opacity-40" onClick={still} disabled={rendering} title="현재 시간의 프레임 (image-to-video 첫 프레임용)">
           🖼 현재 프레임 PNG
         </button>
       </div>
 
       {progress ? (
         <div className="flex flex-col gap-1">
-          <div className="h-2 overflow-hidden rounded bg-white/10">
-            <div className="h-full bg-amber-400 transition-[width]" style={{ width: `${(progress.done / Math.max(1, progress.total)) * 100}%` }} />
+          <div className="h-2 overflow-hidden rounded bg-raised">
+            <div className="h-full bg-accent transition-[width]" style={{ width: `${(progress.done / Math.max(1, progress.total)) * 100}%` }} />
           </div>
-          <div className="flex justify-between text-zinc-400">
+          <div className="flex justify-between text-ink-2">
             <span>
               {progress.done} / {progress.total} 프레임
             </span>
@@ -151,21 +151,21 @@ export function RenderPanel() {
       {error ? <p className="rounded border border-red-500/40 bg-red-500/10 p-2 text-red-200">{error}</p> : null}
 
       {result ? (
-        <div className="flex flex-col gap-2 rounded border border-white/10 p-2">
+        <div className="flex flex-col gap-2 rounded border border-line p-2">
           <video src={result.url} controls className="w-full rounded bg-black" />
           <div className="flex gap-2">
             <button className="flex-1 rounded bg-emerald-500 px-3 py-1.5 font-medium text-black hover:bg-emerald-400" onClick={() => downloadBlob(result.blob, result.name)}>
               ⬇ {result.name}
             </button>
             <button
-              className="rounded bg-white/10 px-3 py-1.5 hover:bg-white/20"
+              className="rounded bg-raised px-3 py-1.5 hover:bg-hover"
               title="프레임별 카메라 위치·회전·초점거리 (카메라 컨트롤 모델용)"
               onClick={() => downloadBlob(new Blob([JSON.stringify(result.cameraLog, null, 2)], { type: "application/json" }), `${baseName}_camera.json`)}
             >
               camera.json
             </button>
           </div>
-          <p className="text-zinc-500">
+          <p className="text-ink-3">
             {result.cameraLog.width}×{result.cameraLog.height} · {result.cameraLog.fps}fps · {result.cameraLog.frames.length}프레임 · {(result.blob.size / 1e6).toFixed(1)}MB
           </p>
         </div>

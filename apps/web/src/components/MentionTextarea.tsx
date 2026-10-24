@@ -76,7 +76,7 @@ export function MentionTextarea({ value, onChange, items, placeholder, className
             <li key={m.kind + m.id} role="option" aria-selected={i === current}>
               <button
                 type="button"
-                className={`flex w-full items-center gap-2 px-2 py-1 text-left ${i === current ? "bg-amber-400/20 text-amber-200" : "text-zinc-300 hover:bg-white/10"}`}
+                className={`flex w-full items-center gap-2 px-2 py-1 text-left ${i === current ? "bg-accent/20 text-accent" : "text-ink-2 hover:bg-hover"}`}
                 onMouseDown={(e) => {
                   e.preventDefault(); // keep the caret in the textarea
                   pick(m);
@@ -85,8 +85,8 @@ export function MentionTextarea({ value, onChange, items, placeholder, className
               >
                 <span>{KIND_ICON[m.kind]}</span>
                 <span className="font-mono">@{m.id}</span>
-                <span className="min-w-0 flex-1 truncate text-zinc-500">{m.label}</span>
-                <span className="text-[10px] text-zinc-600">{KIND_LABEL[m.kind]}</span>
+                <span className="min-w-0 flex-1 truncate text-ink-3">{m.label}</span>
+                <span className="text-[10px] text-ink-3">{KIND_LABEL[m.kind]}</span>
               </button>
             </li>
           ))}

@@ -5,6 +5,7 @@ import { useFrame } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
 import * as THREE from "three";
 import { BONES, DEG, RIG, fingerSegmentLength, type ActorState, type BoneName } from "@blockshot/core";
+import { openObjectMenu } from "../editor/ContextMenu";
 import { useStudio } from "@/lib/store";
 import { EditorOnly } from "./EditorOnly";
 
@@ -175,6 +176,12 @@ export function Mannequin({ id }: { id: string }) {
         while (o && !o.name.startsWith("bone:")) o = o.parent;
         if (st.selection === id && o) st.selectBone(o.name.slice(5) as BoneName);
         else st.select(id);
+      }}
+      onContextMenu={(e) => {
+        if (useStudio.getState().tool) return;
+        e.stopPropagation();
+        e.nativeEvent.preventDefault();
+        openObjectMenu(e.nativeEvent, id);
       }}
     >
       <Bone name="hips" color={color} />

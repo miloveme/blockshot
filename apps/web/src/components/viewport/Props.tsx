@@ -6,6 +6,7 @@ import { Text } from "@react-three/drei";
 import * as THREE from "three";
 import { Reflector } from "three/examples/jsm/objects/Reflector.js";
 import { DEG, STAIR_RISER, propSize, type Prop } from "@blockshot/core";
+import { openObjectMenu } from "../editor/ContextMenu";
 import { useStudio } from "@/lib/store";
 import { instantiate, loadModel } from "@/lib/models";
 
@@ -287,6 +288,12 @@ export function PropObject({ prop }: { prop: Prop }) {
         if (useStudio.getState().tool) return;
         e.stopPropagation();
         useStudio.getState().select(prop.id);
+      }}
+      onContextMenu={(e) => {
+        if (useStudio.getState().tool) return;
+        e.stopPropagation();
+        e.nativeEvent.preventDefault();
+        openObjectMenu(e.nativeEvent, prop.id);
       }}
       position={prop.position}
       rotation={[prop.rotation[0] * DEG, prop.rotation[1] * DEG, prop.rotation[2] * DEG, "YXZ"]}

@@ -159,3 +159,26 @@ describe("removeKeysAt", () => {
     expect(removeKeysAt(r.spec, "minsu", 7.77)).toBe(r.spec);
   });
 });
+
+describe("duplicateEntity", () => {
+  it("copies actors, props and cameras under fresh ids next to the original, without their actions", async () => {
+    const { duplicateEntity, validateSpec } = await import("../src");
+    const r = validateSpec({
+      specVersion: "0.1",
+      actors: [{ id: "minsu", name: "민수", position: [1, 0, 2] }],
+      props: [{ id: "chair1", type: "chair", position: [0, 0, 0] }],
+      cameras: [{ id: "camA", name: "A", position: [0, 1.6, 5] }],
+      actions: [{ type: "walkTo", actor: "minsu", to: [2, 0, 2], start: 0 }],
+    });
+    if (!r.ok) throw new Error("bad");
+    const a = duplicateEntity(r.spec, "minsu")!;
+    expect(a.id).not.toBe("minsu");
+    expect(a.spec.actors.find((x) => x.id === a.id)!.position).toEqual([1.6, 0, 2]);
+    expect(a.spec.actors.find((x) => x.id === a.id)!.name).toBe("민수 복사");
+    expect(a.spec.actions).toHaveLength(1);
+    expect(duplicateEntity(r.spec, "chair1")!.id).toBe("chair2");
+    expect(duplicateEntity(r.spec, "camA")!.spec.cameras).toHaveLength(2);
+    expect(duplicateEntity(r.spec, "nope")).toBeNull();
+    expect(validateSpec(duplicateEntity(a.spec, a.id)!.spec).ok).toBe(true);
+  });
+});
