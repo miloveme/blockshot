@@ -15,6 +15,8 @@ const set = (pose: RigPose, bone: BoneName, x = 0, y = 0, z = 0) => {
 
 /** Seated pelvis height above the floor (m) and how far the thighs slope down from horizontal (rad). */
 export const SIT_HIPS_Y = 0.58;
+/** seconds per stair when climbing — the pace the `climb` pose cycles at (two steps per cycle) */
+export const CLIMB_STEP = 0.6;
 const SIT_THIGH_DROP = 0.19;
 
 /** The built-in poses as bone data. `t` = seconds since the pose started (drives the cycles). */
@@ -73,6 +75,29 @@ export function basePose(name: Pose, t: number): RigPose {
     case "idle":
       set(p, "spine", Math.sin(t * 1.3) * 0.015);
       return p;
+    case "climb": {
+      // up (or down) a staircase: one step every 0.6 s — knee driven high to clear the riser, torso leaning in, arms counter-swinging
+      const ph = (t / CLIMB_STEP / 2) * Math.PI * 2;
+      for (const [side, off] of [["left", 0], ["right", Math.PI]] as const) {
+        const s = Math.sin(ph + off);
+        const lift = Math.max(0, s);
+        const push = Math.max(0, -s);
+        const ul = -0.2 - 0.95 * lift + 0.25 * push;
+        const ll = 0.25 + 1.25 * lift - 0.2 * push;
+        set(p, `${side}UpperLeg`, ul);
+        set(p, `${side}LowerLeg`, ll);
+        set(p, `${side}Foot`, -(ul + ll) * 0.8);
+      }
+      const arm = Math.sin(ph);
+      set(p, "leftUpperArm", -0.25 + 0.3 * arm);
+      set(p, "rightUpperArm", -0.25 - 0.3 * arm);
+      set(p, "leftLowerArm", -0.5);
+      set(p, "rightLowerArm", -0.5);
+      set(p, "spine", 0.2);
+      set(p, "head", -0.1);
+      p.hips = [0, -0.03, 0.05];
+      return p;
+    }
     case "crouch": {
       // ducking under something: deep knee bend, torso and head down, a small shuffling step cycle
       const sw = Math.sin(t * Math.PI * 2 * 1.1) * 0.22;
@@ -278,9 +303,11 @@ export function lookLayer(target: Vec3, skeleton: Skeleton): Layer {
 
 /**
  * Bone rotations that put the wrist of `side`'s arm on `target` (actor space, meters) — or as near as the arm reaches.
- * The elbow is steered by a pole hint (down, outward, slightly back) so it bends naturally.
+ * The elbow is steered by a pole hint (down, outward, slightly back) so it bends naturally. `palmToward` (an actor-space
+ * direction) twists the forearm so the palm faces that way — a hand around a phone has its palm toward the head;
+ * `polePref` overrides the elbow hint (actor space).
  */
-export function solveArm(base: RigPose, side: "left" | "right", target: Vec3, scale: number): { layer: Layer; reach: number } {
+export function solveArm(base: RigPose, side: "left" | "right", target: Vec3, scale: number, palmToward?: Vec3, polePref?: Vec3): { layer: Layer; reach: number } {
   const sk = solveRig(base, scale);
   const shoulderBone = `${side}Shoulder` as const;
   const upperBone = `${side}UpperArm` as const;
@@ -298,7 +325,7 @@ export function solveArm(base: RigPose, side: "left" | "right", target: Vec3, sc
   const cosA = (a * a + dist * dist - b * b) / (2 * a * dist);
   const sinA = Math.sqrt(Math.max(0, 1 - cosA * cosA));
   const sideSign = side === "left" ? 1 : -1;
-  const pole: Vec3 = [sideSign * 0.45, -0.8, -0.4];
+  const pole: Vec3 = polePref ?? [sideSign * 0.45, -0.8, -0.4];
   const along = pole[0] * dir[0] + pole[1] * dir[1] + pole[2] * dir[2];
   let perp: Vec3 = [pole[0] - dir[0] * along, pole[1] - dir[1] * along, pole[2] - dir[2] * along];
   const pl = Math.hypot(...perp);
@@ -311,7 +338,19 @@ export function solveArm(base: RigPose, side: "left" | "right", target: Vec3, sc
   const upperDir = norm([elbow[0] - s[0], elbow[1] - s[1], elbow[2] - s[2]]);
   const lowerDir = norm([wrist[0] - elbow[0], wrist[1] - elbow[1], wrist[2] - elbow[2]]);
   const qUpperWorld = Q.fromUnitVectors(down, upperDir);
-  const qLowerWorld = Q.fromUnitVectors(down, lowerDir);
+  let qLowerWorld = Q.fromUnitVectors(down, lowerDir);
+  if (palmToward) {
+    // roll about the forearm so the palm (inward at rest: -X for the left hand, +X for the right) faces `palmToward`
+    const flat = (v: Vec3): Vec3 => {
+      const d = v[0] * lowerDir[0] + v[1] * lowerDir[1] + v[2] * lowerDir[2];
+      return norm([v[0] - lowerDir[0] * d, v[1] - lowerDir[1] * d, v[2] - lowerDir[2] * d]);
+    };
+    const have = flat(Q.rotate(qLowerWorld, [-sideSign, 0, 0]));
+    const want = flat(palmToward);
+    const cross: Vec3 = [have[1] * want[2] - have[2] * want[1], have[2] * want[0] - have[0] * want[2], have[0] * want[1] - have[1] * want[0]];
+    const angle = Math.atan2(cross[0] * lowerDir[0] + cross[1] * lowerDir[1] + cross[2] * lowerDir[2], have[0] * want[0] + have[1] * want[1] + have[2] * want[2]);
+    qLowerWorld = Q.mul(Q.fromAxisAngle(lowerDir, angle), qLowerWorld);
+  }
   const qParent = sk[shoulderBone].rot;
   const upperLocal = Q.mul(Q.inv(qParent), qUpperWorld);
   const lowerLocal = Q.mul(Q.inv(qUpperWorld), qLowerWorld);

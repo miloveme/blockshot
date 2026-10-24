@@ -23,3 +23,4 @@ export * from "./actions";
 export * from "./nav";
 export * from "./surfaces";
 export * from "./nav-time";
+export * from "./vehicle";

@@ -1,5 +1,6 @@
 import type { Vec3 } from "./schema";
-import { walkSegment, type Circle, type NavGrid } from "./nav";
+import { floorHeight, surfaceSpans, walkSegment, type Circle, type NavGrid } from "./nav";
+import { CLIMB_STEP } from "./poses";
 
 /**
  * Walking round people who are moving too — prioritized (cooperative) space-time A* (docs/NAVIGATION.md).
@@ -223,4 +224,60 @@ export function planAroundMovers(g: NavGrid, route: readonly TimedPoint[], mover
     } else out.push({ p: b, t: tArr }); // nowhere to go: keep the nominal leg
   }
   return { path: out, adjusted };
+}
+
+const RISER = 0.17;
+
+/**
+ * Times a route like `timeRoute`, but stairs are climbed one step at a time: a staircase stretch is cut into one
+ * piece per riser, each taking CLIMB_STEP seconds, and the body height rises in a step-shaped curve (it stays level
+ * while the lead foot reaches for the next tread, then rises as the weight comes over). Everything off the stairs
+ * keeps the walking pace.
+ */
+export function timeRouteOnGrid(g: NavGrid, points: readonly Vec3[], t0: number, speed: number): TimedPoint[] {
+  const spans = surfaceSpans(g, points, 3);
+  if (spans.length === 0) return timeRoute(points, t0, speed);
+
+  // cut the polyline at the span boundaries
+  const at = (a: Vec3, b: Vec3, u: number): Vec3 => [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u];
+  const edges = spans.flat();
+  const cuts: Array<{ p: Vec3; d: number; edge: boolean }> = [{ p: points[0]!, d: 0, edge: false }];
+  let offset = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!;
+    const b = points[i]!;
+    const len = Math.hypot(b[0] - a[0], b[2] - a[2]);
+    for (const e of edges.filter((d) => d > offset + 1e-6 && d < offset + len - 1e-6).sort((x, y) => x - y)) cuts.push({ p: at(a, b, (e - offset) / len), d: e, edge: true });
+    offset += len;
+    cuts.push({ p: b, d: offset, edge: edges.some((e) => Math.abs(e - offset) < 1e-6) });
+  }
+  const onStairs = (mid: number) => spans.some(([f, t]) => mid >= f && mid <= t);
+  const heightAt = (p: Vec3): number => floorHeight(g, p[0], p[2], p[1]) ?? p[1];
+
+  const out: TimedPoint[] = [{ p: cuts[0]!.p, t: t0 }];
+  for (let i = 1; i < cuts.length; i++) {
+    const start = out[out.length - 1]!;
+    const end = cuts[i]!;
+    const dist = end.d - cuts[i - 1]!.d;
+    const stairs = dist > 1e-6 && onStairs((end.d + cuts[i - 1]!.d) / 2);
+    if (!stairs) {
+      const b: Vec3 = end.edge ? [end.p[0], heightAt(end.p), end.p[2]] : end.p;
+      out.push({ p: b, t: start.t + Math.hypot(b[0] - start.p[0], b[1] - start.p[1], b[2] - start.p[2]) / speed });
+      continue;
+    }
+    const sx = start.p[0];
+    const sz = start.p[2];
+    const y0 = heightAt(start.p);
+    const y1 = heightAt(end.p);
+    start.p = [sx, y0, sz];
+    const steps = Math.max(1, Math.round(Math.abs(y1 - y0) / RISER));
+    for (let k = 0; k < steps; k++) {
+      // x / z advance evenly; the height holds, then rises over the second half of each step
+      for (const [u, lift] of [[0.4, 0], [0.7, 0.5], [1, 1]] as const) {
+        const f = (k + u) / steps;
+        out.push({ p: [sx + (end.p[0] - sx) * f, y0 + ((y1 - y0) / steps) * (k + lift), sz + (end.p[2] - sz) * f], t: start.t + (k + u) * CLIMB_STEP });
+      }
+    }
+  }
+  return out;
 }

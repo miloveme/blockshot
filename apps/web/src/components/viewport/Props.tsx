@@ -1,6 +1,7 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useFrame } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
 import * as THREE from "three";
 import { Reflector } from "three/examples/jsm/objects/Reflector.js";
@@ -91,7 +92,7 @@ function Stairs({ color, rise }: { color: string; rise: number }) {
   );
 }
 
-function PropMesh({ type, color, scaleY = 1 }: { type: Prop["type"]; color: string; scaleY?: number }): ReactNode {
+function PropMesh({ id, type, color, scaleY = 1 }: { id: string; type: Prop["type"]; color: string; scaleY?: number }): ReactNode {
   const dark = "#3a3f48";
   switch (type) {
     case "box":
@@ -155,15 +156,7 @@ function PropMesh({ type, color, scaleY = 1 }: { type: Prop["type"]; color: stri
         </>
       );
     case "car":
-      return (
-        <>
-          <Box size={[1.8, 0.7, 4.4]} at={[0, 0.6, 0]} color={color} />
-          <Box size={[1.6, 0.55, 2.2]} at={[0, 1.22, -0.2]} color={color} />
-          {([[0.85, 1.4], [-0.85, 1.4], [0.85, -1.4], [-0.85, -1.4]] as const).map(([x, z], i) => (
-            <Cyl key={i} r={0.33} h={0.22} at={[x, 0.33, z]} rot={[0, 0, Math.PI / 2]} color="#111" />
-          ))}
-        </>
-      );
+      return <Car id={id} color={color} />;
     case "lamp":
       return (
         <>
@@ -188,8 +181,53 @@ function PropMesh({ type, color, scaleY = 1 }: { type: Prop["type"]; color: stri
     case "model":
       return null; // rendered by ModelProp (needs the asset id)
     case "phone":
-      return <Box size={[0.075, 0.008, 0.155]} at={[0, 0.004, 0]} color={dark} />;
+      return (
+        <>
+          <Box size={[0.075, 0.008, 0.155]} at={[0, 0.004, 0]} color={dark} />
+          {/* the screen side, so the way a held phone faces can be seen */}
+          <mesh position={[0, 0.0085, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[0.065, 0.14]} />
+            <meshStandardMaterial color="#9fb7d4" emissive="#4a6a96" emissiveIntensity={0.5} />
+          </mesh>
+        </>
+      );
   }
+}
+
+/** A car: body + four wheels that turn with the distance driven, the front pair steering with the road. */
+const WHEELS: Array<{ x: number; z: number; front: boolean }> = [
+  { x: 0.85, z: 1.4, front: true },
+  { x: -0.85, z: 1.4, front: true },
+  { x: 0.85, z: -1.4, front: false },
+  { x: -0.85, z: -1.4, front: false },
+];
+function Car({ id, color }: { id: string; color: string }) {
+  const steer = useRef<Array<THREE.Group | null>>([]);
+  const spin = useRef<Array<THREE.Group | null>>([]);
+  useFrame(() => {
+    const m = useStudio.getState().sceneState.motion[id];
+    const dist = m?.dist ?? 0;
+    WHEELS.forEach((w, i) => {
+      if (steer.current[i]) steer.current[i]!.rotation.y = w.front ? (m?.steer ?? 0) : 0;
+      if (spin.current[i]) spin.current[i]!.rotation.x = dist / 0.33;
+    });
+  });
+  return (
+    <>
+      <Box size={[1.8, 0.7, 4.4]} at={[0, 0.6, 0]} color={color} />
+      <Box size={[1.6, 0.55, 2.2]} at={[0, 1.22, -0.2]} color={color} />
+      {/* windscreen strip so the front can be told from the back */}
+      <Box size={[1.5, 0.4, 0.05]} at={[0, 1.25, 0.88]} color="#1b2230" />
+      {WHEELS.map((w, i) => (
+        <group key={i} position={[w.x, 0.33, w.z]} ref={(g) => void (steer.current[i] = g)}>
+          <group ref={(g) => void (spin.current[i] = g)}>
+            <Cyl r={0.33} h={0.22} at={[0, 0, 0]} rot={[0, 0, Math.PI / 2]} color="#111" />
+            <Box size={[0.24, 0.06, 0.5]} at={[0, 0, 0]} color="#9aa3b2" />
+          </group>
+        </group>
+      ))}
+    </>
+  );
 }
 
 /** An imported GLB. Shows a dashed placeholder box (with the asset's size) while loading or when the file is missing here. */
@@ -228,8 +266,22 @@ function ModelProp({ prop }: { prop: Prop }) {
 }
 
 export function PropObject({ prop }: { prop: Prop }) {
+  const group = useRef<THREE.Group>(null);
+  // a prop somebody picked up follows their hand: take its position from the evaluated scene every frame
+  useFrame(() => {
+    const g = group.current;
+    const st = useStudio.getState();
+    const now = st.sceneState.props[prop.id];
+    if (!g || !now || st.dragging === prop.id) return;
+    const held = now !== prop; // the evaluated scene hands out a fresh object only for a prop that is in somebody's hand
+    if (!held && !g.userData.wasHeld) return;
+    g.userData.wasHeld = held;
+    g.position.set(...now.position);
+    g.rotation.set(now.rotation[0] * DEG, now.rotation[1] * DEG, now.rotation[2] * DEG, "YXZ");
+  });
   return (
     <group
+      ref={group}
       name={`obj:${prop.id}`}
       onClick={(e) => {
         if (useStudio.getState().tool) return;
@@ -240,7 +292,7 @@ export function PropObject({ prop }: { prop: Prop }) {
       rotation={[prop.rotation[0] * DEG, prop.rotation[1] * DEG, prop.rotation[2] * DEG, "YXZ"]}
       scale={prop.scale}
     >
-      {prop.type === "model" ? <ModelProp prop={prop} /> : <PropMesh type={prop.type} color={prop.color} scaleY={prop.scale[1]} />}
+      {prop.type === "model" ? <ModelProp prop={prop} /> : <PropMesh id={prop.id} type={prop.type} color={prop.color} scaleY={prop.scale[1]} />}
     </group>
   );
 }

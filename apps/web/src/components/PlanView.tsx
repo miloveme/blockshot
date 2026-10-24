@@ -255,6 +255,23 @@ export function PlanView({ className = "" }: { className?: string }) {
           }),
         )}
 
+        {/* vehicles: the smoothed driving line, with an arrowhead at the end */}
+        {spec.actions.flatMap((action, index) => {
+          if (action.type !== "drive") return [];
+          const route = compiled.routes.get(action);
+          if (!route || route.length < 2) return [];
+          const sel = selection === action.prop;
+          const end = route[route.length - 1]!;
+          const prev = route[route.length - 2]!;
+          const yaw = (Math.atan2(end[0] - prev[0], end[2] - prev[2]) * 180) / Math.PI;
+          return [
+            <g key={`drive-${index}`} opacity={sel ? 1 : 0.55} pointerEvents="none">
+              <polyline points={route.map((q) => `${q[0]},${q[2]}`).join(" ")} fill="none" stroke="#fb923c" strokeWidth={sel ? 2.5 : 1.5} vectorEffect="non-scaling-stroke" />
+              <polygon points="0,0.5 -0.3,-0.3 0.3,-0.3" transform={`translate(${end[0]} ${end[2]}) rotate(${-yaw}) scale(1)`} fill="#fb923c" />
+            </g>,
+          ];
+        })}
+
         {nav
           ? actors.map((a) => (
               <circle

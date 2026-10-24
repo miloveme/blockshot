@@ -374,6 +374,22 @@ export function addStandUp(spec: BlockshotSpec, actorId: string, opts: { start: 
   return extendDuration({ ...spec, actions: [...spec.actions, action] });
 }
 
+/** Appends a drive (smooth path through the clicked points) for a vehicle / prop starting at `start`. */
+export function addDrive(spec: BlockshotSpec, propId: string, points: Vec3[], opts: { start: number; speed?: number }): BlockshotSpec {
+  if (points.length === 0 || !spec.props.some((p) => p.id === propId)) return spec;
+  const action = { type: "drive" as const, prop: propId, to: points.length === 1 ? points[0]! : points, gap: 10, offset: [0, 0, 0] as Vec3, ease: "linear" as const, radius: 6, start: roundT(Math.max(0, opts.start)), ...(opts.speed ? { speed: opts.speed } : {}) };
+  return extendDriveDuration({ ...spec, actions: [...spec.actions, action] });
+}
+
+/** Grows the project length so a drive fits (the compiled keys tell how long it takes). */
+function extendDriveDuration(spec: BlockshotSpec): BlockshotSpec {
+  let end = spec.settings.duration;
+  const scene = compile(spec);
+  for (const keys of scene.tracks.values()) end = Math.max(end, keys[keys.length - 1]?.t ?? 0);
+  const duration = Math.ceil(end * 10) / 10;
+  return duration > spec.settings.duration ? { ...spec, settings: { ...spec.settings, duration } } : spec;
+}
+
 /** Adds a body-language gesture for the actor. */
 export function addGesture(spec: BlockshotSpec, actorId: string, gesture: Gesture, opts: { start: number; duration?: number; side?: "left" | "right" }): BlockshotSpec {
   if (!spec.actors.some((a) => a.id === actorId)) return spec;
@@ -385,6 +401,13 @@ export function addGesture(spec: BlockshotSpec, actorId: string, gesture: Gestur
 export function addHandShape(spec: BlockshotSpec, actorId: string, shape: HandShape, opts: { start: number; hand?: "left" | "right" | "both"; duration?: number }): BlockshotSpec {
   if (!spec.actors.some((a) => a.id === actorId)) return spec;
   const action = { type: "handShape" as const, actor: actorId, shape, hand: opts.hand ?? "both", start: roundT(Math.max(0, opts.start)), duration: opts.duration ?? 2 };
+  return extendDuration({ ...spec, actions: [...spec.actions, action] });
+}
+
+/** Has the actor pick up a prop and use it (phone call at the ear, drink at the mouth …). */
+export function addHold(spec: BlockshotSpec, actorId: string, propId: string, opts: { start: number; at?: "ear" | "mouth" | "chest" | "carry"; hand?: "left" | "right"; duration?: number; then?: "keep" | "put" }): BlockshotSpec {
+  if (!spec.actors.some((a) => a.id === actorId) || !spec.props.some((p) => p.id === propId)) return spec;
+  const action = { type: "hold" as const, actor: actorId, prop: propId, hand: opts.hand ?? "right", at: opts.at ?? "carry", duration: opts.duration ?? 4, then: opts.then ?? "keep", start: roundT(Math.max(0, opts.start)) };
   return extendDuration({ ...spec, actions: [...spec.actions, action] });
 }
 

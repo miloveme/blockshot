@@ -48,6 +48,49 @@ export const Q = {
     return [Math.atan2(m32, m22), ey, 0];
   },
 
+  /** Rotation about a unit axis by `angle` radians. */
+  fromAxisAngle(axis: Vec3, angle: number): Quat {
+    const s = Math.sin(angle / 2);
+    return [axis[0] * s, axis[1] * s, axis[2] * s, Math.cos(angle / 2)];
+  },
+
+  /** Rotation whose local X / Y / Z axes point along the given (orthonormal) world directions. */
+  fromBasis(x: Vec3, y: Vec3, z: Vec3): Quat {
+    const m11 = x[0], m21 = x[1], m31 = x[2];
+    const m12 = y[0], m22 = y[1], m32 = y[2];
+    const m13 = z[0], m23 = z[1], m33 = z[2];
+    const trace = m11 + m22 + m33;
+    if (trace > 0) {
+      const s = 0.5 / Math.sqrt(trace + 1);
+      return [(m32 - m23) * s, (m13 - m31) * s, (m21 - m12) * s, 0.25 / s];
+    }
+    if (m11 > m22 && m11 > m33) {
+      const s = 2 * Math.sqrt(1 + m11 - m22 - m33);
+      return [0.25 * s, (m12 + m21) / s, (m13 + m31) / s, (m32 - m23) / s];
+    }
+    if (m22 > m33) {
+      const s = 2 * Math.sqrt(1 + m22 - m11 - m33);
+      return [(m12 + m21) / s, 0.25 * s, (m23 + m32) / s, (m13 - m31) / s];
+    }
+    const s = 2 * Math.sqrt(1 + m33 - m11 - m22);
+    return [(m13 + m31) / s, (m23 + m32) / s, 0.25 * s, (m21 - m12) / s];
+  },
+
+  /** Quaternion → Euler YXZ (radians): the order the Spec uses for actors and props. */
+  toEulerYXZ(q: Quat): Vec3 {
+    const [x, y, z, w] = q;
+    const m13 = 2 * (x * z + y * w);
+    const m21 = 2 * (x * y + z * w);
+    const m22 = 1 - 2 * (x * x + z * z);
+    const m23 = 2 * (y * z - x * w);
+    const m31 = 2 * (x * z - y * w);
+    const m11 = 1 - 2 * (y * y + z * z);
+    const m33 = 1 - 2 * (x * x + y * y);
+    const ex = Math.asin(-Math.max(-1, Math.min(1, m23)));
+    if (Math.abs(m23) < 0.9999999) return [ex, Math.atan2(m13, m33), Math.atan2(m21, m22)];
+    return [ex, Math.atan2(-m31, m11), 0];
+  },
+
   rotate(q: Quat, v: Vec3): Vec3 {
     const [qx, qy, qz, qw] = q;
     // v' = v + 2w(q × v) + 2 q × (q × v)

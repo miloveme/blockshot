@@ -79,6 +79,10 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 | `.standUp({ start, duration?, to? })` | 일어나 앞으로 한 걸음(또는 `to`) |
 | `.gesture(name, { start, duration?, side?, intensity? })` | 몸짓(wave·nod·shrug·clap·cheer …). 포즈 위에 얹힌다 |
 | `.handShape(shape, { start, hand?, duration? })` | 손가락 모양: open·relaxed·fist·point·pinch·grip (`hand`: left/right/both) |
+| `scene.use(propId).drive(path, { start, speed?, duration?, ease?, radius? })` | 차량/소품이 경로를 따라 이동(모서리는 곡선, 차체 기울기·바퀴 회전 포함). 소품은 `drive` 없이는 움직이지 않는다 |
+| `scene.use(propId).follow(leader, { start, gap?, offset?, duration? })` | `leader`의 경로를 `gap` m 뒤에서 쫓아간다 (자동차 추격) |
+| `camera.mount(target, { start, offset?, look?, end? })` | 카메라가 인물/차에 실려 따라간다 (추격 카메라) |
+| `.hold(prop, { start, at?, hand?, duration?, then? })` | 소품을 집어 들고 사용: `at` "ear"(통화)·"mouth"·"chest"·"carry", `then` "keep"/"put". 부위 참조에 `ear_l`/`ear_r`/`mouth` 추가 |
 | `.reach(target, { start, hand?, duration? })` | 손을 대상으로 뻗기(IK). `target`은 점/소품/`인물.hand_r` 등 |
 | `.lookAt(target, { start, end? })` | 머리 방향 |
 | `.head` `.chest` `.pelvis` `.handL` `.handR` | 참조 문자열 (`"minsu.head"`) |

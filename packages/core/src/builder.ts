@@ -39,6 +39,9 @@ export interface ActorHandle {
   readonly pelvis: string;
   readonly handL: string;
   readonly handR: string;
+  readonly earL: string;
+  readonly earR: string;
+  readonly mouth: string;
   walkTo(to: Vec3 | Vec3[], opts: { start: number; duration?: number; speed?: number; direct?: boolean }): ActorHandle;
   runTo(to: Vec3 | Vec3[], opts: { start: number; duration?: number; speed?: number; direct?: boolean }): ActorHandle;
   turnTo(target: Target | number, opts: { start: number; duration?: number }): ActorHandle;
@@ -50,10 +53,21 @@ export interface ActorHandle {
   gesture(name: Gesture, opts: { start: number; duration?: number; side?: "left" | "right"; intensity?: number }): ActorHandle;
   /** Shape the fingers (fist, point, pinch, grip, open, relaxed) of one or both hands for `duration`. */
   handShape(shape: HandShape, opts: { start: number; hand?: "left" | "right" | "both"; duration?: number }): ActorHandle;
+  /** Pick up a prop and use it: `at` "ear" (phone call), "mouth" (drinking), "chest" (reading / texting) or "carry"; `then` keeps it in hand or puts it back. */
+  hold(prop: { id: string } | string, opts: { start: number; at?: "ear" | "mouth" | "chest" | "carry"; hand?: "left" | "right"; duration?: number; then?: "keep" | "put" }): ActorHandle;
   /** Reach a hand toward a point / object / body part (IK) and hold it for `duration`. */
   reach(target: Target, opts: { start: number; hand?: "left" | "right"; duration?: number }): ActorHandle;
   pose(name: Pose, opts: { start: number }): ActorHandle;
   lookAt(target: Target, opts: { start: number; end?: number }): ActorHandle;
+}
+
+/** A prop (usually a vehicle) that can be driven. */
+export interface PropHandle {
+  readonly id: string;
+  /** Drive along a path (corners rounded, body leaning, wheels turning): `speed` m/s (default 12), `ease` easeIn = pull away, easeOut = brake. */
+  drive(path: Vec3 | Vec3[], opts: { start: number; speed?: number; duration?: number; ease?: Ease; radius?: number }): PropHandle;
+  /** Trail another prop / actor `gap` metres behind it along its route (a chase). */
+  follow(leader: { id: string } | string, opts: { start: number; gap?: number; offset?: Vec3; duration?: number }): PropHandle;
 }
 
 export interface CameraHandle {
@@ -65,6 +79,8 @@ export interface CameraHandle {
   orbit(around: Target, opts: Timing & { duration: number; degrees: number }): CameraHandle;
   zoom(focalLength: number, opts: Timing & { duration: number }): CameraHandle;
   lookAt(target: Target, opts: { start: number }): CameraHandle;
+  /** Ride along with an actor / prop (chase cam, hood cam): keep `offset` from it in its own frame and aim at `look`. */
+  mount(to: { id: string } | string, opts: { start: number; offset?: Vec3; look?: Vec3; end?: number }): CameraHandle;
 }
 
 /**
@@ -131,6 +147,9 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
       pelvis: `${id}.pelvis`,
       handL: `${id}.hand_l`,
       handR: `${id}.hand_r`,
+      earL: `${id}.ear_l`,
+      earR: `${id}.ear_r`,
+      mouth: `${id}.mouth`,
       walkTo: (to, o) => (action({ type: "walkTo", actor: id, to, ...o }), handle),
       runTo: (to, o) => (action({ type: "runTo", actor: id, to, ...o }), handle),
       turnTo: (target, o) => (action({ type: "turnTo", actor: id, target, ...o }), handle),
@@ -139,8 +158,18 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
       standUp: (o) => (action({ type: "standUp", actor: id, ...o }), handle),
       gesture: (gesture, o) => (action({ type: "gesture", actor: id, gesture, ...o }), handle),
       handShape: (shape, o) => (action({ type: "handShape", actor: id, shape, ...o }), handle),
+      hold: (prop, o) => (action({ type: "hold", actor: id, prop: typeof prop === "string" ? prop : prop.id, ...o }), handle),
       reach: (target, o) => (action({ type: "reach", actor: id, target, ...o }), handle),
       lookAt: (target, o) => (action({ type: "lookAt", actor: id, target, ...o }), handle),
+    };
+    return handle;
+  }
+
+  function makeProp(id: string): PropHandle {
+    const handle: PropHandle = {
+      id,
+      drive: (path, o) => (action({ type: "drive", prop: id, to: path, ...o }), handle),
+      follow: (leader, o) => (action({ type: "drive", prop: id, follow: typeof leader === "string" ? leader : leader.id, ...o }), handle),
     };
     return handle;
   }
@@ -172,6 +201,7 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
         if (cur().aim === null) cur().aim = around;
         return handle;
       },
+      mount: (to, o) => (action({ type: "mount", camera: id, to: typeof to === "string" ? to : to.id, ...o }), handle),
       zoom: (focalLength, o) => (action({ type: "zoom", camera: id, focalLength, start: o.start, duration: o.duration, ease: o.ease }), handle),
       lookAt: (target, o) => {
         action({ type: "cameraLookAt", camera: id, target, start: o.start });
@@ -224,10 +254,10 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
       return makeActor(id);
     },
     /** Handle for something that already exists in the scene (placed by hand or by an earlier script). */
-    use(id: string): ActorHandle | CameraHandle | { id: string } {
+    use(id: string): ActorHandle | CameraHandle | PropHandle {
       if (spec.actors.some((a) => a.id === id)) return makeActor(id);
       if (spec.cameras.some((c) => c.id === id)) return makeCamera(id);
-      if (spec.props.some((p) => p.id === id)) return { id };
+      if (spec.props.some((p) => p.id === id)) return makeProp(id);
       const known = [...spec.actors, ...spec.props, ...spec.cameras].map((o) => o.id).join(", ") || "none";
       throw new Error(`scene.use("${id}"): no such actor, camera or prop. Available: ${known}`);
     },
@@ -262,7 +292,7 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
       const id = o.id ?? `${type}${++propCounter}`;
       ensureFreeId(id);
       spec.props.push({ id, type, position: o.at, rotation: o.rotation ?? (o.facing !== undefined ? [0, o.facing, 0] : undefined), scale: o.scale, color: o.color });
-      return { id };
+      return makeProp(id);
     },
     camera(id: string, o: CameraOpts = {}): CameraHandle {
       ensureFreeId(id);

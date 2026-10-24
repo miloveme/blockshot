@@ -128,7 +128,9 @@ function cornersOf(r: Rect): Array<[number, number]> {
 
 /** Props that block the body: solid, not decor, not a walkable surface. Their height decides whether they block, force a crouch or are stepped over. */
 export function navObstacles(spec: BlockshotSpec): Prop[] {
-  return spec.props.filter((p) => !PROP_CATALOG[p.type].passable && !isSurface(p));
+  // a prop that is driven away (a car in a chase) is not a fixed obstacle
+  const driven = new Set(spec.actions.flatMap((a) => (a.type === "drive" ? [a.prop] : [])));
+  return spec.props.filter((p) => !PROP_CATALOG[p.type].passable && !isSurface(p) && !driven.has(p.id));
 }
 
 /** Actors that never move: no walk/run/sit/stand action and no manual position track. They are solid for everyone else. */
@@ -695,4 +697,36 @@ export function crouchSpans(g: NavGrid, points: readonly Vec3[], lead = 0.35): A
     else merged.push([...s]);
   }
   return merged;
+}
+
+/**
+ * Stretches (horizontal distance from the start, metres) of a walked polyline that lie on a surface of kind
+ * `surface` (1 platform, 2 ramp, 3 stairs).
+ */
+export function surfaceSpans(g: NavGrid, points: readonly Vec3[], surface: number): Array<[number, number]> {
+  const n = g.w * g.h;
+  const spans: Array<[number, number]> = [];
+  let offset = 0;
+  let open = -1;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!;
+    const b = points[i]!;
+    const len = Math.hypot(b[0] - a[0], b[2] - a[2]);
+    const steps = Math.max(1, Math.ceil(len / (g.cell * 0.5)));
+    for (let k = 0; k <= steps; k++) {
+      const u = k / steps;
+      const col = colOf(g, a[0] + (b[0] - a[0]) * u, a[2] + (b[2] - a[2]) * u);
+      const l = col < 0 ? -1 : layerNear(g, col, a[1] + (b[1] - a[1]) * u);
+      const on = l >= 0 && g.surf[l * n + col] === surface;
+      const d = offset + len * u;
+      if (on && open < 0) open = d;
+      if (!on && open >= 0) {
+        spans.push([open, d]);
+        open = -1;
+      }
+    }
+    offset += len;
+  }
+  if (open >= 0) spans.push([open, offset]);
+  return spans.filter(([f, t]) => t - f > 0.15);
 }

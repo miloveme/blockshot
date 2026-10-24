@@ -13,7 +13,7 @@ export type Vec3 = z.infer<typeof Vec3>;
 export const Id = z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]*$/, "id must start with a letter and use [a-zA-Z0-9_-]");
 export const Color = z.string().regex(/^#[0-9a-fA-F]{6}$/, "color must be #rrggbb");
 
-export const BODY_PARTS = ["head", "chest", "pelvis", "hand_l", "hand_r", "foot_l", "foot_r"] as const;
+export const BODY_PARTS = ["head", "chest", "pelvis", "hand_l", "hand_r", "foot_l", "foot_r", "ear_l", "ear_r", "mouth"] as const;
 export const BodyPart = z.enum(BODY_PARTS);
 export type BodyPart = z.infer<typeof BodyPart>;
 
@@ -27,7 +27,7 @@ export type Target = z.infer<typeof Target>;
 export const Ease = z.enum(["linear", "easeIn", "easeOut", "easeInOut", "step"]);
 export type Ease = z.infer<typeof Ease>;
 
-export const POSES = ["stand", "idle", "walk", "run", "sit", "point", "talk", "crouch"] as const;
+export const POSES = ["stand", "idle", "walk", "run", "sit", "point", "talk", "crouch", "climb"] as const;
 export const Pose = z.enum(POSES);
 export type Pose = z.infer<typeof Pose>;
 
@@ -35,6 +35,10 @@ export type Pose = z.infer<typeof Pose>;
 export const GESTURES = ["wave", "nod", "shakeHead", "shrug", "clap", "crossArms", "handsOnHips", "think", "bow", "lookAround", "cheer"] as const;
 export const GestureName = z.enum(GESTURES);
 export type Gesture = z.infer<typeof GestureName>;
+
+/** Where a held prop is used: to the ear (phone call), mouth (drinking, speaking into it), in front of the chest (reading, texting), or just carried at the side. */
+export const HOLD_AT = ["ear", "mouth", "chest", "carry"] as const;
+export type HoldAt = (typeof HOLD_AT)[number];
 
 /** Hand shapes for the finger bones. */
 export const HAND_SHAPES = ["open", "relaxed", "fist", "point", "pinch", "grip"] as const;
@@ -155,6 +159,24 @@ export const Action = z.discriminatedUnion("type", [
   z.object({ type: z.literal("gesture"), actor: Id, gesture: GestureName, side: z.enum(["left", "right"]).optional(), duration: z.number().positive().optional(), intensity: z.number().min(0).max(1).default(1), ...timed }),
   /** hold a hand shape (fist, point, pinch, grip, open) with one or both hands for `duration` */
   z.object({ type: z.literal("handShape"), actor: Id, shape: HandShapeName, hand: z.enum(["left", "right", "both"]).default("both"), duration: z.number().positive().default(2), ...timed }),
+  /** a vehicle (or any prop) drives along a path — corners rounded by a turning radius, body leaning in turns — or trails another prop / actor `gap` metres behind it along its route */
+  z.object({
+    type: z.literal("drive"),
+    prop: Id,
+    to: z.union([Vec3, z.array(Vec3).min(1)]).optional(),
+    follow: Id.optional(),
+    gap: z.number().min(0).default(10),
+    offset: Vec3.default([0, 0, 0]),
+    speed: z.number().positive().optional(),
+    duration: z.number().positive().optional(),
+    ease: Ease.default("linear"),
+    radius: z.number().positive().default(6),
+    ...timed,
+  }),
+  /** a camera rides along with an actor or prop (chase / hood / follow cam): it keeps `offset` from the target in the target's own frame and aims at `look` */
+  z.object({ type: z.literal("mount"), camera: Id, to: Id, offset: Vec3.default([0, 1.6, -6]), look: Vec3.default([0, 1, 0]), end: z.number().positive().optional(), ...timed }),
+  /** pick up a prop (a phone, a cup …) and use it: bring it to the ear / mouth / chest, then keep it in hand or put it back */
+  z.object({ type: z.literal("hold"), actor: Id, prop: Id, hand: z.enum(["left", "right"]).default("right"), at: z.enum(HOLD_AT).default("carry"), duration: z.number().positive().default(4), then: z.enum(["keep", "put"]).default("keep"), ...timed }),
   /** reach a hand toward a point / object / body part (IK) — pointing, touching, handing over — and hold it for `duration` */
   z.object({ type: z.literal("reach"), actor: Id, target: Target, hand: z.enum(["left", "right"]).default("right"), duration: z.number().positive().default(1.5), ...timed }),
   /** walk onto a chair / sofa, turn to face the way it faces and lower into the seat */

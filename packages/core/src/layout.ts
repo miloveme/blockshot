@@ -2,6 +2,7 @@ import type { Action, BlockshotSpec, Prop, Space, Vec3 } from "./schema";
 import { PROP_CATALOG, propSize } from "./catalog";
 import { DEG } from "./math";
 import { compile, evaluate, partPosition, type CameraState } from "./evaluate";
+import { staticActors } from "./nav";
 import { mirrorPlane, reflectPoint, sideOf, type MirrorPlane } from "./mirror";
 import type { Issue } from "./validate";
 
@@ -132,6 +133,31 @@ export function lintLayout(spec: BlockshotSpec): Issue[] {
       }
     }
     pos.set(a.actor, points.at(-1)!);
+  }
+
+  // vehicles: the line a driven prop really follows must not run through furniture or people standing still
+  const standing = new Set(staticActors(spec));
+  const driven = new Set(spec.actions.flatMap((a) => (a.type === "drive" ? [a.prop] : [])));
+  for (const [index, a] of spec.actions.entries()) {
+    if (a.type !== "drive") continue;
+    const route = scene.routes.get(a);
+    if (!route || route.length < 2) continue;
+    const carBox = solid.find((s) => s.p.id === a.prop);
+    const halfW = carBox ? Math.min(carBox.box.x1 - carBox.box.x0, carBox.box.z1 - carBox.box.z0) / 2 : 0.9;
+    const obstaclesNow = solid.filter(({ p, info }) => !info.passable && !info.surface && !driven.has(p.id) && p.id !== a.prop);
+    let hit: string | null = null;
+    for (let i = 1; i < route.length && !hit; i++) {
+      for (const o of obstaclesNow) {
+        if (segmentHitsBox(route[i - 1]!, route[i]!, { x0: o.box.x0 - halfW, x1: o.box.x1 + halfW, z0: o.box.z0 - halfW, z1: o.box.z1 + halfW })) {
+          hit = `"${o.p.id}" (${o.p.type})`;
+          break;
+        }
+      }
+      for (const actor of spec.actors) {
+        if (!hit && standing.has(actor.id) && segmentHitsBox(route[i - 1]!, route[i]!, { x0: actor.position[0] - halfW - 0.3, x1: actor.position[0] + halfW + 0.3, z0: actor.position[2] - halfW - 0.3, z1: actor.position[2] + halfW + 0.3 })) hit = `"${actor.id}"`;
+      }
+    }
+    if (hit) issues.push({ path: `actions[${index}]`, message: `"${a.prop}" drives through ${hit} — move the waypoints so the line passes beside it` });
   }
 
   issues.push(...lintMirrorShots(spec));
