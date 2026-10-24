@@ -13,6 +13,9 @@ importers:
       '@blockshot/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@blockshot/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       '@jitl/quickjs-singlefile-mjs-release-sync':
         specifier: ^0.32.0
         version: 0.32.0
@@ -90,6 +93,40 @@ importers:
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^5.0.5
+        version: 5.0.5(@types/node@24.19.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
+
+  packages/mcp:
+    dependencies:
+      '@blockshot/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@jitl/quickjs-singlefile-mjs-release-sync':
+        specifier: ^0.32.0
+        version: 0.32.0
+      '@resvg/resvg-js':
+        specifier: ^2.6.2
+        version: 2.6.2
+      '@types/node':
+        specifier: ^24.19.2
+        version: 24.19.2
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
+      playwright-core:
+        specifier: ^1.50.0
+        version: 1.64.1
+      quickjs-emscripten-core:
+        specifier: ^0.32.0
+        version: 0.32.0
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
@@ -2393,6 +2430,11 @@ packages:
   picomatch@4.0.7:
     resolution: {integrity: sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==}
     engines: {node: '>=12'}
+
+  playwright-core@1.64.1:
+    resolution: {integrity: sha512-BC4s8y6SEVA6Q1rSxZTto8hI1KUI3xXlHGZgvGqP4IqPdI/a6FX9H29IDNz7vKo9l21b6LfYosScPL6M3xxyDQ==}
+    engines: {node: '>=20'}
+    hasBin: true
 
   possible-typed-array-names@1.1.0:
     resolution: {integrity: sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg==}
@@ -5148,6 +5190,8 @@ snapshots:
   picomatch@2.3.2: {}
 
   picomatch@4.0.7: {}
+
+  playwright-core@1.64.1: {}
 
   possible-typed-array-names@1.1.0: {}
 

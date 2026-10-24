@@ -22,6 +22,7 @@ pnpm gen:sandbox    # builder.ts/motion.ts 변경 후 MCP QuickJS 샌드박스 �
 ## 구조 요약
 
 - `packages/core` — **헤드리스 순수 TS**. DOM·three.js import 금지. 스키마(zod), 검증, compile/evaluate, 스크립트 빌더, 프롬프트 키트
+- `packages/mcp` — MCP 도구(원격 `/api/mcp`와 로컬 `blockshot-mcp` stdio 공용). `pnpm --filter @blockshot/mcp build` → `dist/cli.mjs`
 - `apps/web` — Next.js 16 App Router + React Three Fiber + zustand. core를 소스(TS)로 직접 import (Turbopack이 워크스페이스 패키지 자동 트랜스파일)
 
 ## 반드시 지킬 규칙

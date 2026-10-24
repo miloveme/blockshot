@@ -5,12 +5,13 @@
   "scripts": {
     "dev": "pnpm --filter web dev",
     "build": "pnpm --filter @blockshot/core build && pnpm --filter web build",
-    "test": "pnpm --filter @blockshot/core test",
+    "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r typecheck",
     "gen:schema": "pnpm --filter @blockshot/core gen:schema",
     "lint": "pnpm --filter web lint",
     "check": "pnpm test && pnpm typecheck && pnpm lint && pnpm build",
-    "gen:sandbox": "pnpm --filter @blockshot/core gen:sandbox"
+    "gen:sandbox": "pnpm --filter @blockshot/core gen:sandbox",
+    "build:mcp": "pnpm --filter @blockshot/mcp build"
   },
   "engines": {
     "node": ">=22"

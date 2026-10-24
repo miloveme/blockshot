@@ -25,9 +25,34 @@ Vercel 프로젝트 환경변수 `mcp_token`(또는 `MCP_TOKEN`)을 설정하면
 
 권장 루프: `get_guide` → `run_script` → `preview`(여러 시각) / `evaluate`로 확인 → 고쳐서 `run_script`(base 넘겨 부분 수정) → `open_link`를 사용자에게 전달. 사용자는 링크에서 재생하고 키프레임·뼈를 직접 손본다.
 
+## 로컬에서 실행 (`blockshot-mcp`, stdio) — 서버 비용 0, MP4까지
+
+같은 도구를 내 컴퓨터에서 직접 돌린다. 스크립트는 같은 QuickJS 샌드박스, 프리뷰는 resvg로 로컬에서 처리하므로 Vercel을 전혀 쓰지 않는다. 로컬에서만 되는 도구가 둘 더 있다.
+
+| 도구 | 설명 |
+|---|---|
+| `render_still` | 스튜디오와 같은 **진짜 3D 렌더** PNG (`preview` 도식보다 훨씬 정확, 몇 초) |
+| `render_video` | 장면을 **MP4(Chrome이 H.264를 지원하지 않으면 WebM)로 렌더**해 파일로 저장하고 경로를 돌려준다. `range`(샷 id/`all`)·`camera`·`scale`·`pass` 선택 |
+
+렌더는 **내 컴퓨터의 Chrome(헤드리스)** 이 스튜디오 페이지를 열어(`BLOCKSHOT_URL`, 기본은 배포본) 브라우저 렌더러+WebCodecs로 인코딩한다 — 렌더 서버 없음. 소프트웨어 WebGL이라 몇 초 영상도 수십 초~수 분 걸릴 수 있다.
+
+설치(저장소를 받은 경우):
+
+```
+pnpm install && pnpm --filter @blockshot/mcp build      # → packages/mcp/dist/cli.mjs
+claude mcp add blockshot -- node /절대경로/blockshot/packages/mcp/dist/cli.mjs
+```
+
+필요한 것: Node 22+, Google Chrome(없으면 `BLOCKSHOT_CHROME`에 크롬/크로미움 실행 파일 경로). `render_*`를 쓸 때만 필요하다.
+환경변수: `BLOCKSHOT_URL`(링크·렌더에 쓰는 스튜디오 주소, 로컬 개발 서버면 `http://localhost:3000`), `BLOCKSHOT_CHROME`.
+
+어느 쪽을 쓸지: 데스크톱에서는 **로컬**(비용 0, MP4 가능), iPad·모바일처럼 설치가 안 되는 곳은 **원격**. 둘 다 등록해 두어도 된다(이름만 다르게).
+
+패키지 구조: 도구 정의는 `packages/mcp/src/tools.ts`(호스트 무관), 원격(`apps/web/src/server/mcp.ts`)과 로컬(`node-platform.ts` + `cli.ts`)이 각자 샌드박스·PNG 처리를 주입한다. 스튜디오 페이지는 `window.__blockshot`(`lib/render.ts`)로 헤드리스 렌더 API를 노출한다.
+
 ## 구현 메모
 
-- 스크립트는 **QuickJS(WASM) 샌드박스**에서 실행한다(`apps/web/src/server/sandbox.ts`): 네트워크·파일·호스트 객체 없음, 메모리 96 MB·4 s 제한. 샌드박스에 들어가는 번들은 `pnpm gen:sandbox`로 `builder.ts` 등을 묶어 생성(`sandbox-runtime.generated.ts`, 커밋 포함). builder/motion을 고치면 다시 생성한다.
+- 스크립트는 **QuickJS(WASM) 샌드박스**에서 실행한다(`apps/web/src/server/sandbox.ts`(로컬은 `packages/mcp/src/node-platform.ts`)): 네트워크·파일·호스트 객체 없음, 메모리 96 MB·4 s 제한. 샌드박스에 들어가는 번들은 `pnpm gen:sandbox`로 `builder.ts` 등을 묶어 생성(`sandbox-runtime.generated.ts`, 커밋 포함). builder/motion을 고치면 다시 생성한다.
 - `preview`는 GPU 없이 동작하는 **도식 렌더러**다: `core/preview.ts`가 SVG를 만들고 `@resvg/resvg-js`가 PNG로 바꾼다(`serverExternalPackages`로 번들 제외, 글꼴은 임베드). 최종 영상 품질이 아니라 구도·자세·동선 확인용이다.
 - 링크: `/studio#s=<base64url(deflate-raw(JSON))>` — 열면 새 프로젝트로 로드(`lib/share.ts`, 기존 작업은 건드리지 않음).
-- 문서 임베드(`docs.generated.ts`)는 `pnpm gen:schema`가 만든다.
+- 문서 임베드(`packages/mcp/src/docs.generated.ts`)는 `pnpm gen:schema`가, 샌드박스 번들(`runtime.generated.ts`)은 `pnpm gen:sandbox`가 만든다.

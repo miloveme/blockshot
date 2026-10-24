@@ -2,7 +2,7 @@
 
 import * as THREE from "three";
 import { BufferTarget, CanvasSource, Mp4OutputFormat, Output, QUALITY_HIGH, WebMOutputFormat, getFirstEncodableVideoCodec } from "mediabunny";
-import { DEG, type PlannedFrame, type Vec3 } from "@blockshot/core";
+import { DEG, planFrames, type PlannedFrame, type Vec3 } from "@blockshot/core";
 import { useStudio } from "./store";
 import { aimCamera } from "@/components/viewport/util";
 
@@ -213,4 +213,42 @@ export function downloadBlob(blob: Blob, name: string) {
   a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+}
+
+// ---- page API for headless callers (the local MCP server drives a Chrome through this) --------------------------------
+
+const toBase64 = (blob: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(blob);
+  });
+
+if (typeof window !== "undefined") {
+  const scaled = (w: number, scale: number) => Math.round((w * scale) / 2) * 2;
+  (window as unknown as { __blockshot: unknown }).__blockshot = {
+    ready: () => bridge !== null,
+    /** { range?: shot id | "all", camera?, scale?, pass?, depthFar? } → encoded video as base64 */
+    async video(req: { range?: string; camera?: string; scale?: number; pass?: RenderPass; depthFar?: number }) {
+      const { spec } = useStudio.getState();
+      const shot = spec.shots.find((s) => s.id === req.range);
+      const frames = planFrames(spec, { shotId: shot?.id, camera: req.camera });
+      const [w, h] = spec.settings.resolution;
+      const scale = req.scale && req.scale > 0 ? req.scale : 1;
+      const r = await renderVideo({ frames, width: scaled(w, scale), height: scaled(h, scale), pass: req.pass ?? "beauty", depthFar: req.depthFar ?? 12 });
+      return { base64: await toBase64(r.blob), extension: r.extension, frames: frames.length, seconds: frames.length / spec.settings.fps, cameraLog: r.cameraLog };
+    },
+    /** { t, camera?, width?, pass? } → PNG as base64 */
+    async still(req: { t: number; camera?: string; width?: number; pass?: RenderPass; depthFar?: number }) {
+      const st = useStudio.getState();
+      st.setTime(Math.max(0, Math.min(req.t, st.spec.settings.duration)));
+      const cam = req.camera ?? useStudio.getState().sceneState.activeCameraId ?? st.spec.cameras[0]?.id;
+      if (!cam) throw new Error("no camera in the scene");
+      const [w, h] = st.spec.settings.resolution;
+      const width = req.width && req.width > 0 ? Math.round(req.width / 2) * 2 : w;
+      const height = Math.round(((width * h) / w) / 2) * 2;
+      return { base64: await toBase64(await renderStill({ width, height, pass: req.pass ?? "beauty", depthFar: req.depthFar ?? 12, camera: cam })) };
+    },
+  };
 }
