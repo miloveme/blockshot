@@ -231,11 +231,12 @@ if (typeof window !== "undefined") {
   const scaled = (w: number, scale: number) => Math.round((w * scale) / 2) * 2;
   (window as unknown as { __blockshot: unknown }).__blockshot = {
     ready: () => bridge !== null,
-    /** { range?: shot id | "all", camera?, scale?, pass?, depthFar? } → encoded video as base64 */
-    async video(req: { range?: string; camera?: string; scale?: number; pass?: RenderPass; depthFar?: number }) {
+    /** { range?: shot id | "all", from?, to? (seconds: edit time, or scene time with a fixed camera), camera?, scale?, pass?, depthFar? } → encoded video as base64 */
+    async video(req: { range?: string; from?: number; to?: number; camera?: string; scale?: number; pass?: RenderPass; depthFar?: number }) {
       const { spec } = useStudio.getState();
       const shot = spec.shots.find((s) => s.id === req.range);
-      const frames = planFrames(spec, { shotId: shot?.id, camera: req.camera });
+      const frames = planFrames(spec, { shotId: shot?.id, camera: req.camera, from: req.from, to: req.to });
+      if (!frames.length) throw new Error("the range has no frames (check from / to against the edit or scene length)");
       const [w, h] = spec.settings.resolution;
       const scale = req.scale && req.scale > 0 ? req.scale : 1;
       const r = await renderVideo({ frames, width: scaled(w, scale), height: scaled(h, scale), pass: req.pass ?? "beauty", depthFar: req.depthFar ?? 12 });

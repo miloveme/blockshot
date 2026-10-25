@@ -188,7 +188,8 @@ export const Action = z.discriminatedUnion("type", [
   z.object({ type: z.literal("standUp"), actor: Id, duration: z.number().positive().default(0.8), to: Vec3.optional(), ...timed }),
   z.object({ type: z.literal("lookAt"), actor: Id, target: Target, end: z.number().optional(), ...timed }),
   z.object({ type: z.literal("cameraMove"), camera: Id, to: Vec3, duration: z.number().positive(), ease: Ease.default("easeInOut"), ...timed }),
-  z.object({ type: z.literal("cameraLookAt"), camera: Id, target: Target, ...timed }),
+  /** switch what the camera holds on; `duration` > 0 pans there over that many seconds (on screen), omitted / 0 = instant (at a cut) */
+  z.object({ type: z.literal("cameraLookAt"), camera: Id, target: Target, duration: z.number().min(0).max(30).optional(), ...timed }),
   z.object({ type: z.literal("zoom"), camera: Id, focalLength: z.number().min(4).max(600), duration: z.number().positive(), ease: Ease.default("easeInOut"), ...timed }),
   z.object({ type: z.literal("orbit"), camera: Id, around: Target, degrees: z.number(), duration: z.number().positive(), ease: Ease.default("easeInOut"), ...timed }),
 ]);
@@ -229,6 +230,8 @@ export const Shot = z.object({
   end: z.number().positive(),
   description: z.string().optional(),
   prompt: z.string().optional(),
+  /** the cut INTO this shot crosses the 180° line on purpose (silences the axis check) */
+  crossAxis: z.boolean().optional(),
 });
 export type Shot = z.infer<typeof Shot>;
 

@@ -20,7 +20,7 @@
   ],
   "cameras": [
     { "id": "camA", "name": "A — 와이드", "position": [2.6, 1.6, 2.8], "lookAt": "minsu.head", "focalLength": 28 },
-    { "id": "camB", "name": "B — OTS", "position": [-1.0, 1.22, -2.9], "lookAt": "minsu.chest", "focalLength": 28 }
+    { "id": "camB", "name": "B — OTS", "position": [-1.2, 1.22, -2.55], "lookAt": "minsu.chest", "focalLength": 28 }
   ],
   "actions": [
     { "type": "walkTo", "actor": "minsu", "to": [[1.2, 0, -2.2], [0.7, 0, -1.7]], "start": 0.5, "duration": 3.2 },

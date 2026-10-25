@@ -3,8 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { editDuration, planFrames } from "@blockshot/core";
+import { ArrowLeftToLine, ArrowRightToLine } from "lucide-react";
 import { downloadBlob, renderStill, renderVideo, type RenderPass, type RenderResult } from "@/lib/render";
 import { viewedCameraId } from "./viewport/util";
+import { NumField } from "./fields";
+import { IconButton } from "./ui";
 
 const label = "mb-1 block text-[11px] font-medium text-ink-2";
 const select = "w-full rounded border border-line bg-black/30 px-2 py-1 text-xs";
@@ -15,7 +18,14 @@ const slug = (s: string) => s.replace(/[^\p{L}\p{N}_-]+/gu, "_") || "blockshot";
 export function RenderPanel() {
   const spec = useStudio((s) => s.spec);
   const rendering = useStudio((s) => s.rendering);
+  /** "all" | a shot id | "custom" (from / to below) */
   const [range, setRange] = useState("all");
+  const [from, setFrom] = useState(0);
+  const [to, setTo] = useState(0);
+  const editTime = useStudio((s) => s.editTime);
+  const sceneTime = useStudio((s) => s.time);
+  const inPoint = useStudio((s) => s.inPoint);
+  const outPoint = useStudio((s) => s.outPoint);
   const [camera, setCamera] = useState("shots");
   const [pass, setPass] = useState<RenderPass>("beauty");
   const [scale, setScale] = useState(1);
@@ -34,9 +44,26 @@ export function RenderPanel() {
   const height = Math.round((h0 * scale) / 2) * 2;
   const shot = spec.shots.find((s) => s.id === range);
   const fixedCam = camera === "shots" ? undefined : camera;
-  const plan = planFrames(spec, { shotId: shot?.id, camera: fixedCam });
-  const seconds = plan.length / spec.settings.fps;
-  const baseName = `${slug(spec.meta.title)}${shot ? `_${shot.id}` : ""}_${pass}`;
+  const { fps } = spec.settings;
+  // a custom range is in the time of what is rendered: the edit (shot order) or the scene (one fixed camera / no shots)
+  const sceneBased = !!fixedCam || spec.shots.length === 0;
+  const total = sceneBased ? spec.settings.duration : editDuration(spec);
+  const custom = range === "custom";
+  const lo = Math.min(Math.max(0, from), total);
+  const hi = Math.min(Math.max(lo + 1 / fps, to), total);
+  const playhead = sceneBased ? sceneTime : editTime;
+  const inOut = !sceneBased && inPoint !== null && outPoint !== null ? ([Math.min(inPoint, outPoint), Math.max(inPoint, outPoint)] as const) : null;
+  const plan = planFrames(spec, { shotId: shot?.id, camera: fixedCam, ...(custom ? { from: lo, to: hi } : {}) });
+  const seconds = plan.length / fps;
+  const baseName = `${slug(spec.meta.title)}${shot ? `_${shot.id}` : ""}${custom ? `_${lo.toFixed(1)}-${hi.toFixed(1)}s` : ""}_${pass}`;
+  const chooseRange = (v: string) => {
+    if (v === "custom" && range !== "custom") {
+      // start from the cut editor's In / Out when there is one, else the whole timeline
+      setFrom(inOut ? inOut[0] : 0);
+      setTo(inOut ? inOut[1] : total);
+    }
+    setRange(v);
+  };
 
   const run = async () => {
     setError(null);
@@ -73,15 +100,49 @@ export function RenderPanel() {
 
       <div>
         <span className={label}>구간</span>
-        <select className={select} value={range} onChange={(e) => setRange(e.target.value)} disabled={rendering}>
+        <select className={select} value={range} onChange={(e) => chooseRange(e.target.value)} disabled={rendering}>
           <option value="all">{fixedCam ? `장면 전체 0–${spec.settings.duration}s` : `편집본 전체 (${spec.shots.length}샷 · ${editDuration(spec).toFixed(1)}s)`}</option>
           {spec.shots.map((s, i) => (
             <option key={s.id} value={s.id}>
               {i + 1}. 샷 {s.id} · {s.start}–{s.end}s
             </option>
           ))}
+          <option value="custom">직접 지정 (시작–끝)</option>
         </select>
       </div>
+
+      {custom ? (
+        <div className="flex flex-col gap-2 rounded-md border border-line bg-black/20 p-2">
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                ["시작 (초)", lo, setFrom, ArrowLeftToLine],
+                ["끝 (초)", hi, setTo, ArrowRightToLine],
+              ] as const
+            ).map(([name, value, set, Icon]) => (
+              <div key={name}>
+                <span className={label}>{name}</span>
+                <div className="flex items-center gap-1">
+                  <div className="min-w-0 flex-1">
+                    <NumField value={value} min={0} max={total} step={1 / fps} digits={2} onCommit={set} />
+                  </div>
+                  <IconButton icon={Icon} size="sm" label={`재생 헤드 위치(${playhead.toFixed(2)}s)로`} tipSide="top" onClick={() => set(Number(playhead.toFixed(3)))} disabled={rendering} />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between gap-2 text-[11px] text-ink-3">
+            <span>
+              {sceneBased ? "장면 시간" : "편집본 시간(컷 편집 눈금)"} 기준 · 0–{total.toFixed(1)}s · {plan.length}프레임
+            </span>
+            {inOut ? (
+              <button type="button" className="shrink-0 rounded bg-accent-soft px-1.5 py-0.5 font-mono text-[10px] text-accent hover:bg-accent/25" onClick={() => (setFrom(inOut[0]), setTo(inOut[1]))} title="컷 편집에서 찍은 In / Out 구간">
+                In/Out {inOut[0].toFixed(1)}–{inOut[1].toFixed(1)}s
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       <div>
         <span className={label}>카메라</span>
@@ -124,7 +185,7 @@ export function RenderPanel() {
       ) : null}
 
       <div className="flex gap-2">
-        <button className="flex-1 rounded bg-accent px-3 py-1.5 font-medium text-black hover:brightness-110 disabled:opacity-40" onClick={run} disabled={rendering}>
+        <button className="flex-1 rounded bg-accent px-3 py-1.5 font-medium text-black hover:brightness-110 disabled:opacity-40" onClick={run} disabled={rendering || plan.length === 0}>
           🎞 영상 렌더 ({seconds.toFixed(1)}s)
         </button>
         <button className="rounded bg-raised px-3 py-1.5 hover:bg-hover disabled:opacity-40" onClick={still} disabled={rendering} title="현재 시간의 프레임 (image-to-video 첫 프레임용)">

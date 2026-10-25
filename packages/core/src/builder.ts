@@ -87,7 +87,8 @@ export interface CameraHandle {
   pedestal(distance: number, opts: Timing & { duration: number }): CameraHandle;
   orbit(around: Target, opts: Timing & { duration: number; degrees: number }): CameraHandle;
   zoom(focalLength: number, opts: Timing & { duration: number }): CameraHandle;
-  lookAt(target: Target, opts: { start: number }): CameraHandle;
+  /** Hold on a new subject from `start`; `duration` (s) pans there on screen — omit at a cut (instant). */
+  lookAt(target: Target, opts: { start: number; duration?: number }): CameraHandle;
   /** Ride along with an actor / prop (chase cam, hood cam): keep `offset` from it in its own frame and aim at `look`. */
   mount(to: { id: string } | string, opts: { start: number; offset?: Vec3; look?: Vec3; end?: number }): CameraHandle;
 }
@@ -227,7 +228,7 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
       mount: (to, o) => (action({ type: "mount", camera: id, to: typeof to === "string" ? to : to.id, ...o }), handle),
       zoom: (focalLength, o) => (action({ type: "zoom", camera: id, focalLength, start: o.start, duration: o.duration, ease: o.ease }), handle),
       lookAt: (target, o) => {
-        action({ type: "cameraLookAt", camera: id, target, start: o.start });
+        action({ type: "cameraLookAt", camera: id, target, start: o.start, ...(o.duration ? { duration: o.duration } : {}) });
         cur().aim = target;
         return handle;
       },
@@ -324,15 +325,15 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
       camCursor.set(id, { pos, aim: o.lookAt ?? null, rotation: o.rotation ?? [0, 0, 0] });
       return makeCamera(id);
     },
-    shot(id: string, o: { camera: CameraHandle | string; start: number; end: number; name?: string; description?: string; prompt?: string; after?: string }) {
-      const shot = { id, name: o.name, camera: typeof o.camera === "string" ? o.camera : o.camera.id, start: o.start, end: o.end, description: o.description, prompt: o.prompt };
+    shot(id: string, o: { camera: CameraHandle | string; start: number; end: number; name?: string; description?: string; prompt?: string; after?: string; crossAxis?: boolean }) {
+      const shot = { id, name: o.name, camera: typeof o.camera === "string" ? o.camera : o.camera.id, start: o.start, end: o.end, description: o.description, prompt: o.prompt, ...(o.crossAxis ? { crossAxis: true } : {}) };
       const at = o.after === undefined ? -1 : spec.shots.findIndex((s) => s.id === o.after);
       if (o.after !== undefined && at < 0) throw new Error(`scene.shot("${id}"): no shot "${o.after}" to insert after. Available: ${spec.shots.map((s) => s.id).join(", ") || "none"}`);
       if (at < 0) spec.shots.push(shot);
       else spec.shots.splice(at + 1, 0, shot);
     },
-    /** Changes fields of an existing shot (camera, start, end, name, description, prompt); everything else stays. */
-    patchShot(id: string, o: { camera?: CameraHandle | string; start?: number; end?: number; name?: string; description?: string; prompt?: string }) {
+    /** Changes fields of an existing shot (camera, start, end, name, description, prompt, crossAxis); everything else stays. */
+    patchShot(id: string, o: { camera?: CameraHandle | string; start?: number; end?: number; name?: string; description?: string; prompt?: string; crossAxis?: boolean }) {
       const shot = spec.shots.find((s) => s.id === id);
       if (!shot) throw new Error(`scene.patchShot("${id}"): no such shot. Available: ${spec.shots.map((s) => s.id).join(", ") || "none"}`);
       const { camera, ...rest } = o;

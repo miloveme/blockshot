@@ -112,26 +112,45 @@ export interface PlannedFrame {
 /**
  * - `camera` given: that camera over a scene-time range (a shot's in/out, or the whole scene).
  * - otherwise: the edit — every clip in order (or just `shotId`), each through its own camera.
+ * - `from` / `to` (seconds) trim that to a custom range: SCENE time with a fixed camera (or when there are no shots),
+ *   EDIT-timeline time when following the shot order (what the cut editor's ruler and In / Out show). A range that misses
+ *   everything plans no frames.
  */
-export function planFrames(spec: BlockshotSpec, opts: { shotId?: string; camera?: string } = {}): PlannedFrame[] {
+export function planFrames(spec: BlockshotSpec, opts: { shotId?: string; camera?: string; from?: number; to?: number } = {}): PlannedFrame[] {
   const { fps, duration } = spec.settings;
   const frames: PlannedFrame[] = [];
+  const lo = opts.from ?? -Infinity;
+  const hi = opts.to ?? Infinity;
+  const custom = opts.from !== undefined || opts.to !== undefined;
   const range = (from: number, to: number, camera: string, shot: string | null) => {
+    if (to - from <= 1e-6) return;
     const n = Math.max(1, Math.round((to - from) * fps));
     for (let k = 0; k < n; k++) frames.push({ t: roundT(from + k / fps), camera, shot });
   };
+  /** a scene-time window trimmed to [from, to] */
+  const sceneWindow = (from: number, to: number, camera: string, shot: string | null) => range(Math.max(from, lo), Math.min(to, hi), camera, shot);
   const shot = opts.shotId ? spec.shots.find((s) => s.id === opts.shotId) : undefined;
   if (opts.camera) {
-    range(shot ? shot.start : 0, shot ? shot.end : duration, opts.camera, shot?.id ?? null);
+    sceneWindow(shot ? shot.start : 0, shot ? shot.end : duration, opts.camera, shot?.id ?? null);
     return frames;
   }
-  const clips = shot ? [shot] : spec.shots;
-  if (!clips.length) {
+  if (!spec.shots.length) {
     const cam = spec.cameras[0]?.id;
-    if (cam) range(0, duration, cam, null);
+    if (cam) sceneWindow(0, duration, cam, null);
     return frames;
   }
-  for (const s of clips) range(s.start, s.end, s.camera, s.id);
+  for (const clip of buildSequence(spec)) {
+    if (shot && clip.shot.id !== shot.id) continue;
+    if (!custom) {
+      range(clip.shot.start, clip.shot.end, clip.shot.camera, clip.shot.id);
+      continue;
+    }
+    // the part of this clip inside the edit-time range, mapped back to scene time
+    const a = Math.max(clip.editStart, lo);
+    const b = Math.min(clip.editEnd, hi);
+    if (b - a <= 1e-6) continue;
+    range(clip.shot.start + (a - clip.editStart), clip.shot.start + (b - clip.editStart), clip.shot.camera, clip.shot.id);
+  }
   return frames;
 }
 

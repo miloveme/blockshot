@@ -1,3 +1,4 @@
+import { checkAxis } from "./axis";
 import type { Action, BlockshotSpec, Prop, Space, Vec3 } from "./schema";
 import { PROP_CATALOG, propSize } from "./catalog";
 import { DEG } from "./math";
@@ -161,6 +162,8 @@ export function lintLayout(spec: BlockshotSpec): Issue[] {
   }
 
   issues.push(...lintMirrorShots(spec));
+  // 180° rule at the cuts — advice, the scene stays valid (mark intended crossings with "crossAxis": true)
+  for (const w of checkAxis(spec)) issues.push({ path: `shots[${w.index}]`, message: w.message });
   return issues.slice(0, MAX_REPORTED);
 }
 

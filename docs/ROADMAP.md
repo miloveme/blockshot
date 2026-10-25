@@ -118,6 +118,9 @@
 - [x] `window.blockshot` API: commands/run/spec/load/addon/script/select/seek/play/state/link/on ([docs/EDITOR_API.md](EDITOR_API.md))
 - [x] 반응형 셸: 1200px 미만 좌우 패널 서랍화, 1024px 미만 ☰ 메뉴, 컨테이너 쿼리 우선순위 숨김(뷰포트 바·트랜스포트·탭), 짧은 창 타임라인 축소, 컷 편집 아이콘 툴바
 - [x] 포커스: F = 선택한 것으로 화면 맞추기(뼈 포함, 박스 모서리 기준 프러스텀 맞춤, 0.35초 이징, 탑뷰 동기), A/⇧F = 전체 보기, 아웃라이너 더블클릭
+- [x] 렌더 구간 직접 지정(시작·끝, 재생 헤드·In/Out으로 채우기): core `planFrames({ from, to })` — 샷 순서면 편집본 시간, 카메라 고정이면 장면 시간. 로컬 MCP `render_video`도 `from`/`to`
+- [x] 용어 '조준' → '피사체 고정'. 피사체 전환: `cameraLookAt.duration`으로 숏 안 팬·틸트(시선 방향 slerp), 카메라 속성 '피사체 전환' 목록·추가
+- [x] 축선(180°) 자동 검사 `checkAxis`(두 인물 축선 / 단일 피사체 진행 방향, 중립 ±15°, `crossAxis` 의도 표시) — 경고만, lintLayout·MCP 포함, 컷 트랙 ⚠ 표시, 샷 패널: 같은 쪽 카메라로·의도한 연출·AI에게 해결 방안 묻기·프롬프트 복사. 샘플 거실 camB를 축선 같은 쪽으로
 - [ ] 그래프 에디터(커브), 도프시트에서 키 드래그 이동·다중 선택, 사용자 단축키 재지정, 라이트 테마
 
 ## M5 이후

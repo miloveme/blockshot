@@ -47,6 +47,27 @@ describe("edit sequence", () => {
     expect(frames.at(-1)!.camera).toBe("camA");
     expect(planFrames(spec, { camera: "camB" }).length).toBe(8 * 24);
   });
+
+  it("renders a custom range: edit time across a cut, scene time with a fixed camera", () => {
+    // edit 3.0–5.0 s spans the S1 → S2 cut at 4.2: 1.2 s of camA (scene 3.0–4.2) then 0.8 s of camB (scene 4.2–5.0)
+    const cut = planFrames(spec, { from: 3, to: 5 });
+    expect(cut.length).toBe(Math.round(1.2 * 24) + Math.round(0.8 * 24));
+    expect(cut[0]).toEqual({ t: 3, camera: "camA", shot: "S1" });
+    expect(cut.find((f) => f.shot === "S2")).toEqual({ t: 4.2, camera: "camB", shot: "S2" });
+    expect(cut.at(-1)!.t).toBeLessThan(5);
+    // moved shots: edit time follows the edit order, not scene time
+    const moved = planFrames(moveShot(spec, "S2", 0), { from: 0, to: 1 });
+    expect(moved.every((f) => f.camera === "camB")).toBe(true);
+    expect(moved[0]!.t).toBe(4.2);
+    // fixed camera: plain scene time, clamped to the scene
+    const fixed = planFrames(spec, { camera: "camA", from: 6, to: 99 });
+    expect(fixed.length).toBe(2 * 24);
+    expect(fixed[0]).toEqual({ t: 6, camera: "camA", shot: null });
+    // one end only, a shot and a range together, and a range that misses everything
+    expect(planFrames(spec, { to: 1 }).length).toBe(24);
+    expect(planFrames(spec, { shotId: "S2", from: 0, to: 5 }).length).toBe(Math.round(0.8 * 24));
+    expect(planFrames(spec, { from: 20, to: 30 })).toEqual([]);
+  });
 });
 
 describe("NLE edits", () => {

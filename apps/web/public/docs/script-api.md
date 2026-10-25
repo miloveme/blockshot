@@ -57,13 +57,13 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 | `scene.patchAction(id, fields)` | 기존 액션 한 개의 필드만 수정 (id = 명시한 `id` 또는 `act1`, `act2` … 위치 라벨, `type`은 변경 불가) |
 | `scene.removeAction(id)` | 기존 액션 한 개 삭제 |
 | `scene.clearActions(idOrHandle?)` | 기존 액션 삭제 — 한 오브젝트 것만, 인자가 없으면 전부 (처음부터 다시 연출할 때) |
-| `scene.patchShot(id, { camera?, start?, end?, name?, description?, prompt? })` | **기존 샷의 일부만 수정** — 적은 필드만 바뀐다. 없는 id면 가능한 id 목록과 함께 오류 |
+| `scene.patchShot(id, { camera?, start?, end?, name?, description?, prompt?, crossAxis? })` | **기존 샷의 일부만 수정** — 적은 필드만 바뀐다. 없는 id면 가능한 id 목록과 함께 오류 |
 | `scene.removeShot(id)` | 샷 하나 삭제 |
 | `scene.shot(id, { ..., after? })` | 샷 추가. `after: "S1"`이면 S1 바로 뒤에 삽입, 없으면 끝에 추가 |
 | `scene.clearShots()` | 샷 목록 전체 비우기 (컷을 처음부터 새로 만들 때만) |
 | `scene.reflect(ref, mirror) → ref` | `scene.reflect(man.chest, mirror)` → `"man.chest@mirror"`: 거울 속 반사 위치. 카메라 `lookAt`/`orbit`의 대상으로 쓴다 |
 | `scene.camera(id, opts) → Camera` | `opts: { name?, lens?, sensor?, at?, lookAt?, rotation? }` |
-| `scene.shot(id, { camera, start, end, description?, prompt? })` | 샷 추가 |
+| `scene.shot(id, { camera, start, end, description?, prompt?, crossAxis? })` | 샷 추가. `crossAxis: true` = 이 샷으로 들어오는 컷이 180° 축선을 일부러 넘음(축선 경고 끄기) |
 | `scene.key(targetId, property, t, value, ease?)` | 저수준 키프레임 (`property`에 `bone:rightUpperArm`·`hips` 가능) |
 | `actor.bone(bone, [[t,[x°,y°,z°]],…], ease?)` | 뼈 키프레임 (오일러 도). `actor.hips([[t,[x,y,z]],…])`는 골반 |
 | `scene.toSpec()` | 현재까지의 Spec 반환(런타임이 자동 호출) |
@@ -98,7 +98,7 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 | `.truck(distance, opts)` / `.pedestal(distance, opts)` | 좌우 / 상하 평행 이동 |
 | `.orbit(around, { degrees, start, duration, ease? })` | 원호 이동 |
 | `.zoom(focalLength, { start, duration, ease? })` | 초점거리 변경 |
-| `.lookAt(target, { start })` | 조준 대상 변경 |
+| `.lookAt(target, { start, duration? })` | 피사체 고정 대상 변경 (`duration` 초 동안 팬으로 넘어감, 생략 시 즉시 — 컷 지점용) |
 | `.id` | |
 
 ### 유틸

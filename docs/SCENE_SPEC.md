@@ -142,7 +142,7 @@ LLM과 사람이 가장 많이 쓰는 레이어. 로드 시 `compile()`이 `trac
 | `standUp` | `actor, start, duration?(0.8), to?` | `stand`로 일어나 좌석(의자·소파) 앞 가장자리 너머 0.25 m까지 걸어 나온다(좌석이 아니면 바라보는 방향으로 0.6 m, 또는 `to`). `pose`/포즈 키로 `sit` → 다른 포즈로 바뀔 때도, 그 자리에 머물러 있으면 같은 방식으로 좌석 밖으로 나온다 |
 | `lookAt` | `actor, target, start, end?` | 머리 방향 |
 | `cameraMove` | `camera, to: Vec3, start, duration, ease?` | 카메라 이동 |
-| `cameraLookAt` | `camera, target, start` | 카메라 조준 대상 변경 |
+| `cameraLookAt` | `camera, target, start, duration?` | 카메라의 피사체 고정 대상 변경. `duration`(초)을 주면 그동안 이전 피사체에서 새 피사체로 팬·틸트(시선 방향을 일정한 각속도로 회전, 둘 다 움직여도 따라감). 생략·0이면 즉시 전환 — 컷 지점용. 숏 안에서 피사체를 바꾸는 것은 의도된 연출일 때만 |
 | `zoom` | `camera, focalLength, start, duration, ease?` | 초점거리 애니메이션 |
 | `orbit` | `camera, around: Vec3 \| ref, degrees, start, duration, ease?` | 대상 중심 원호 이동 |
 
@@ -186,6 +186,13 @@ LLM과 사람이 가장 많이 쓰는 레이어. 로드 시 `compile()`이 `trac
 
 - 자유 시점·카메라 시점(장면 시간 보기)에서 "현재 샷"은 그 장면 시간을 덮는 샷 중 배열 뒤쪽 것. 샷이 없는 시간은 첫 번째 카메라
 - `prompt`는 AI 영상 생성용 텍스트로 내보내기에 포함된다
+- `crossAxis: true` — 이 샷으로 들어오는 컷이 **180° 규칙(축선)을 일부러 넘는다**는 표시. 축선 검사가 이 컷은 경고하지 않는다
+
+**축선 검사(`checkAxis`, `lintLayout`에 포함)** — 경고일 뿐 장면은 유효하다. 편집 순서의 각 컷마다:
+- 화면에 두 인물이 있으면(앞뒤 샷에서 보이는 인물 중 가장 중심에 가까운 둘) 그 둘을 잇는 선 기준으로, 앞 샷과 뒤 샷 카메라가 반대편이면 경고(두 사람의 화면 좌우가 바뀜)
+- 인물 한 명·차량처럼 하나만 움직이면 이동 경로를 선으로 보고, 반대편으로 컷하면 경고(화면 진행 방향이 반대로 바뀜)
+- 경고하지 않음: 선 위(±15°)의 중립 숏, 같은 카메라가 끊김 없이 이어지는 컷, `crossAxis: true`인 샷
+- 경고마다 반대편 카메라를 선에 대해 대칭으로 옮긴 위치(`suggestion`)를 제안한다
 
 ### bin — 보관함
 

@@ -9,7 +9,7 @@ import { commitTransform, insertKeyAtCurrentTime, matchCameraToFreeView, patch, 
 import { getBridge } from "@/lib/render";
 import { ColorField, NumField, Row, SelectField, TextField, Vec3Field } from "./fields";
 import { CommandButton, PanelSection } from "./ui";
-import { Accessibility, Armchair, Box, Camera as CameraIcon, Car, Copy, Footprints, Move3d, PersonStanding, Sparkles, Trash2, User } from "lucide-react";
+import { Accessibility, Armchair, Box, Camera as CameraIcon, Car, Copy, Crosshair, Footprints, Move3d, PersonStanding, Plus, Sparkles, Trash2, User, X } from "lucide-react";
 
 const POSE_LABEL: Record<Pose, string> = { stand: "서기", idle: "대기", walk: "걷기", run: "달리기", sit: "앉기", point: "가리키기", talk: "말하기", crouch: "숙이기", climb: "계단 오르기" };
 
@@ -133,10 +133,10 @@ export function Properties() {
               onCommit={(v) => patch(id, { sensor: v })}
             />
           </Row>
-          <Row label="조준">
+          <Row label="피사체 고정" hint="이 카메라가 계속 바라볼 인물·소품 (Look At). 없으면 회전값대로 찍습니다">
             <SelectField
               value={typeof cam.lookAt === "string" ? (cam.lookAt.includes("@") ? "__reflect" : cam.lookAt.split(".")[0]!) : cam.lookAt ? "__point" : "__none"}
-              options={[{ value: "__none", label: "(없음 — 회전 사용)" }, ...(Array.isArray(cam.lookAt) ? [{ value: "__point", label: "고정 좌표" }] : []),
+              options={[{ value: "__none", label: "(고정 안 함 — 회전값 사용)" }, ...(Array.isArray(cam.lookAt) ? [{ value: "__point", label: "고정 좌표" }] : []),
                 ...(typeof cam.lookAt === "string" && cam.lookAt.includes("@") ? [{ value: "__reflect", label: `🪞 반사 (${cam.lookAt})` }] : []), ...refs]}
               onCommit={(v) => {
                 if (v === "__none") patch(id, { lookAt: undefined });
@@ -189,6 +189,11 @@ export function Properties() {
             <PoseEditor actorId={id} />
           </PanelSection>
         </>
+      ) : null}
+      {cam ? (
+        <PanelSection id="subject" title="피사체 전환" icon={Crosshair} defaultOpen={false}>
+          <SubjectChanges cameraId={id} refs={refs} />
+        </PanelSection>
       ) : null}
       {drivable ? (
         <PanelSection id="drive" title="주행" icon={Car}>
@@ -564,5 +569,74 @@ function PoseEditor({ actorId }: { actorId: string }) {
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Changing the camera's subject mid-shot. On a set the subject normally stays put for the whole shot and a new subject
+ * means a cut; re-aiming inside a shot is a deliberate on-screen move — a pan / tilt that takes time (follow then hand off,
+ * reveal, pan to a newcomer). So each change has a transition time: > 0 pans there, 0 switches at once (for a cut point).
+ */
+function SubjectChanges({ cameraId, refs }: { cameraId: string; refs: Array<{ value: string; label: string }> }) {
+  const actions = useStudio((s) => s.spec.actions);
+  const time = useStudio((s) => s.time);
+  const edit = useStudio((s) => s.edit);
+  const [target, setTarget] = useState(refs[0]?.value ?? "");
+  const [duration, setDuration] = useState(0.8);
+  const changes = actions.flatMap((a, i) => (a.type === "cameraLookAt" && a.camera === cameraId ? [{ a, i }] : []));
+  const targetOf = (t: unknown) => (typeof t === "string" ? t.split("@")[0]!.split(".")[0]! : "__point");
+  return (
+    <>
+      <p className="text-[11px] leading-relaxed text-ink-3">
+        보통은 숏 하나에 피사체 하나, 피사체가 바뀌면 컷을 나눕니다. 숏 안에서 옮겨 가는 연출(팬·틸트)이 필요할 때만 쓰세요. 전환 시간이 0이면 그 순간 바로 바뀝니다(컷 지점용).
+      </p>
+      {changes.length ? (
+        <div className="flex flex-col gap-1">
+          <div className="grid grid-cols-[64px_1fr_64px_24px] gap-1 text-[10px] text-ink-3">
+            <span>시작(s)</span>
+            <span>새 피사체</span>
+            <span>전환(s)</span>
+            <span />
+          </div>
+          {changes.map(({ a, i }) =>
+            a.type === "cameraLookAt" ? (
+              <div key={i} className="grid grid-cols-[64px_1fr_64px_24px] items-center gap-1">
+                <NumField value={a.start} min={0} step={0.1} digits={2} onCommit={(v) => edit((s) => patchActionAt(s, i, { start: v }))} />
+                <SelectField
+                  value={targetOf(a.target)}
+                  options={[...(typeof a.target === "string" ? [] : [{ value: "__point", label: "고정 좌표" }]), ...refs]}
+                  onCommit={(v) => v !== "__point" && edit((s) => patchActionAt(s, i, { target: v }))}
+                />
+                <NumField value={a.duration ?? 0} min={0} max={30} step={0.1} digits={1} onCommit={(v) => edit((s) => patchActionAt(s, i, { duration: v }))} />
+                <button type="button" aria-label="삭제" title="이 전환 삭제" className="flex h-6 w-6 items-center justify-center rounded text-ink-3 hover:bg-hover hover:text-key" onClick={() => edit((s) => removeActionAt(s, i))}>
+                  <X size={13} />
+                </button>
+              </div>
+            ) : null,
+          )}
+        </div>
+      ) : null}
+      <div className="grid grid-cols-[1fr_64px] items-end gap-1 border-t border-line pt-2">
+        <div>
+          <span className="mb-1 block text-[10px] text-ink-3">새 피사체</span>
+          <SelectField value={target} options={refs} onCommit={setTarget} />
+        </div>
+        <div>
+          <span className="mb-1 block text-[10px] text-ink-3">전환(s)</span>
+          <NumField value={duration} min={0} max={30} step={0.1} digits={1} onCommit={setDuration} />
+        </div>
+      </div>
+      <button
+        type="button"
+        disabled={!target}
+        onClick={() =>
+          edit((s) => ({ ...s, actions: [...s.actions, { type: "cameraLookAt" as const, camera: cameraId, target, start: Math.round(time * 100) / 100, ...(duration > 0 ? { duration } : {}) }] }))
+        }
+        className="flex h-7 items-center justify-center gap-1.5 rounded-md bg-raised text-xs text-ink hover:bg-hover disabled:opacity-40"
+      >
+        <Plus size={13} />
+        {time.toFixed(2)}s에 {duration > 0 ? `${duration.toFixed(1)}초 동안 팬으로` : "바로"} 전환 추가
+      </button>
+    </>
   );
 }

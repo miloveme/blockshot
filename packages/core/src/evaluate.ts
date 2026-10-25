@@ -41,6 +41,8 @@ interface Segment {
   start: number;
   end: number;
   target: AimTarget;
+  /** seconds to swing over from the previous target (a pan / tilt on screen); 0 = switch at once */
+  blend?: number;
 }
 
 export interface CompiledScene {
@@ -573,7 +575,7 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
     }
     case "cameraLookAt": {
       const list = scene.aims.get(a.camera) ?? [];
-      list.push({ start: a.start, end: Infinity, target: a.target });
+      list.push({ start: a.start, end: Infinity, target: a.target, blend: a.duration ?? 0 });
       scene.aims.set(a.camera, list);
       break;
     }
@@ -604,6 +606,37 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       break;
     }
   }
+}
+
+/** The point `dist` metres ahead of a camera that has no target (rotation YXZ, looking down -Z). */
+function pointAlong(position: Vec3, rotation: Vec3, dist: number): Vec3 {
+  const x = rotation[0] * DEG;
+  const y = rotation[1] * DEG;
+  const d = Math.max(dist, 0.5);
+  return [position[0] - Math.cos(x) * Math.sin(y) * d, position[1] + Math.sin(x) * d, position[2] - Math.cos(x) * Math.cos(y) * d];
+}
+
+/**
+ * Where a camera at `eye` aims k (0..1) of the way through a pan from `a` to `b`: the viewing DIRECTION turns at an even
+ * angular rate (a real pan / tilt, not a slide of the aim point across the room), the distance eases between the two.
+ */
+function panBetween(eye: Vec3, a: Vec3, b: Vec3, k: number): Vec3 {
+  const da = vec.distance(eye, a) || 1e-6;
+  const db = vec.distance(eye, b) || 1e-6;
+  const ua: Vec3 = [(a[0] - eye[0]) / da, (a[1] - eye[1]) / da, (a[2] - eye[2]) / da];
+  const ub: Vec3 = [(b[0] - eye[0]) / db, (b[1] - eye[1]) / db, (b[2] - eye[2]) / db];
+  const dot = Math.max(-1, Math.min(1, ua[0] * ub[0] + ua[1] * ub[1] + ua[2] * ub[2]));
+  const omega = Math.acos(dot);
+  let dir: Vec3;
+  if (omega < 1e-4) dir = ub;
+  else {
+    const s = Math.sin(omega);
+    const wa = Math.sin((1 - k) * omega) / s;
+    const wb = Math.sin(k * omega) / s;
+    dir = [ua[0] * wa + ub[0] * wb, ua[1] * wa + ub[1] * wb, ua[2] * wa + ub[2] * wb];
+  }
+  const d = da + (db - da) * k;
+  return [eye[0] + dir[0] * d, eye[1] + dir[1] * d, eye[2] + dir[2] * d];
 }
 
 function activeSegment(list: Segment[] | undefined, t: number): Segment | undefined {
@@ -1053,13 +1086,23 @@ export function evaluate(scene: CompiledScene, t: number): SceneState {
   for (const c of spec.cameras) {
     const focalLength = sampleKeys(scene.tracks.get(trackKey(c.id, "focalLength"))!, t) as number;
     const lookTrack = scene.tracks.get(trackKey(c.id, "lookAt"));
-    const aim = activeSegment(scene.aims.get(c.id), t);
+    const aims = scene.aims.get(c.id);
+    const aim = activeSegment(aims, t);
+    const position = sampleKeys(scene.tracks.get(trackKey(c.id, "position"))!, t) as Vec3;
+    const rotation = sampleKeys(scene.tracks.get(trackKey(c.id, "rotation"))!, t) as Vec3;
+    let target: Vec3 | null = lookTrack ? (sampleKeys(lookTrack, t) as Vec3) : aim ? resolveTarget(scene, aim.target, t) : null;
+    if (!lookTrack && aim && target && aim.blend && t < aim.start + aim.blend) {
+      // a pan / tilt from what it held on before (or from where it pointed) to the new subject — both may be moving
+      const prev = activeSegment(aims, aim.start - 1e-6);
+      const from = prev ? resolveTarget(scene, prev.target, t) : pointAlong(position, rotation, vec.distance(position, target));
+      target = panBetween(position, from, target, applyEase("easeInOut", (t - aim.start) / aim.blend));
+    }
     cameras[c.id] = {
       id: c.id,
       name: c.name,
-      position: sampleKeys(scene.tracks.get(trackKey(c.id, "position"))!, t) as Vec3,
-      rotation: sampleKeys(scene.tracks.get(trackKey(c.id, "rotation"))!, t) as Vec3,
-      target: lookTrack ? (sampleKeys(lookTrack, t) as Vec3) : aim ? resolveTarget(scene, aim.target, t) : null,
+      position,
+      rotation,
+      target,
       focalLength,
       vFov: verticalFov(focalLength, c.sensor, aspect),
       aspect,
