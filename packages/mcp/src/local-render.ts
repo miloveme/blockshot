@@ -47,13 +47,13 @@ export function localRenderTools(studioUrl: string): Tool[] {
     {
       name: "render_video",
       description:
-        "LOCAL ONLY. Renders the scene to a real MP4 (WebM if your Chrome lacks H.264) with the studio's own 3D renderer, using headless Chrome on this machine, and saves it to disk. Returns the file path. range: a shot id or \"all\" (the whole edit); camera: render one fixed camera instead of the shot order; scale: resolution multiplier (default 1); pass: \"beauty\" or \"depth\". Takes seconds to minutes (software WebGL).",
-      inputSchema: { type: "object", properties: { spec: SPEC_PROP, range: { type: "string" }, camera: { type: "string" }, scale: { type: "number" }, pass: { type: "string", enum: ["beauty", "depth"] }, output: { type: "string", description: "output file path (default ~/Blockshot/renders/<title>.mp4)" } }, required: ["spec"] },
+        "LOCAL ONLY. Renders the scene to a real MP4 (WebM if your Chrome lacks H.264) with the studio's own 3D renderer, using headless Chrome on this machine, and saves it to disk. Returns the file path. range: a shot id or \"all\" (the whole edit); from / to: render only that part, in seconds — EDIT time (the cut timeline, across shots) when following the shot order, SCENE time with a fixed camera; camera: render one fixed camera instead of the shot order; scale: resolution multiplier (default 1); pass: \"beauty\" or \"depth\". Takes seconds to minutes (software WebGL).",
+      inputSchema: { type: "object", properties: { spec: SPEC_PROP, range: { type: "string" }, from: { type: "number", description: "start (s) of a custom range" }, to: { type: "number", description: "end (s) of a custom range" }, camera: { type: "string" }, scale: { type: "number" }, pass: { type: "string", enum: ["beauty", "depth"] }, output: { type: "string", description: "output file path (default ~/Blockshot/renders/<title>.mp4)" } }, required: ["spec"] },
       async run(a) {
         const spec = specOf(a.spec);
         if (!spec) return fail("The scene is invalid — validate it with validate_spec first.");
         try {
-          const r = await withStudio(studioUrl, spec, (page) => page.evaluate<PageVideo>(`window.__blockshot.video(${JSON.stringify({ range: a.range, camera: a.camera, scale: a.scale, pass: a.pass })})`));
+          const r = await withStudio(studioUrl, spec, (page) => page.evaluate<PageVideo>(`window.__blockshot.video(${JSON.stringify({ range: a.range, from: a.from, to: a.to, camera: a.camera, scale: a.scale, pass: a.pass })})`));
           const title = (spec.meta.title ?? "blockshot").replace(/[^\p{L}\p{N}_-]+/gu, "_") || "blockshot";
           const wanted = a.output ? resolve(String(a.output)) : null;
           // the container follows the codec the browser could encode (.mp4 with H.264, otherwise .webm)

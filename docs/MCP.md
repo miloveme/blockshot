@@ -33,7 +33,7 @@ Vercel 프로젝트 환경변수 `mcp_token`(또는 `MCP_TOKEN`)을 설정하면
 | 도구 | 설명 |
 |---|---|
 | `render_still` | 스튜디오와 같은 **진짜 3D 렌더** PNG (`preview` 도식보다 훨씬 정확, 몇 초) |
-| `render_video` | 장면을 **MP4(Chrome이 H.264를 지원하지 않으면 WebM)로 렌더**해 파일로 저장하고 경로를 돌려준다. `range`(샷 id/`all`)·`camera`·`scale`·`pass` 선택 |
+| `render_video` | 장면을 **MP4(Chrome이 H.264를 지원하지 않으면 WebM)로 렌더**해 파일로 저장하고 경로를 돌려준다. `range`(샷 id/`all`)·`from`/`to`(원하는 구간, 초 — 샷 순서면 편집본 시간, `camera` 고정이면 장면 시간)·`camera`·`scale`·`pass` 선택 |
 
 렌더는 **내 컴퓨터의 Chrome(헤드리스)** 이 스튜디오 페이지를 열어(`BLOCKSHOT_URL`) 브라우저 렌더러+WebCodecs로 인코딩한다 — 렌더 서버 없음. Chrome은 DevTools 프로토콜로 직접 제어한다(`src/chrome.ts`, Playwright 불필요). 소프트웨어 WebGL이라 몇 초 영상도 수십 초~수 분 걸릴 수 있다.
 
