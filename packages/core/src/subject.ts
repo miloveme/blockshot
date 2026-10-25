@@ -70,12 +70,13 @@ const style = (s: TransitionStyle) => ({
 
 /**
  * Puts `target` on the camera from time `t`:
- * - the camera has no subject yet → it becomes THE subject, for the whole time;
+ * - the camera has no subject yet → it becomes THE subject, for the whole time — unless `fromHere`: then the camera
+ *   stays free (its rotation) until `t` and picks the subject up there;
  * - at 0 s → replaces the camera's own subject;
  * - a key already at that time (± half a frame) → that key changes subject;
  * - otherwise → a new key that takes over from `t`, arriving the way `how` says.
  */
-export function addSubjectKey(spec: BlockshotSpec, cameraId: string, t: number, target: Target | null, how: TransitionStyle = { transition: "pan" }): BlockshotSpec {
+export function addSubjectKey(spec: BlockshotSpec, cameraId: string, t: number, target: Target | null, how: TransitionStyle = { transition: "pan" }, opts: { fromHere?: boolean } = {}): BlockshotSpec {
   const cam = spec.cameras.find((c) => c.id === cameraId);
   if (!cam) return spec;
   const keys = subjectKeys(spec, cameraId);
@@ -83,7 +84,7 @@ export function addSubjectKey(spec: BlockshotSpec, cameraId: string, t: number, 
   const half = 0.5 / spec.settings.fps;
   // "free" with nothing to let go of: the camera already points by its rotation
   if (!keys.length && target === null) return spec;
-  if (!keys.length || time < half) return setOwn(spec, cameraId, target);
+  if (time < half || (!keys.length && !opts.fromHere)) return setOwn(spec, cameraId, target);
   const same = keys.find((k) => k.action !== null && Math.abs(k.t - time) < half);
   if (same) return { ...spec, actions: spec.actions.map((a, i) => (i === same.action && isKey(a, cameraId) ? { ...a, target } : a)) };
   const key: LookAt = { type: "cameraLookAt", camera: cameraId, target, start: time, ...style(how) } as LookAt;

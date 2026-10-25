@@ -121,7 +121,7 @@
 - [x] 렌더 구간 직접 지정(시작·끝, 재생 헤드·In/Out으로 채우기): core `planFrames({ from, to })` — 샷 순서면 편집본 시간, 카메라 고정이면 장면 시간. 로컬 MCP `render_video`도 `from`/`to`
 - [x] 용어 '조준' → '피사체 고정'. 피사체 전환: `cameraLookAt.duration`으로 숏 안 팬·틸트(시선 방향 slerp), 카메라 속성 '피사체 전환' 목록·추가
 - [x] 축선(180°) 자동 검사 `checkAxis`(두 인물 축선 / 단일 피사체 진행 방향, 중립 ±15°, `crossAxis` 의도 표시) — 경고만, lintLayout·MCP 포함, 컷 트랙 ⚠ 표시, 샷 패널: 같은 쪽 카메라로·의도한 연출·AI에게 해결 방안 묻기·프롬프트 복사. 샘플 거실 camB를 축선 같은 쪽으로
-- [x] 피사체 고정을 키프레임 모델로: 하나 = 전체 시간, 키가 시간을 나눔, 자유(없음) 키(target: null)로 처음·중간에 피사체 없이. `cameraLookAt.transition`(cut·pan·whip)·`ease`, core `subjectKeys/addSubjectKey/patchSubjectKey/removeSubjectKey`, 속성 섹션 통합, 카메라·타임라인 우클릭·L 키로 추가, 키 우클릭 메뉴, 도프시트 피사체 칩, 편집 기본값
+- [x] 피사체 고정을 키프레임 모델로: 하나 = 전체 시간, 키가 시간을 나눔, 자유(없음) 키(target: null)로 처음·중간에 피사체 없이. `cameraLookAt.transition`(cut·pan·whip)·`ease`, core `subjectKeys/addSubjectKey/patchSubjectKey/removeSubjectKey`, 속성 섹션 통합(피사체가 없어도 '처음 = 없음' 줄 표시, `addSubjectKey(…, { fromHere })`로 그 전은 자유), 카메라·타임라인 우클릭·L 키로 추가, 키 우클릭 메뉴, 도프시트 피사체 칩, 편집 기본값
 - [ ] 이동하며 피사체 전환(돌리·아크), 랙 포커스(심도 표현 필요)
 - [ ] 그래프 에디터(커브), 도프시트에서 키 드래그 이동·다중 선택, 사용자 단축키 재지정, 라이트 테마
 
