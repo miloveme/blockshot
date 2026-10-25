@@ -1494,6 +1494,11 @@
                   }
                 ]
               },
+              "duration": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 30
+              },
               "start": {
                 "type": "number",
                 "minimum": 0

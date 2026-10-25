@@ -87,7 +87,8 @@ export interface CameraHandle {
   pedestal(distance: number, opts: Timing & { duration: number }): CameraHandle;
   orbit(around: Target, opts: Timing & { duration: number; degrees: number }): CameraHandle;
   zoom(focalLength: number, opts: Timing & { duration: number }): CameraHandle;
-  lookAt(target: Target, opts: { start: number }): CameraHandle;
+  /** Hold on a new subject from `start`; `duration` (s) pans there on screen — omit at a cut (instant). */
+  lookAt(target: Target, opts: { start: number; duration?: number }): CameraHandle;
   /** Ride along with an actor / prop (chase cam, hood cam): keep `offset` from it in its own frame and aim at `look`. */
   mount(to: { id: string } | string, opts: { start: number; offset?: Vec3; look?: Vec3; end?: number }): CameraHandle;
 }
@@ -227,7 +228,7 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
       mount: (to, o) => (action({ type: "mount", camera: id, to: typeof to === "string" ? to : to.id, ...o }), handle),
       zoom: (focalLength, o) => (action({ type: "zoom", camera: id, focalLength, start: o.start, duration: o.duration, ease: o.ease }), handle),
       lookAt: (target, o) => {
-        action({ type: "cameraLookAt", camera: id, target, start: o.start });
+        action({ type: "cameraLookAt", camera: id, target, start: o.start, ...(o.duration ? { duration: o.duration } : {}) });
         cur().aim = target;
         return handle;
       },

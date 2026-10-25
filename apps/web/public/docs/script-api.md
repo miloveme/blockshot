@@ -98,7 +98,7 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 | `.truck(distance, opts)` / `.pedestal(distance, opts)` | 좌우 / 상하 평행 이동 |
 | `.orbit(around, { degrees, start, duration, ease? })` | 원호 이동 |
 | `.zoom(focalLength, { start, duration, ease? })` | 초점거리 변경 |
-| `.lookAt(target, { start })` | 조준 대상 변경 |
+| `.lookAt(target, { start, duration? })` | 피사체 고정 대상 변경 (`duration` 초 동안 팬으로 넘어감, 생략 시 즉시 — 컷 지점용) |
 | `.id` | |
 
 ### 유틸

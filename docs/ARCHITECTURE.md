@@ -84,8 +84,8 @@ blockshot/
 - `compile(spec)`는 `actions`를 시간순으로 풀어 `tracks: Map<"id/property", Key[]>`를 만든다.
   - 인물 액션을 먼저, 카메라 액션을 나중에 컴파일 (카메라가 인물 위치를 참조하므로)
   - `spec.tracks`(수동 키)는 같은 대상·속성의 생성 트랙을 **덮어쓴다**
-  - 시선(`lookAt`)·조준(`cameraLookAt`)은 움직이는 대상을 따라가야 하므로 키가 아닌 **구간(segment)** 으로 저장하고 평가 시 해석
-- `evaluate(compiled, t)`는 순수 함수. 결과 `SceneState`는 인물(위치·회전·포즈·poseTime·시선점), 카메라(위치·조준점·FOV), 활성 샷/카메라를 담는다.
+  - 시선(`lookAt`)·카메라 피사체 고정(`cameraLookAt`)은 움직이는 대상을 따라가야 하므로 키가 아닌 **구간(segment)** 으로 저장하고 평가 시 해석
+- `evaluate(compiled, t)`는 순수 함수. 결과 `SceneState`는 인물(위치·회전·포즈·poseTime·시선점), 카메라(위치·주시점·FOV), 활성 샷/카메라를 담는다.
 
 ### 3.2 렌더러 (apps/web/viewport)
 
@@ -118,7 +118,7 @@ for (let f = first; f < last; f++) {
 ### 3.5 PiP와 카메라 조작
 
 - `SceneRenderer`가 `useFrame(…, 1)`로 렌더링을 직접 맡아 메인 뷰를 그린 뒤, 자유 시점이면 scissor로 우상단에 선택(또는 활성 샷) 카메라 화면을 한 번 더 그린다
-- 카메라 시점 + 파일럿 ON이면 `OrbitControls`가 그 샷 카메라를 직접 움직이고(조준점 중심 오빗), 놓을 때 `commitCamera`로 위치(애니메이션 중이면 키)를 저장한다. 드래그 중에는 `dragging` 플래그로 sceneState 구동을 멈춘다
+- 카메라 시점 + 파일럿 ON이면 `OrbitControls`가 그 샷 카메라를 직접 움직이고(주시점 중심 오빗), 놓을 때 `commitCamera`로 위치(애니메이션 중이면 키)를 저장한다. 드래그 중에는 `dragging` 플래그로 sceneState 구동을 멈춘다
 
 ### 3.6 레코딩 (`lib/recorder.ts`, `viewport/Recorder.tsx`, `core/record.ts`)
 

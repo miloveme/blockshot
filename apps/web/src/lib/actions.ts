@@ -205,7 +205,7 @@ export function commitCameraRotation(id: string, position: Vec3, rotation: Vec3)
     next = keyed(next, id, "rotation") ? upsertKey(next, id, "rotation", t, rot) : patchEntity(next, id, { rotation: rot });
     return next;
   });
-  if (aimed) state().notify("카메라 조준을 해제하고 회전값으로 바꿨습니다 (속성 → 조준에서 다시 지정 가능)");
+  if (aimed) state().notify("카메라의 피사체 고정을 풀고 회전값으로 바꿨습니다 (속성 → 피사체 고정에서 다시 지정 가능)");
 }
 
 /**
