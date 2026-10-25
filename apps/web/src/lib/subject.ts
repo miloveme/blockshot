@@ -42,9 +42,15 @@ export const subjectName = (target: Target | null | undefined): string => {
   return useStudio.getState().spec.actors.find((a) => a.id === id)?.name ?? id;
 };
 
+/** Adds the key, selects the camera it went on (so the inspector shows it) and says where it went. */
 export function addSubject(cameraId: string, t: number, target: string | null) {
   const how = useUi.getState().subjectStyle;
-  useStudio.getState().edit((s) => addSubjectKey(s, cameraId, t, target, how));
+  const st = useStudio.getState();
+  const first = subjectKeys(st.spec, cameraId).length === 0;
+  st.edit((s) => addSubjectKey(s, cameraId, t, target, how));
+  st.select(cameraId);
+  const cam = st.spec.cameras.find((c) => c.id === cameraId);
+  st.notify(`${cam?.name ?? cameraId}: ${first ? "전체 시간" : `${t.toFixed(2)}s부터`} ${subjectName(target)}`);
 }
 
 /** Menu items: put each possible subject on `cameraId` from time `t`. */

@@ -6,7 +6,7 @@ import { Box, Camera, Car, ChevronDown, ChevronRight, Diamond, DoorOpen, Footpri
 import { useStudio } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import { runCommand } from "@/lib/commands";
-import { cx } from "../ui";
+import { cx, Tally, useOnAirCamera } from "../ui";
 import { openObjectMenu } from "./ContextMenu";
 import { frameSelected } from "@/lib/frame";
 
@@ -17,7 +17,7 @@ export function Outliner() {
   const spec = useStudio((s) => s.spec);
   const selection = useStudio((s) => s.selection);
   const view = useStudio((s) => s.view);
-  const activeCam = useStudio((s) => s.sceneState.activeCameraId);
+  const activeCam = useOnAirCamera();
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
   const match = (...words: Array<string | undefined>) => !q || words.some((w) => w?.toLowerCase().includes(q));
@@ -81,7 +81,7 @@ export function Outliner() {
                 sub={`${c.focalLength}mm`}
                 selected={selection === c.id}
                 keyed={animated(c.id)}
-                badge={activeCam === c.id ? <span className="rounded bg-cam/15 px-1 text-[9px] font-semibold text-cam">ON AIR</span> : null}
+                badge={activeCam === c.id ? <Tally label /> : null}
                 onClick={() => useStudio.getState().select(c.id)}
                 onDoubleClick={() => useStudio.getState().setView({ kind: "camera", id: c.id })}
                 onContext={(e) => openObjectMenu(e, c.id)}

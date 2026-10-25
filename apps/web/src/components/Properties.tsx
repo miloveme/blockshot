@@ -9,7 +9,7 @@ import { commitTransform, insertKeyAtCurrentTime, matchCameraToFreeView, patch, 
 import { getBridge } from "@/lib/render";
 import { addSubject, FREE, FREE_LABEL, openKeyMenu, subjectOptions, toTarget, TRANSITION_LABEL } from "@/lib/subject";
 import { ColorField, NumField, Row, SelectField, TextField, Vec3Field } from "./fields";
-import { CommandButton, PanelSection } from "./ui";
+import { CommandButton, PanelSection, Tally, useOnAirCamera } from "./ui";
 import { Accessibility, Armchair, Box, Camera as CameraIcon, Car, Copy, Crosshair, Footprints, Move3d, PersonStanding, Plus, Sparkles, Trash2, User, X } from "lucide-react";
 
 const POSE_LABEL: Record<Pose, string> = { stand: "서기", idle: "대기", walk: "걷기", run: "달리기", sit: "앉기", point: "가리키기", talk: "말하기", crouch: "숙이기", climb: "계단 오르기" };
@@ -72,6 +72,7 @@ export function Properties() {
           <div className="truncate font-mono text-[10px] text-ink-3">
             {kind === "actor" ? "인물" : kind === "camera" ? "카메라" : prop?.type === "model" ? "모델" : `소품 · ${prop?.type}`} · {id}
           </div>
+          {cam ? <OnAirStatus cameraId={id} /> : null}
         </div>
         <CommandButton id="edit.duplicate" icon={Copy} size="sm" />
         <CommandButton id="edit.delete" icon={Trash2} size="sm" tone="danger" />
@@ -629,5 +630,26 @@ function SubjectKeys({ cameraId }: { cameraId: string }) {
       </div>
       <p className="text-[10px] leading-relaxed text-ink-3">보통은 숏 하나에 피사체 하나, 바뀌면 컷을 나눕니다. 타임라인이나 카메라를 우클릭해도 키를 넣을 수 있습니다.</p>
     </>
+  );
+}
+
+/**
+ * Says whether the camera in the inspector is the one on air at the playhead — and if not, which one is, one click away.
+ * Selection (what you edit) and on air (what the edit shows) are different things; this keeps them from being confused.
+ */
+function OnAirStatus({ cameraId }: { cameraId: string }) {
+  const onAir = useOnAirCamera();
+  const name = useStudio((s) => (onAir ? (s.spec.cameras.find((c) => c.id === onAir)?.name ?? onAir) : null));
+  if (onAir === cameraId)
+    return (
+      <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-key">
+        <Tally /> 지금 송출 중
+      </div>
+    );
+  if (!onAir) return null;
+  return (
+    <button type="button" onClick={() => useStudio.getState().select(onAir)} className="mt-0.5 flex max-w-full items-center gap-1.5 truncate text-[10px] text-ink-3 hover:text-ink" title="송출 중인 카메라를 선택">
+      <Tally /> 송출 중: {name} →
+    </button>
   );
 }
