@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { FRAME_EVENT, type FrameTarget } from "@/lib/frame";
 import {
   DEG, bakeNav, cameraForward2D, compile, navRadiusOf, planBounds, staticActors, propSize, sideOfLine, wedgePoints, yawFacing,
   type ActorState, type BlockshotSpec, type CameraState, type NavGrid, type Prop, type Vec3,
@@ -69,6 +70,18 @@ export function PlanView({ className = "" }: { className?: string }) {
   const bw = bounds.x1 - bounds.x0;
   const bh = bounds.z1 - bounds.z0;
   const fit = Math.min(size[0] / bw, size[1] / bh); // px per meter when fully zoomed out
+
+  // F / A: centre the plan on what is framed and zoom so it fills about half the view
+  useEffect(() => {
+    const onFrame = (e: Event) => {
+      const { center, radius } = (e as CustomEvent<FrameTarget>).detail;
+      const span = Math.max(4, radius * 2 * 3);
+      const zoom = Math.min(12, Math.max(0.4, Math.min(size[0], size[1]) / (fit * span)));
+      setView({ dx: center[0] - (bounds.x0 + bounds.x1) / 2, dz: center[2] - (bounds.z0 + bounds.z1) / 2, zoom });
+    };
+    window.addEventListener(FRAME_EVENT, onFrame);
+    return () => window.removeEventListener(FRAME_EVENT, onFrame);
+  }, [bounds, fit, size]);
   const scale = fit * view.zoom;
   const cx = (bounds.x0 + bounds.x1) / 2 + view.dx;
   const cz = (bounds.z0 + bounds.z1) / 2 + view.dz;

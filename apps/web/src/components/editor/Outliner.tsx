@@ -8,6 +8,7 @@ import { useUi } from "@/lib/ui";
 import { runCommand } from "@/lib/commands";
 import { cx } from "../ui";
 import { openObjectMenu } from "./ContextMenu";
+import { frameSelected } from "@/lib/frame";
 
 const PROP_ICON: Partial<Record<string, LucideIcon>> = { car: Car, door: DoorOpen, window: DoorOpen, stairs: Footprints, ramp: Footprints };
 
@@ -48,6 +49,7 @@ export function Outliner() {
               selected={selection === a.id}
               keyed={animated(a.id)}
               onClick={() => useStudio.getState().select(a.id)}
+              onDoubleClick={() => (useStudio.getState().select(a.id), frameSelected())}
               onContext={(e) => openObjectMenu(e, a.id)}
             />
           ))}
@@ -62,6 +64,7 @@ export function Outliner() {
               selected={selection === p.id}
               keyed={animated(p.id)}
               onClick={() => useStudio.getState().select(p.id)}
+              onDoubleClick={() => (useStudio.getState().select(p.id), frameSelected())}
               onContext={(e) => openObjectMenu(e, p.id)}
             />
           ))}
