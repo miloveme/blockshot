@@ -18,7 +18,11 @@ const RULES = `Conventions:
 - References are strings: "actorId" or "actorId.part" (parts: ${BODY_PARTS.join(", ")}); "actorId.part@mirrorId" is that point as seen inside a mirror prop.
 - Room spaces are centered at the origin: x in [-width/2, width/2], z in [-depth/2, depth/2]. Walls: north(-Z) south(+Z) east(+X) west(-X).
 - Eye-level camera height is 1.5–1.7 m. Wide 18–28mm, normal 35–50mm, tele/close-up 85mm+.
-- Keep the 180-degree rule between cuts. Shots are usually 2–6 seconds.
+- Keep the 180-degree rule between cuts: with two people in play, every camera of a cut stays on the same side of the
+  line through them (or they swap screen sides); with one subject on the move, stay on the same side of its path (or its
+  screen direction reverses). Cross only through a neutral shot ON the line, a camera move that crosses on screen, or on
+  purpose — then mark the incoming shot "crossAxis": true. The studio and the tools warn about other crossings.
+  Shots are usually 2–6 seconds.
 - "shots" in ARRAY ORDER is the edit: each shows scene time [start, end) through its camera. Shots may overlap or repeat
   scene time to cut the same performance between cameras (coverage).
 - A camera normally HOLDS ONE SUBJECT for its shot; when the subject changes, cut to another camera/shot. Re-aim the
@@ -71,7 +75,7 @@ const SPEC_SUMMARY = `Blockshot Spec v${SPEC_VERSION} fields:
   "actions": [
 ${ACTION_LINES} ],
   "tracks"?: [{ "target": id, "property": "position"|"rotation"|"focalLength"|"hips"|"bone:<boneName>", "keys": [{ "t", "value", "ease"? }] }],   // optional hand keys; a track REPLACES what actions generate for that property. rotation / bone values are degrees ([x,y,z]); use for camera shake, a car's heading tricks, specific postures
-  "shots": [{ "id", "camera", "start", "end", "description"?, "prompt"? }] }
+  "shots": [{ "id", "camera", "start", "end", "description"?, "prompt"?, "crossAxis"?: true when the cut into it crosses the 180° line on purpose }] }
 Poses: ${POSES.join(", ")}. Prop types: ${LLM_PROP_TYPES.join(", ")}. Ease: linear, easeIn, easeOut, easeInOut, step.`;
 
 const SCRIPT_SUMMARY = `Blockshot Script API (JavaScript; globals: scene, vec, rand, interpolate, spring, noise, clamp):
@@ -325,7 +329,7 @@ const ANIMATE_RULES = `Hard rules:
 - Hand-keyed acting (when no gesture fits — a specific posture, a held beat, an unusual movement): key bones directly with tracks. "bone:<name>" tracks hold Euler XYZ DEGREES per key; 0,0,0 is the relaxed rest (arms hang down). Arms: rightUpperArm [-90,0,0] points it straight forward, [0,0,-90] straight out to the side, [0,0,-150] overhead (the left arm mirrors: z is positive for the side/overhead raise); lowerArm [-90,0,0] bends the elbow so the hand comes up in front (both arms); spine/chest/neck/head x leans forward (+) / back (−), y turns, z tilts; legs: upperLeg x −60 swings the leg forward, +60 back, lowerLeg x +60 bends the knee (foot goes back) — keep legs and feet mostly to the automatic motion. Between a track's first and last key it overrides the automatic motion of that bone (fading in/out over 0.25 s outside them), other bones keep following it. Bones: ${BONES_LINE}. A "hips" track offsets the pelvis in metres ([0,-0.1,0] sinks it). Give 2–6 keys per bone with "ease": "easeInOut". Prefer actions (walkTo, gesture, hold …) for what they cover and use bone keys only for the rest — the user can then edit every key by hand.
 - When asked to change part of the existing animation, edit ONLY the actions concerned (patchActions / removeActions by id) and leave the rest alone; use clearActions only to re-animate everything.
 - Times are scene seconds from 0. Make the animation fit the length, or set "duration" when it needs more.
-- Keep the 180-degree rule between cuts; shots are usually 2–6 seconds; eye-level camera height 1.5–1.7 m.`;
+- Keep the 180-degree rule between cuts (cameras of a cut on the same side of the line between the two people, or of a mover's path); a deliberate crossing gets "crossAxis": true on the incoming shot (addShots / patchShots). Shots are usually 2–6 seconds; eye-level camera height 1.5–1.7 m.`;
 
 /**
  * Prompt for animating an already placed scene. The LLM answers with ONLY additions (actions / cameras / shots), so the

@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { buildSequence, editTimeOf, patchShot, setShotRange, sourceTakes, type ClipData } from "@blockshot/core";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Clipboard, Crosshair, Sparkles } from "lucide-react";
+import { axisRequest, buildAnimatePrompt, buildSequence, checkAxis, duplicateEntity, editTimeOf, patchShot, setShotRange, sourceTakes, type AxisWarning, type BlockshotSpec, type ClipData } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
+import { askAi } from "./editor/CommandPalette";
 import { addSelectionToBin, deleteBinClip, deleteSelection, insertClipsAt } from "@/lib/shotActions";
 import { NumField, SelectField, TextField } from "./fields";
 
@@ -86,6 +88,78 @@ function DragGhost() {
   );
 }
 
+/** Puts a copy of the incoming shot's camera at the mirrored spot (the outgoing camera's side) and cuts to it — the other shots keep the original. */
+function sameSideCamera(spec: BlockshotSpec, w: AxisWarning): BlockshotSpec {
+  const d = duplicateEntity(spec, w.camera, 0);
+  if (!d) return spec;
+  const cameras = d.spec.cameras.map((c) => (c.id === d.id ? { ...c, position: w.suggestion, name: `${spec.cameras.find((x) => x.id === w.camera)?.name ?? w.camera} (축선 맞춤)` } : c));
+  return patchShot({ ...d.spec, cameras }, w.to, { camera: d.id });
+}
+
+/** Moves the cut editor to a cut and selects the incoming clip. */
+export function gotoCut(w: AxisWarning) {
+  const s = useStudio.getState();
+  if (s.view.kind !== "shot") s.setView({ kind: "shot" });
+  s.selectClips([w.to]);
+  useStudio.getState().setEditTime(w.cut + 1e-4);
+}
+
+/**
+ * 180° rule warnings at the cuts. Advice, not a block: jump to the cut, put the camera on the right side, mark the
+ * crossing as intended, or hand the whole list to an AI for options (AI panel, or a prompt to paste anywhere).
+ */
+function AxisWarnings() {
+  const spec = useStudio((s) => s.spec);
+  const edit = useStudio((s) => s.edit);
+  const warnings = useMemo(() => checkAxis(spec), [spec]);
+  if (!warnings.length) return null;
+  const request = axisRequest(spec, warnings);
+  const iconBtn = "inline-flex h-6 items-center gap-1 rounded bg-raised px-1.5 text-[11px] text-ink hover:bg-hover";
+  return (
+    <section className="flex flex-col gap-1.5 rounded-md border border-accent/40 bg-accent-soft p-2">
+      <h3 className="flex items-center gap-1.5 text-xs font-semibold text-accent">
+        <AlertTriangle size={13} /> 축선(180°) 경고 {warnings.length}건
+      </h3>
+      <p className="text-[11px] leading-relaxed text-ink-3">컷 앞뒤 카메라가 축선의 반대편이라 인물의 좌우나 진행 방향이 바뀌어 보입니다. 의도한 연출이면 그대로 두어도 됩니다.</p>
+      <ul className="flex flex-col gap-1.5">
+        {warnings.map((w) => (
+          <li key={`${w.from}-${w.to}`} className="flex flex-col gap-1 rounded border border-line bg-black/20 p-1.5">
+            <button type="button" className="text-left text-[11px] leading-snug text-ink hover:underline" onClick={() => gotoCut(w)} title="이 컷으로 이동">
+              {w.ko}
+            </button>
+            <div className="flex flex-wrap gap-1">
+              <button type="button" className={iconBtn} title={`${w.camera}를 복제해 축선 같은 쪽 [${w.suggestion.join(", ")}]에 두고 이 샷만 그 카메라로 바꿉니다 (다른 샷은 그대로)`} onClick={() => edit((s) => sameSideCamera(s, w))}>
+                <Crosshair size={12} /> 같은 쪽 카메라로
+              </button>
+              <button type="button" className={iconBtn} title="일부러 넘는 컷으로 표시하고 경고를 끕니다 (샷 속성에서 되돌릴 수 있음)" onClick={() => edit((s) => patchShot(s, w.to, { crossAxis: true }))}>
+                의도한 연출
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className="flex flex-wrap gap-1">
+        <button type="button" className={`${iconBtn} text-accent`} onClick={() => askAi(request)} title="AI 패널에서 해결 방안을 받습니다 (설명 + 적용할 수정안)">
+          <Sparkles size={12} /> AI에게 해결 방안 묻기
+        </button>
+        <button
+          type="button"
+          className={iconBtn}
+          title="장면 정보가 담긴 프롬프트를 복사합니다 — ChatGPT·Claude 등에 붙여넣기"
+          onClick={() => {
+            void navigator.clipboard.writeText(buildAnimatePrompt({ request, spec })).then(
+              () => useStudio.getState().notify("축선 검토 프롬프트를 복사했습니다 — AI에게 붙여넣으세요"),
+              () => useStudio.getState().notify("복사하지 못했습니다", "error"),
+            );
+          }}
+        >
+          <Clipboard size={12} /> 프롬프트 복사
+        </button>
+      </div>
+    </section>
+  );
+}
+
 /** Edit panel: the clip being edited, source takes, the bin and the edit order. */
 export function ShotEditor() {
   const spec = useStudio((s) => s.spec);
@@ -109,6 +183,7 @@ export function ShotEditor() {
   return (
     <div className="flex flex-col gap-4">
       <DragGhost />
+      <AxisWarnings />
       <Section title="클립" hint={selection.length > 1 ? `${selection.length}개 선택됨` : current ? `${index + 1}번째` : undefined}>
         {current ? (
           <div className="flex flex-col gap-1.5 rounded border border-amber-400/50 bg-accent/5 p-2">
@@ -130,6 +205,12 @@ export function ShotEditor() {
             </div>
             <TextField value={current.description ?? ""} placeholder="설명 / 메모" onCommit={(v) => edit((sp) => patchShot(sp, current.id, { description: v || undefined }))} />
             <TextField multiline value={current.prompt ?? ""} placeholder="AI 영상 프롬프트 (내보내기에 포함)" onCommit={(v) => edit((sp) => patchShot(sp, current.id, { prompt: v || undefined }))} />
+            {index > 0 ? (
+              <label className="flex items-center gap-1.5 text-[11px] text-ink-3" title="이 샷으로 들어오는 컷이 180° 축선을 일부러 넘는 연출 — 축선 경고를 끕니다">
+                <input type="checkbox" checked={!!current.crossAxis} onChange={(e) => edit((sp) => patchShot(sp, current.id, { crossAxis: e.target.checked || undefined }))} className="accent-[var(--color-accent)]" />
+                앞 컷에서 축선을 일부러 넘음
+              </label>
+            ) : null}
             <div className="flex gap-1">
               <button className={btn} onClick={addSelectionToBin}>📥 보관함에 담기</button>
               <button className={`${btn} text-red-300`} onClick={deleteSelection}>삭제</button>

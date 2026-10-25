@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { buildSequence, editDuration, editPoints, setShotRange } from "@blockshot/core";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { buildSequence, checkAxis, editDuration, editPoints, setShotRange } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
-import { Archive, ClipboardPaste, Copy, CopyPlus, Merge, MousePointer2, Plus, Scissors, Slice, SquareSplitHorizontal, Trash2, X, ZoomIn } from "lucide-react";
+import { AlertTriangle, Archive, ClipboardPaste, Copy, CopyPlus, Merge, MousePointer2, Plus, Scissors, Slice, SquareSplitHorizontal, Trash2, X, ZoomIn } from "lucide-react";
 import { clearRange, insertClipsAt, moveClipTo, razorAt } from "@/lib/shotActions";
 import { CommandButton } from "./ui";
+import { gotoCut } from "./ShotEditor";
+import { setDock } from "@/lib/ui";
 
 export const SHOT_COLORS = ["#3b82f6", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#ec4899"];
 
@@ -79,6 +81,8 @@ export function EditTrack() {
   const inner = useRef<HTMLDivElement>(null);
   const [marker, setMarker] = useState<number | null>(null);
   const seq = buildSequence(spec);
+  // 180° rule: a marker over every cut that crosses the line (advice — see the shots panel)
+  const axis = useMemo(() => checkAxis(spec), [spec]);
   const total = Math.max(editDuration(spec), 1e-3);
   const { fps } = spec.settings;
   const cameraName = (id: string) => spec.cameras.find((c) => c.id === id)?.name ?? id;
@@ -197,6 +201,24 @@ export function EditTrack() {
               </span>
             ))}
             {range ? <div className="absolute inset-y-0 bg-sky-400/30" style={{ left: pct(range[0]!), width: pct(range[1]! - range[0]!) }} /> : null}
+            {axis.map((w) => (
+              <button
+                key={`${w.from}-${w.to}`}
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => {
+                  gotoCut(w);
+                  useStudio.getState().setPanel("shots");
+                  setDock("right", true);
+                }}
+                title={`${w.ko}\n클릭: 이 컷으로 이동 · 샷 패널에서 해결 방법 보기`}
+                className="absolute -top-px z-10 flex h-4 -translate-x-1/2 items-center gap-0.5 rounded-sm bg-accent px-1 text-[9px] font-bold text-black hover:brightness-110"
+                style={{ left: pct(w.cut) }}
+              >
+                <AlertTriangle size={9} strokeWidth={2.5} />
+                180°
+              </button>
+            ))}
           </div>
           {/* clips */}
           <div className={`relative mt-0.5 flex h-10 overflow-hidden rounded bg-black/30 ${razor ? "cursor-crosshair" : ""}`}>

@@ -1817,6 +1817,9 @@
           },
           "prompt": {
             "type": "string"
+          },
+          "crossAxis": {
+            "type": "boolean"
           }
         },
         "required": [

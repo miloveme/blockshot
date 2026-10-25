@@ -27,3 +27,4 @@ export * from "./vehicle";
 export * from "./bake";
 export * from "./motion";
 export * from "./preview";
+export * from "./axis";

@@ -230,6 +230,8 @@ export const Shot = z.object({
   end: z.number().positive(),
   description: z.string().optional(),
   prompt: z.string().optional(),
+  /** the cut INTO this shot crosses the 180° line on purpose (silences the axis check) */
+  crossAxis: z.boolean().optional(),
 });
 export type Shot = z.infer<typeof Shot>;
 

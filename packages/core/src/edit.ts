@@ -239,7 +239,7 @@ export function setShotRange(spec: BlockshotSpec, shotId: string, range: { start
   };
 }
 
-export function patchShot(spec: BlockshotSpec, shotId: string, patch: Partial<Pick<Shot, "name" | "camera" | "description" | "prompt">>): BlockshotSpec {
+export function patchShot(spec: BlockshotSpec, shotId: string, patch: Partial<Pick<Shot, "name" | "camera" | "description" | "prompt" | "crossAxis">>): BlockshotSpec {
   return { ...spec, shots: spec.shots.map((s) => (s.id === shotId ? { ...s, ...patch } : s)) };
 }
 
