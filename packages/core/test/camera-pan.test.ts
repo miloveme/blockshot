@@ -95,3 +95,28 @@ describe("subject keys (피사체 고정 as keyframes)", () => {
     expect(target(whip, 3)[0]).toBeCloseTo(2, 1);
   });
 });
+
+describe("free subject keys (no subject from a time on)", () => {
+  it("starts free and picks a subject up later, then lets go again", async () => {
+    const { addSubjectKey, subjectKeys, patchSubjectKey } = await import("../src");
+    let spec = scene([], { rotation: [0, 0, 0] });
+    spec = addSubjectKey(spec, "cam", 0, "ana"); // whole time…
+    spec = addSubjectKey(spec, "cam", 2, "ben", { transition: "cut" });
+    spec = patchSubjectKey(spec, "cam", subjectKeys(spec, "cam")[0]!, { target: null }); // …but free until 2 s
+    spec = addSubjectKey(spec, "cam", 4, null, { transition: "pan", duration: 1 }); // and free again from 4 s, panning back
+    expect(subjectKeys(spec, "cam").map((k) => [k.t, k.target])).toEqual([[0, null], [2, "ben"], [4, null]]);
+    expect(spec.cameras[0]!.lookAt).toBeUndefined();
+    const at = (t: number) => evaluate(compile(spec), t).cameras.cam!.target;
+    expect(at(1)).toBeNull(); // free: rotation
+    expect(at(3)![0]).toBeCloseTo(2, 1); // on Ben
+    expect(yawOf(at(4.5)!)).toBeGreaterThan(0.01); // turning from Ben back to straight ahead
+    expect(yawOf(at(4.5)!)).toBeLessThan(yawOf(at(3.9)!));
+    expect(at(5.5)).toBeNull(); // free again
+  });
+
+  it("a free key with nothing to let go of changes nothing", async () => {
+    const { addSubjectKey } = await import("../src");
+    const spec = scene([], { rotation: [0, 0, 0] });
+    expect(addSubjectKey(spec, "cam", 2, null)).toBe(spec);
+  });
+});

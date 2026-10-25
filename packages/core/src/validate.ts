@@ -114,7 +114,7 @@ export function validateSpec(input: unknown): ValidationResult {
       else if (PROP_CATALOG[prop.type].surface || prop.type === "door" || prop.type === "window" || prop.type === "mirror") errors.push({ path: `${p}.prop`, message: `"${a.prop}" is a ${prop.type}; hold needs something small enough to pick up (phone, cup, box …)` });
     }
     if ("camera" in a) checkCamera(a.camera, `${p}.camera`);
-    if ("target" in a) checkTarget(a.target, `${p}.target`);
+    if ("target" in a && a.target !== null) checkTarget(a.target, `${p}.target`);
     if (a.type === "orbit") checkTarget(a.around, `${p}.around`);
   });
   spec.tracks.forEach((t, i) => {

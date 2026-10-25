@@ -1472,25 +1472,32 @@
               "target": {
                 "anyOf": [
                   {
-                    "type": "array",
-                    "prefixItems": [
+                    "anyOf": [
                       {
-                        "type": "number"
+                        "type": "array",
+                        "prefixItems": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ],
+                        "items": false,
+                        "minItems": 3,
+                        "maxItems": 3
                       },
                       {
-                        "type": "number"
-                      },
-                      {
-                        "type": "number"
+                        "type": "string",
+                        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*(\\.[a-z_]+)?(@[a-zA-Z][a-zA-Z0-9_-]*)?$"
                       }
-                    ],
-                    "items": false,
-                    "minItems": 3,
-                    "maxItems": 3
+                    ]
                   },
                   {
-                    "type": "string",
-                    "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*(\\.[a-z_]+)?(@[a-zA-Z][a-zA-Z0-9_-]*)?$"
+                    "type": "null"
                   }
                 ]
               },

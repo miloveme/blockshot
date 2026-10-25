@@ -43,7 +43,8 @@ type AimTarget = Target | ((t: number) => Vec3);
 interface Segment {
   start: number;
   end: number;
-  target: AimTarget;
+  /** null = free: the camera points by its rotation */
+  target: AimTarget | null;
   /** seconds to swing over from the previous target (a pan / tilt on screen); 0 = switch at once */
   blend?: number;
   ease?: Ease;
@@ -1045,7 +1046,7 @@ export function evaluate(scene: CompiledScene, t: number): SceneState {
   for (const a of spec.actors) {
     const core = actorCore(scene, a.id, t);
     const look = activeSegment(scene.looks.get(a.id), t);
-    const lookTarget = look ? resolveTarget(scene, look.target, t) : null;
+    const lookTarget = look?.target != null ? resolveTarget(scene, look.target, t) : null;
     actors[a.id] = {
       id: a.id,
       name: a.name,
@@ -1098,13 +1099,19 @@ export function evaluate(scene: CompiledScene, t: number): SceneState {
     const aim = activeSegment(aims, t);
     const position = sampleKeys(scene.tracks.get(trackKey(c.id, "position"))!, t) as Vec3;
     const rotation = sampleKeys(scene.tracks.get(trackKey(c.id, "rotation"))!, t) as Vec3;
-    let target: Vec3 | null = lookTrack ? (sampleKeys(lookTrack, t) as Vec3) : aim ? resolveTarget(scene, aim.target, t) : null;
-    if (!lookTrack && aim && target && aim.blend && t < aim.start + aim.blend) {
-      // a pan / tilt from what it held on before (or from where it pointed) to the new subject — both may be moving
+    let target: Vec3 | null = lookTrack ? (sampleKeys(lookTrack, t) as Vec3) : aim?.target != null ? resolveTarget(scene, aim.target, t) : null;
+    if (!lookTrack && aim && aim.blend && t < aim.start + aim.blend) {
+      // a pan / tilt from what it held on before (or from where it pointed) to the new subject — both may be moving;
+      // letting go (free) turns from the old subject to where the camera's rotation points
       const prev = activeSegment(aims, aim.start - 1e-6);
-      const from = prev ? resolveTarget(scene, prev.target, t) : pointAlong(position, rotation, vec.distance(position, target));
-      const k = applyEase(aim.ease ?? "easeInOut", (t - aim.start) / aim.blend);
-      target = panBetween(position, from, target, aim.whip ? applyEase("easeInOut", k) : k);
+      const before = prev?.target != null ? resolveTarget(scene, prev.target, t) : null;
+      const reach = before ?? target;
+      if (reach) {
+        const from = before ?? pointAlong(position, rotation, vec.distance(position, reach));
+        const to = target ?? pointAlong(position, rotation, vec.distance(position, reach));
+        const k = applyEase(aim.ease ?? "easeInOut", (t - aim.start) / aim.blend);
+        target = panBetween(position, from, to, aim.whip ? applyEase("easeInOut", k) : k);
+      }
     }
     cameras[c.id] = {
       id: c.id,

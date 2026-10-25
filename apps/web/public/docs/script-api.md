@@ -98,7 +98,7 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 | `.truck(distance, opts)` / `.pedestal(distance, opts)` | 좌우 / 상하 평행 이동 |
 | `.orbit(around, { degrees, start, duration, ease? })` | 원호 이동 |
 | `.zoom(focalLength, { start, duration, ease? })` | 초점거리 변경 |
-| `.lookAt(target, { start, transition?, duration?, ease? })` | 피사체 키 — `start`부터 이 피사체. `transition`: `"cut"`(즉시) · `"pan"`(`duration`초 회전) · `"whip"`(휩 팬), `ease`로 움직임 형태 |
+| `.lookAt(target, { start, transition?, duration?, ease? })` | 피사체 키 — `start`부터 이 피사체(`null`이면 자유 — 회전값으로). `transition`: `"cut"`(즉시) · `"pan"`(`duration`초 회전) · `"whip"`(휩 팬), `ease`로 움직임 형태 |
 | `.id` | |
 
 ### 유틸

@@ -222,3 +222,21 @@ export function EmptyState({ icon: Icon, title, children }: { icon: LucideIcon; 
     </div>
   );
 }
+
+/**
+ * Tally light — the red lamp on a broadcast camera that is live. Marks the camera the edit is showing at the playhead
+ * ("on air"); it follows playback. Deliberately not a highlight: selection (amber) is what the inspector shows.
+ */
+export function Tally({ title = "송출 중 — 재생 헤드 위치에서 편집본에 나가는 카메라 (선택과는 별개)", label = false }: { title?: string; label?: boolean }) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1" title={title}>
+      <span className="h-[7px] w-[7px] rounded-full bg-key shadow-[0_0_6px_1px_rgb(239_75_75/0.7)]" />
+      {label ? <span className="text-[9px] font-bold tracking-wider text-key">ON AIR</span> : null}
+    </span>
+  );
+}
+
+/** The camera on air at the playhead: in cut playback the clip under the cut playhead, otherwise the shot at scene time. */
+export function useOnAirCamera(): string | null {
+  return useStudio((s) => (s.view.kind === "shot" ? (s.spec.shots.find((x) => x.id === s.cutShotId)?.camera ?? s.sceneState.activeCameraId) : s.sceneState.activeCameraId));
+}
