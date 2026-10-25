@@ -189,14 +189,15 @@ export const Action = z.discriminatedUnion("type", [
   z.object({ type: z.literal("lookAt"), actor: Id, target: Target, end: z.number().optional(), ...timed }),
   z.object({ type: z.literal("cameraMove"), camera: Id, to: Vec3, duration: z.number().positive(), ease: Ease.default("easeInOut"), ...timed }),
   /**
-   * A subject key: from `start` the camera holds on `target`. How it gets there from the previous subject:
+   * A subject key: from `start` the camera holds on `target` — or, with `target: null`, lets go and points by its own
+   * rotation again (free). How it gets there from the previous subject:
    * "cut" = at once · "pan" = turns in place over `duration` s · "whip" = a fast whip pan. Without `transition`,
    * a `duration` > 0 means "pan" and none means "cut". `ease` shapes the turn (default easeInOut).
    */
   z.object({
     type: z.literal("cameraLookAt"),
     camera: Id,
-    target: Target,
+    target: Target.nullable(),
     transition: z.enum(["cut", "pan", "whip"]).optional(),
     duration: z.number().min(0).max(30).optional(),
     ease: Ease.optional(),

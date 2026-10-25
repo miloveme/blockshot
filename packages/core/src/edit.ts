@@ -112,7 +112,7 @@ export function addCamera(spec: BlockshotSpec): { spec: BlockshotSpec; id: strin
   return { spec: { ...spec, cameras: [...spec.cameras, camera] }, id };
 }
 
-type Refish = string | readonly unknown[] | number;
+type Refish = string | readonly unknown[] | number | null;
 /** True when the reference points at `id` — directly ("id", "id.part") or as the mirror of a reflection ("x@id"). */
 const refersTo = (target: Refish, id: string) => {
   if (typeof target !== "string") return false;

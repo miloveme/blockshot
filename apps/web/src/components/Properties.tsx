@@ -7,7 +7,7 @@ import { hasModel, importGlb } from "@/lib/models";
 import { startPath } from "@/lib/placement";
 import { commitTransform, insertKeyAtCurrentTime, matchCameraToFreeView, patch, removeKeysAtTime, setLens, setPoseCmd } from "@/lib/actions";
 import { getBridge } from "@/lib/render";
-import { addSubject, openKeyMenu, subjectOptions, TRANSITION_LABEL } from "@/lib/subject";
+import { addSubject, FREE, FREE_LABEL, openKeyMenu, subjectOptions, toTarget, TRANSITION_LABEL } from "@/lib/subject";
 import { ColorField, NumField, Row, SelectField, TextField, Vec3Field } from "./fields";
 import { CommandButton, PanelSection } from "./ui";
 import { Accessibility, Armchair, Box, Camera as CameraIcon, Car, Copy, Crosshair, Footprints, Move3d, PersonStanding, Plus, Sparkles, Trash2, User, X } from "lucide-react";
@@ -573,12 +573,12 @@ function SubjectKeys({ cameraId }: { cameraId: string }) {
   const options = subjectOptions();
   const keys = subjectKeys(spec, cameraId);
   const [pick, setPick] = useState(options[0]?.value ?? "");
-  const valueOf = (t: unknown) => (typeof t === "string" ? t.split("@")[0]!.split(".")[0]! : "__point");
-  const opts = (k: SubjectKey) => [...(typeof k.target === "string" ? [] : [{ value: "__point", label: "고정 좌표" }]), ...options];
+  const valueOf = (t: unknown) => (t === null ? FREE : typeof t === "string" ? t.split("@")[0]!.split(".")[0]! : "__point");
+  const opts = (k: SubjectKey) => [...(Array.isArray(k.target) ? [{ value: "__point", label: "고정 좌표" }] : []), ...options, { value: FREE, label: FREE_LABEL }];
   return (
     <>
       {keys.length === 0 ? (
-        <p className="text-[11px] leading-relaxed text-ink-3">피사체를 정하면 카메라가 그 인물·소품을 계속 바라봅니다. 하나면 전체 시간, 더 넣으면 그 시간부터 바뀝니다.</p>
+        <p className="text-[11px] leading-relaxed text-ink-3">피사체를 정하면 카메라가 그 인물·소품을 계속 바라봅니다. 하나면 전체 시간, 더 넣으면 그 시간부터 바뀝니다. 처음이나 중간을 ‘없음(자유)’으로 하면 그 구간은 카메라 회전값대로 찍습니다.</p>
       ) : (
         <div className="flex flex-col gap-1">
           <div className="grid grid-cols-[52px_1fr_78px_20px] gap-1 text-[10px] text-ink-3">
@@ -594,7 +594,7 @@ function SubjectKeys({ cameraId }: { cameraId: string }) {
               ) : (
                 <NumField value={k.t} min={0} step={0.1} digits={2} onCommit={(v) => edit((s) => patchSubjectKey(s, cameraId, k, { t: v }))} />
               )}
-              <SelectField value={valueOf(k.target)} options={opts(k)} onCommit={(v) => v !== "__point" && edit((s) => patchSubjectKey(s, cameraId, k, { target: v }))} />
+              <SelectField value={valueOf(k.target)} options={opts(k)} onCommit={(v) => v !== "__point" && edit((s) => patchSubjectKey(s, cameraId, k, { target: toTarget(v) }))} />
               {k.action === null ? (
                 <span className="px-1 text-[10px] text-ink-3">—</span>
               ) : (
@@ -615,11 +615,11 @@ function SubjectKeys({ cameraId }: { cameraId: string }) {
         </div>
       )}
       <div className="grid grid-cols-[1fr_auto] items-center gap-1 border-t border-line pt-2">
-        <SelectField value={pick} options={options} onCommit={setPick} />
+        <SelectField value={pick} options={keys.length ? [...options, { value: FREE, label: FREE_LABEL }] : options} onCommit={setPick} />
         <button
           type="button"
           disabled={!pick}
-          onClick={() => addSubject(cameraId, time, pick)}
+          onClick={() => addSubject(cameraId, time, toTarget(pick))}
           className="flex h-7 items-center gap-1 whitespace-nowrap rounded-md bg-raised px-2 text-xs text-ink hover:bg-hover disabled:opacity-40"
           title={keys.length ? "현재 시간부터 이 피사체로 (전환 방식은 설정의 기본값, 나중에 바꿀 수 있음)" : "이 피사체를 전체 시간 동안 고정"}
         >

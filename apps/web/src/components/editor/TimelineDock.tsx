@@ -299,7 +299,7 @@ function SubjectLane({ cameraId, pct }: { cameraId: string; pct: (t: number) => 
         return (
           <div key={k.action ?? "base"} className="absolute inset-y-0" style={{ left: pct(k.t), width: pct(until - k.t) }}>
             {/* the hold: a thin line with the subject's name */}
-            <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-cam/40" />
+            {k.target !== null ? <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-cam/40" /> : null}
             <button
               type="button"
               onPointerDown={(e) => e.stopPropagation()}
@@ -313,7 +313,7 @@ function SubjectLane({ cameraId, pct }: { cameraId: string; pct: (t: number) => 
                 openKeyMenu(e, cameraId, k);
               }}
               title={`${subjectName(k.target)} · ${k.action === null ? "처음부터" : `${k.t.toFixed(2)}s부터 · ${k.transition === "cut" ? "컷" : `${TRANSITION_LABEL[k.transition]} ${k.duration}s`}`}\n클릭: 이동 · 우클릭: 전환 방식·삭제`}
-              className="absolute top-[4px] flex h-4 max-w-full items-center gap-1 overflow-hidden whitespace-nowrap rounded-sm px-1 text-[9px] font-medium text-cam ring-1 ring-cam/50 hover:bg-cam/25"
+              className={cx("absolute top-[4px] flex h-4 max-w-full items-center gap-1 overflow-hidden whitespace-nowrap rounded-sm px-1 text-[9px] font-medium hover:bg-cam/25", k.target === null ? "text-ink-3 outline-dashed outline-1 outline-ink-3/50" : "text-cam ring-1 ring-cam/50")}
               style={{ minWidth: turn > 0 ? `${(turn / (until - k.t || 1)) * 100}%` : undefined, background: turn > 0 ? "color-mix(in srgb, var(--color-cam) 22%, transparent)" : "rgb(10 12 15 / 0.85)" }}
             >
               <Crosshair size={9} className="shrink-0" />

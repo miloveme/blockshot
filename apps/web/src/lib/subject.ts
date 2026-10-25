@@ -30,14 +30,19 @@ export function subjectOptions(): Array<{ value: string; label: string }> {
   return [...spec.actors.map((a) => ({ value: a.id, label: `🧍 ${a.name ?? a.id}` })), ...spec.props.map((p) => ({ value: p.id, label: `📦 ${p.id}` }))];
 }
 
-export const subjectName = (target: Target | undefined): string => {
-  if (target === undefined) return "없음";
+/** Select value standing for "free" (no subject — the camera points by its rotation). */
+export const FREE = "__free";
+export const FREE_LABEL = "⊘ 없음 (자유 — 회전값)";
+export const toTarget = (v: string): string | null => (v === FREE ? null : v);
+
+export const subjectName = (target: Target | null | undefined): string => {
+  if (target == null) return "자유";
   if (typeof target !== "string") return "고정 좌표";
   const id = target.split("@")[0]!.split(".")[0]!;
   return useStudio.getState().spec.actors.find((a) => a.id === id)?.name ?? id;
 };
 
-export function addSubject(cameraId: string, t: number, target: string) {
+export function addSubject(cameraId: string, t: number, target: string | null) {
   const how = useUi.getState().subjectStyle;
   useStudio.getState().edit((s) => addSubjectKey(s, cameraId, t, target, how));
 }
@@ -51,6 +56,8 @@ export function addSubjectItems(cameraId: string, t: number): MenuItemSpec[] {
   return [
     { label: first ? `피사체 고정 · ${cam?.name ?? cameraId} (전체 시간)` : `피사체 키 · ${cam?.name ?? cameraId} · ${t.toFixed(2)}s · ${TRANSITION_LABEL[style.transition]}`, header: true },
     ...subjectOptions().map((o) => ({ label: o.label, run: () => addSubject(cameraId, t, o.value) })),
+    // letting go only means something once there is a subject
+    ...(first ? [] : [{ label: "", separator: true }, { label: FREE_LABEL, run: () => addSubject(cameraId, t, null) }]),
   ];
 }
 
@@ -67,6 +74,7 @@ export function openKeyMenu(e: { clientX: number; clientY: number }, cameraId: s
   const items: MenuItemSpec[] = [
     { label: `${subjectName(key.target)} · ${base ? "처음부터" : `${key.t.toFixed(2)}s`}`, header: true },
     ...subjectOptions().map((o) => ({ label: `${o.label}로 바꾸기`, run: () => edit((s) => patchSubjectKey(s, cameraId, key, { target: o.value })) })),
+    { label: `${FREE_LABEL}로 바꾸기`, run: () => edit((s) => patchSubjectKey(s, cameraId, key, { target: null })) },
   ];
   if (!base) {
     items.push(

@@ -29,7 +29,8 @@ const RULES = `Conventions:
   same camera mid-shot only as a deliberate on-screen move (follow then hand off, reveal, pan to a newcomer): give that
   cameraLookAt "transition": "pan" with a "duration" (0.6–2 s), or "whip" (≈0.3 s) for a whip pan; "cut" (or no
   transition and no duration) switches at once — only at a cut. A camera's "lookAt" is its subject for the whole time
-  until a cameraLookAt key changes it; to return to the first subject, add another key.`;
+  until a cameraLookAt key changes it; to return to the first subject, add another key. "target": null lets go (free:
+  the camera points by its own rotation from then on); a camera without "lookAt" but with keys starts free.`;
 
 /** Remotion-style helpers — the same text the hosted MCP's script guide describes, so pasted prompts and MCP agree. */
 const CODE_API_NOTES = `Code API (like Remotion — motion as a function of time, deterministic): globals interpolate(x, [x0,x1,..], [v0,v1,..], { ease? }) (numbers or [x,y,z]), spring(t, { stiffness?, damping? }) (0→1 with overshoot), noise(x, seed) (smooth −1..1), clamp(x, lo, hi). scene.sequence(start, () => { ... }) shifts every action start / key authored inside by "start" s (nestable; shots stay absolute). scene.animate(targetId, property, { from?, to, fps? }, t => value) samples fn(t) (t = seconds since from) into simplified keys for position / rotation / focalLength / hips / "bone:<name>"; a.boneFn(bone, { from?, to }, t => [x°,y°,z°]) does it for one bone — use loops and these helpers for repeated, rhythmic or procedural acting (nodding, pacing, breathing, shaking a camera) instead of writing every key by hand.`;

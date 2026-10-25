@@ -88,7 +88,7 @@ export interface CameraHandle {
   orbit(around: Target, opts: Timing & { duration: number; degrees: number }): CameraHandle;
   zoom(focalLength: number, opts: Timing & { duration: number }): CameraHandle;
   /** Subject key: hold on `target` from `start`. transition "cut" (instant, at a cut) · "pan" (turns over `duration` s) · "whip" (fast whip pan); `ease` shapes the turn. A `duration` without transition means "pan". */
-  lookAt(target: Target, opts: { start: number; duration?: number; transition?: "cut" | "pan" | "whip"; ease?: "linear" | "easeIn" | "easeOut" | "easeInOut" }): CameraHandle;
+  lookAt(target: Target | null, opts: { start: number; duration?: number; transition?: "cut" | "pan" | "whip"; ease?: "linear" | "easeIn" | "easeOut" | "easeInOut" }): CameraHandle;
   /** Ride along with an actor / prop (chase cam, hood cam): keep `offset` from it in its own frame and aim at `look`. */
   mount(to: { id: string } | string, opts: { start: number; offset?: Vec3; look?: Vec3; end?: number }): CameraHandle;
 }
