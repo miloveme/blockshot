@@ -43,14 +43,15 @@ export const subjectName = (target: Target | null | undefined): string => {
 };
 
 /** Adds the key, selects the camera it went on (so the inspector shows it) and says where it went. */
-export function addSubject(cameraId: string, t: number, target: string | null) {
+export function addSubject(cameraId: string, t: number, target: string | null, opts: { fromHere?: boolean } = {}) {
   const how = useUi.getState().subjectStyle;
   const st = useStudio.getState();
   const first = subjectKeys(st.spec, cameraId).length === 0;
-  st.edit((s) => addSubjectKey(s, cameraId, t, target, how));
+  st.edit((s) => addSubjectKey(s, cameraId, t, target, how, opts));
   st.select(cameraId);
   const cam = st.spec.cameras.find((c) => c.id === cameraId);
-  st.notify(`${cam?.name ?? cameraId}: ${first ? "전체 시간" : `${t.toFixed(2)}s부터`} ${subjectName(target)}`);
+  const whole = t < 0.5 / st.spec.settings.fps || (first && !opts.fromHere);
+  st.notify(`${cam?.name ?? cameraId}: ${whole ? "전체 시간" : `${t.toFixed(2)}s부터`} ${subjectName(target)}${first && !whole ? " (그 전엔 없음)" : ""}`);
 }
 
 /** Menu items: put each possible subject on `cameraId` from time `t`. */
@@ -59,11 +60,27 @@ export function addSubjectItems(cameraId: string, t: number): MenuItemSpec[] {
   const cam = spec.cameras.find((c) => c.id === cameraId);
   const first = subjectKeys(spec, cameraId).length === 0;
   const style = useUi.getState().subjectStyle;
+  const name = cam?.name ?? cameraId;
+  if (first) {
+    // no subject yet: hold on it for the whole time, or only from here (free before) — both are common
+    const later = t >= 0.5 / spec.settings.fps;
+    return [
+      { label: `피사체 고정 · ${name} · 전체 시간`, header: true },
+      ...subjectOptions().map((o) => ({ label: o.label, run: () => addSubject(cameraId, 0, o.value) })),
+      ...(later
+        ? [
+            { label: "", separator: true },
+            { label: `${t.toFixed(2)}s부터 (그 전엔 없음) · ${TRANSITION_LABEL[style.transition]}`, header: true },
+            ...subjectOptions().map((o) => ({ label: o.label, run: () => addSubject(cameraId, t, o.value, { fromHere: true }) })),
+          ]
+        : []),
+    ];
+  }
   return [
-    { label: first ? `피사체 고정 · ${cam?.name ?? cameraId} (전체 시간)` : `피사체 키 · ${cam?.name ?? cameraId} · ${t.toFixed(2)}s · ${TRANSITION_LABEL[style.transition]}`, header: true },
+    { label: `피사체 키 · ${name} · ${t.toFixed(2)}s · ${TRANSITION_LABEL[style.transition]}`, header: true },
     ...subjectOptions().map((o) => ({ label: o.label, run: () => addSubject(cameraId, t, o.value) })),
-    // letting go only means something once there is a subject
-    ...(first ? [] : [{ label: "", separator: true }, { label: FREE_LABEL, run: () => addSubject(cameraId, t, null) }]),
+    { label: "", separator: true },
+    { label: FREE_LABEL, run: () => addSubject(cameraId, t, null) },
   ];
 }
 

@@ -120,3 +120,14 @@ describe("free subject keys (no subject from a time on)", () => {
     expect(addSubjectKey(spec, "cam", 2, null)).toBe(spec);
   });
 });
+
+describe("picking a subject up later on a camera that had none", () => {
+  it("fromHere keeps the camera free until that time", async () => {
+    const { addSubjectKey, subjectKeys } = await import("../src");
+    const spec = addSubjectKey(scene([], { rotation: [0, 0, 0] }), "cam", 3, "ben", { transition: "cut" }, { fromHere: true });
+    expect(spec.cameras[0]!.lookAt).toBeUndefined();
+    expect(subjectKeys(spec, "cam").map((k) => [k.t, k.target])).toEqual([[0, null], [3, "ben"]]);
+    expect(evaluate(compile(spec), 2).cameras.cam!.target).toBeNull();
+    expect(evaluate(compile(spec), 3).cameras.cam!.target![0]).toBeCloseTo(2, 1);
+  });
+});

@@ -578,57 +578,62 @@ function SubjectKeys({ cameraId }: { cameraId: string }) {
   const opts = (k: SubjectKey) => [...(Array.isArray(k.target) ? [{ value: "__point", label: "고정 좌표" }] : []), ...options, { value: FREE, label: FREE_LABEL }];
   return (
     <>
-      {keys.length === 0 ? (
-        <p className="text-[11px] leading-relaxed text-ink-3">피사체를 정하면 카메라가 그 인물·소품을 계속 바라봅니다. 하나면 전체 시간, 더 넣으면 그 시간부터 바뀝니다. 처음이나 중간을 ‘없음(자유)’으로 하면 그 구간은 카메라 회전값대로 찍습니다.</p>
-      ) : (
-        <div className="flex flex-col gap-1">
-          <div className="grid grid-cols-[52px_1fr_78px_20px] gap-1 text-[10px] text-ink-3">
-            <span>시간</span>
-            <span>피사체</span>
-            <span>들어오는 방식</span>
+      {/* with no key yet the camera is free from the start: show that as the first row instead of hiding it */}
+      <div className="flex flex-col gap-1">
+        <div className="grid grid-cols-[52px_1fr_78px_20px] gap-1 text-[10px] text-ink-3">
+          <span>시간</span>
+          <span>피사체</span>
+          <span>들어오는 방식</span>
+          <span />
+        </div>
+        {keys.length === 0 ? (
+          <div className="grid grid-cols-[52px_1fr_78px_20px] items-center gap-1">
+            <span className="px-1 font-mono text-[11px] text-ink-3">처음</span>
+            <SelectField value={FREE} options={[{ value: FREE, label: FREE_LABEL }, ...options]} onCommit={(v) => v !== FREE && addSubject(cameraId, 0, v)} />
+            <span className="px-1 text-[10px] text-ink-3">—</span>
             <span />
           </div>
-          {keys.map((k) => (
-            <div key={k.action ?? "base"} className="grid grid-cols-[52px_1fr_78px_20px] items-center gap-1">
-              {k.action === null ? (
-                <span className="px-1 font-mono text-[11px] text-ink-3">처음</span>
-              ) : (
-                <NumField value={k.t} min={0} step={0.1} digits={2} onCommit={(v) => edit((s) => patchSubjectKey(s, cameraId, k, { t: v }))} />
-              )}
-              <SelectField value={valueOf(k.target)} options={opts(k)} onCommit={(v) => v !== "__point" && edit((s) => patchSubjectKey(s, cameraId, k, { target: toTarget(v) }))} />
-              {k.action === null ? (
-                <span className="px-1 text-[10px] text-ink-3">—</span>
-              ) : (
-                <button
-                  type="button"
-                  className="h-6 truncate rounded border border-line bg-black/25 px-1.5 text-left text-[11px] text-ink-2 hover:border-line-strong hover:text-ink"
-                  title="전환 방식 · 시간 · 움직임 바꾸기"
-                  onClick={(e) => openKeyMenu(e, cameraId, k)}
-                >
-                  {k.transition === "cut" ? "컷" : `${TRANSITION_LABEL[k.transition]} ${k.duration}s`}
-                </button>
-              )}
-              <button type="button" aria-label="삭제" title="이 키 삭제" className="flex h-6 w-5 items-center justify-center rounded text-ink-3 hover:bg-hover hover:text-key" onClick={() => edit((s) => removeSubjectKey(s, cameraId, k))}>
-                <X size={12} />
+        ) : null}
+        {keys.map((k) => (
+          <div key={k.action ?? "base"} className="grid grid-cols-[52px_1fr_78px_20px] items-center gap-1">
+            {k.action === null ? (
+              <span className="px-1 font-mono text-[11px] text-ink-3">처음</span>
+            ) : (
+              <NumField value={k.t} min={0} step={0.1} digits={2} onCommit={(v) => edit((s) => patchSubjectKey(s, cameraId, k, { t: v }))} />
+            )}
+            <SelectField value={valueOf(k.target)} options={opts(k)} onCommit={(v) => v !== "__point" && edit((s) => patchSubjectKey(s, cameraId, k, { target: toTarget(v) }))} />
+            {k.action === null ? (
+              <span className="px-1 text-[10px] text-ink-3">—</span>
+            ) : (
+              <button
+                type="button"
+                className="h-6 truncate rounded border border-line bg-black/25 px-1.5 text-left text-[11px] text-ink-2 hover:border-line-strong hover:text-ink"
+                title="전환 방식 · 시간 · 움직임 바꾸기"
+                onClick={(e) => openKeyMenu(e, cameraId, k)}
+              >
+                {k.transition === "cut" ? "컷" : `${TRANSITION_LABEL[k.transition]} ${k.duration}s`}
               </button>
-            </div>
-          ))}
-        </div>
-      )}
+            )}
+            <button type="button" aria-label="삭제" title="이 키 삭제" className="flex h-6 w-5 items-center justify-center rounded text-ink-3 hover:bg-hover hover:text-key" onClick={() => edit((s) => removeSubjectKey(s, cameraId, k))}>
+              <X size={12} />
+            </button>
+          </div>
+        ))}
+      </div>
       <div className="grid grid-cols-[1fr_auto] items-center gap-1 border-t border-line pt-2">
         <SelectField value={pick} options={keys.length ? [...options, { value: FREE, label: FREE_LABEL }] : options} onCommit={setPick} />
         <button
           type="button"
-          disabled={!pick}
-          onClick={() => addSubject(cameraId, time, toTarget(pick))}
+          disabled={!pick || (!keys.length && toTarget(pick) === null)}
+          onClick={() => addSubject(cameraId, time, toTarget(pick), { fromHere: true })}
           className="flex h-7 items-center gap-1 whitespace-nowrap rounded-md bg-raised px-2 text-xs text-ink hover:bg-hover disabled:opacity-40"
-          title={keys.length ? "현재 시간부터 이 피사체로 (전환 방식은 설정의 기본값, 나중에 바꿀 수 있음)" : "이 피사체를 전체 시간 동안 고정"}
+          title={keys.length ? "현재 시간부터 이 피사체로 (전환 방식은 설정의 기본값, 나중에 바꿀 수 있음)" : "현재 시간부터 이 피사체로 — 그 전은 ‘없음(자유)’ 그대로. 처음부터 고정하려면 위 ‘처음’ 줄에서 고르세요"}
         >
           <Plus size={13} />
-          {keys.length ? `${time.toFixed(2)}s부터` : "고정"}
+          {`${time.toFixed(2)}s부터`}
         </button>
       </div>
-      <p className="text-[10px] leading-relaxed text-ink-3">보통은 숏 하나에 피사체 하나, 바뀌면 컷을 나눕니다. 타임라인이나 카메라를 우클릭해도 키를 넣을 수 있습니다.</p>
+      <p className="text-[10px] leading-relaxed text-ink-3">‘처음’ 줄은 시작부터의 피사체(없음 = 카메라 회전값대로)입니다. 보통은 숏 하나에 피사체 하나, 바뀌면 컷을 나눕니다. 타임라인이나 카메라를 우클릭해도 키를 넣을 수 있습니다.</p>
     </>
   );
 }
