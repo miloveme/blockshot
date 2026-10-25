@@ -1,8 +1,8 @@
 "use client";
 
 import { useRef, useSyncExternalStore } from "react";
-import { describeAction, editDuration, keyTimes, type Action } from "@blockshot/core";
-import { Camera, Circle, Clapperboard, Diamond, Pause, Play, SkipBack, SkipForward, StepBack, StepForward, User, Box, PanelBottomClose } from "lucide-react";
+import { describeAction, editDuration, keyTimes, subjectKeys, type Action } from "@blockshot/core";
+import { Camera, Circle, Clapperboard, Crosshair, Diamond, Pause, Play, SkipBack, SkipForward, StepBack, StepForward, User, Box, PanelBottomClose } from "lucide-react";
 import { useStudio } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import { removeKeysAtTime } from "@/lib/actions";
@@ -11,6 +11,7 @@ import { CommandButton, cx, IconButton, Segmented } from "../ui";
 import { NumField } from "../fields";
 import { EditTrack, SHOT_COLORS, timecode } from "../Timeline";
 import { openObjectMenu } from "./ContextMenu";
+import { activeCamera, openAddSubjectMenu, openKeyMenu, subjectName, TRANSITION_LABEL } from "@/lib/subject";
 import { ResizeHandle } from "./Docks";
 
 const LABEL_W = 184;
@@ -193,7 +194,16 @@ function DopeSheet() {
               </span>
             ))}
           </div>
-          <div className="relative cursor-ew-resize" onPointerDown={scrub}>
+          <div
+            className="relative cursor-ew-resize"
+            onPointerDown={scrub}
+            onContextMenu={(e) => {
+              if (e.defaultPrevented) return;
+              e.preventDefault();
+              const t = timeAt(e.clientX);
+              openAddSubjectMenu(e, activeCamera(t), t);
+            }}
+          >
             {/* shots */}
             <div className="relative border-b border-line/60" style={{ height: ROW_H }}>
               {spec.shots.map((s, i) => (
@@ -212,9 +222,21 @@ function DopeSheet() {
               ))}
             </div>
             {rows.map((r) => {
-              const acts = spec.actions.map((a, i) => ({ a, i })).filter(({ a }) => ownerOf(a) === r.id);
+              // a camera's subject keys get their own look (below); its other actions stay plain blocks
+              const acts = spec.actions.map((a, i) => ({ a, i })).filter(({ a }) => ownerOf(a) === r.id && a.type !== "cameraLookAt");
               return (
-                <div key={r.id} className={cx("relative border-b border-line/50", selection === r.id && "bg-accent/[0.04]")} style={{ height: ROW_H }}>
+                <div
+                  key={r.id}
+                  className={cx("relative border-b border-line/50", selection === r.id && "bg-accent/[0.04]")}
+                  style={{ height: ROW_H }}
+                  onContextMenu={(e) => {
+                    // right-click a frame: a subject key there — on this camera, or on the camera active at that frame
+                    e.preventDefault();
+                    const t = timeAt(e.clientX);
+                    openAddSubjectMenu(e, r.kind === "camera" ? r.id : activeCamera(t), t);
+                  }}
+                >
+                  {r.kind === "camera" ? <SubjectLane cameraId={r.id} pct={pct} /> : null}
                   {acts.map(({ a, i }, k) => {
                     const next = acts[k + 1]?.a.start ?? duration;
                     const d = "duration" in a && typeof a.duration === "number" ? a.duration : "end" in a && typeof a.end === "number" ? a.end - a.start : Math.min(2, next - a.start);
@@ -258,5 +280,49 @@ function DopeSheet() {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * A camera's subject keys in its lane: who it holds on from when, and how each change arrives — a cut is a tick, a pan /
+ * whip a block as long as the turn. Click a key to go there, right-click for its menu (transition, time, ease, delete).
+ */
+function SubjectLane({ cameraId, pct }: { cameraId: string; pct: (t: number) => string }) {
+  const spec = useStudio((s) => s.spec);
+  const keys = subjectKeys(spec, cameraId);
+  const { duration } = spec.settings;
+  return (
+    <>
+      {keys.map((k, i) => {
+        const until = keys[i + 1]?.t ?? duration;
+        const turn = Math.min(k.duration, until - k.t);
+        return (
+          <div key={k.action ?? "base"} className="absolute inset-y-0" style={{ left: pct(k.t), width: pct(until - k.t) }}>
+            {/* the hold: a thin line with the subject's name */}
+            <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-cam/40" />
+            <button
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => {
+                useStudio.getState().select(cameraId);
+                useStudio.getState().setTime(k.t + turn);
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openKeyMenu(e, cameraId, k);
+              }}
+              title={`${subjectName(k.target)} · ${k.action === null ? "처음부터" : `${k.t.toFixed(2)}s부터 · ${k.transition === "cut" ? "컷" : `${TRANSITION_LABEL[k.transition]} ${k.duration}s`}`}\n클릭: 이동 · 우클릭: 전환 방식·삭제`}
+              className="absolute top-[4px] flex h-4 max-w-full items-center gap-1 overflow-hidden whitespace-nowrap rounded-sm px-1 text-[9px] font-medium text-cam ring-1 ring-cam/50 hover:bg-cam/25"
+              style={{ minWidth: turn > 0 ? `${(turn / (until - k.t || 1)) * 100}%` : undefined, background: turn > 0 ? "color-mix(in srgb, var(--color-cam) 22%, transparent)" : "rgb(10 12 15 / 0.85)" }}
+            >
+              <Crosshair size={9} className="shrink-0" />
+              {subjectName(k.target)}
+              {k.action !== null && k.transition !== "cut" ? <span className="opacity-60">· {TRANSITION_LABEL[k.transition]}</span> : null}
+            </button>
+          </div>
+        );
+      })}
+    </>
   );
 }

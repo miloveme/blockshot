@@ -1,10 +1,11 @@
 "use client";
 
 import { Boxes, Clapperboard, Film, FolderTree, Info, Layers, PanelLeftClose, PanelRightClose, Settings2, SlidersHorizontal, Sparkles } from "lucide-react";
-import { ASPECT_PRESETS, aspectLabel } from "@blockshot/core";
+import { ASPECT_PRESETS, DEFAULT_TRANSITION_TIME, aspectLabel } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
 import { setDock, useUi } from "@/lib/ui";
 import { setAspect } from "@/lib/actions";
+import { EASE_LABEL, TRANSITION_LABEL, type SubjectEase } from "@/lib/subject";
 import { cx, IconButton, PanelSection, TabBar } from "../ui";
 import { NumField, Row, SelectField, TextField } from "../fields";
 import { Outliner } from "./Outliner";
@@ -171,6 +172,9 @@ function SceneInspector() {
       <PanelSection id="space" title="공간 · 방 구조" icon={Layers}>
         <SpaceEditor />
       </PanelSection>
+      <PanelSection id="defaults" title="편집 기본값" icon={SlidersHorizontal} defaultOpen={false}>
+        <SubjectDefaults />
+      </PanelSection>
       <PanelSection id="tips" title="시작하기" icon={Info} defaultOpen={false}>
         <ul className="flex list-disc flex-col gap-1 pl-4 text-xs leading-relaxed text-ink-3">
           <li>왼쪽 <b className="text-ink-2">에셋</b>에서 고른 뒤 바닥을 클릭해 배치합니다.</li>
@@ -179,5 +183,33 @@ function SceneInspector() {
         </ul>
       </PanelSection>
     </div>
+  );
+}
+
+/** How a newly added subject key (피사체 고정) arrives — the same choices as a key's right-click menu. Saved in this browser. */
+function SubjectDefaults() {
+  const style = useUi((s) => s.subjectStyle);
+  const set = (p: Partial<typeof style>) => useUi.getState().set({ subjectStyle: { ...style, ...p } });
+  return (
+    <>
+      <p className="text-[11px] leading-relaxed text-ink-3">카메라에 피사체 키를 새로 넣을 때 쓰는 전환 방식입니다. 키마다 우클릭으로 바꿀 수 있습니다.</p>
+      <Row label="피사체 전환">
+        <SelectField
+          value={style.transition}
+          options={(["cut", "pan", "whip"] as const).map((v) => ({ value: v, label: TRANSITION_LABEL[v] }))}
+          onCommit={(v) => set({ transition: v as typeof style.transition, duration: DEFAULT_TRANSITION_TIME[v as typeof style.transition] })}
+        />
+      </Row>
+      {style.transition !== "cut" ? (
+        <>
+          <Row label="전환 시간 (초)">
+            <NumField value={style.duration ?? DEFAULT_TRANSITION_TIME[style.transition]} min={0.1} max={10} step={0.1} digits={1} onCommit={(v) => set({ duration: v })} />
+          </Row>
+          <Row label="움직임">
+            <SelectField value={style.ease ?? "easeInOut"} options={(Object.keys(EASE_LABEL) as SubjectEase[]).map((v) => ({ value: v, label: EASE_LABEL[v] }))} onCommit={(v) => set({ ease: v as SubjectEase })} />
+          </Row>
+        </>
+      ) : null}
+    </>
   );
 }

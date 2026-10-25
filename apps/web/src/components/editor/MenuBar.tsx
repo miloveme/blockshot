@@ -39,7 +39,7 @@ const MENUS: Array<{ id: string; label: string; items: () => MenuItemSpec[] }> =
     items: () => [
       c("view.free"), c("view.cut"),
       ...Array.from({ length: 9 }, (_, i) => `view.camera${i + 1}`).filter((id) => isAvailable(findCommand(id)!)).map(c),
-      sep, c("camera.lookThrough"), c("camera.matchView"), c("camera.pilot"), sep, head("렌즈"), c("camera.lens18"), c("camera.lens24"), c("camera.lens35"), c("camera.lens50"), c("camera.lens85"),
+      sep, c("camera.subjectKey"), c("camera.lookThrough"), c("camera.matchView"), c("camera.pilot"), sep, head("렌즈"), c("camera.lens18"), c("camera.lens24"), c("camera.lens35"), c("camera.lens50"), c("camera.lens85"),
     ],
   },
   {

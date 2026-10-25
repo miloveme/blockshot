@@ -1,4 +1,4 @@
-import type { Action, BodyPart, Gesture, HandShape, HoldAt, Key, Pose, BlockshotSpec, Prop, Target, TrackProperty, Vec3 } from "./schema";
+import type { Action, BodyPart, Ease, Gesture, HandShape, HoldAt, Key, Pose, BlockshotSpec, Prop, Target, TrackProperty, Vec3 } from "./schema";
 import { applyEase, DEG, unwrapYaw, vec, yawTowards } from "./math";
 import { verticalFov } from "./camera";
 import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
@@ -25,6 +25,9 @@ export const POSE_BLEND = 0.35;
 const SEAT_APPROACH = 0.5;
 /** standing up somewhere that is not a known seat: one step forward (m) */
 const STAND_STEP = 0.6;
+/** default subject-change times (s) when a key names the transition but no duration */
+const PAN_TIME = 0.8;
+const WHIP_TIME = 0.3;
 /** how long getting up out of a seat takes when the pose simply switches from sit (s) — standUp's default duration */
 const STAND_TIME = 0.8;
 
@@ -43,6 +46,9 @@ interface Segment {
   target: AimTarget;
   /** seconds to swing over from the previous target (a pan / tilt on screen); 0 = switch at once */
   blend?: number;
+  ease?: Ease;
+  /** a whip pan: the same turn, crammed into the middle of the blend */
+  whip?: boolean;
 }
 
 export interface CompiledScene {
@@ -575,7 +581,9 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
     }
     case "cameraLookAt": {
       const list = scene.aims.get(a.camera) ?? [];
-      list.push({ start: a.start, end: Infinity, target: a.target, blend: a.duration ?? 0 });
+      const transition = a.transition ?? (a.duration ? "pan" : "cut");
+      const blend = transition === "cut" ? 0 : (a.duration ?? (transition === "whip" ? WHIP_TIME : PAN_TIME));
+      list.push({ start: a.start, end: Infinity, target: a.target, blend, ease: a.ease ?? "easeInOut", whip: transition === "whip" });
       scene.aims.set(a.camera, list);
       break;
     }
@@ -1095,7 +1103,8 @@ export function evaluate(scene: CompiledScene, t: number): SceneState {
       // a pan / tilt from what it held on before (or from where it pointed) to the new subject — both may be moving
       const prev = activeSegment(aims, aim.start - 1e-6);
       const from = prev ? resolveTarget(scene, prev.target, t) : pointAlong(position, rotation, vec.distance(position, target));
-      target = panBetween(position, from, target, applyEase("easeInOut", (t - aim.start) / aim.blend));
+      const k = applyEase(aim.ease ?? "easeInOut", (t - aim.start) / aim.blend);
+      target = panBetween(position, from, target, aim.whip ? applyEase("easeInOut", k) : k);
     }
     cameras[c.id] = {
       id: c.id,

@@ -188,8 +188,20 @@ export const Action = z.discriminatedUnion("type", [
   z.object({ type: z.literal("standUp"), actor: Id, duration: z.number().positive().default(0.8), to: Vec3.optional(), ...timed }),
   z.object({ type: z.literal("lookAt"), actor: Id, target: Target, end: z.number().optional(), ...timed }),
   z.object({ type: z.literal("cameraMove"), camera: Id, to: Vec3, duration: z.number().positive(), ease: Ease.default("easeInOut"), ...timed }),
-  /** switch what the camera holds on; `duration` > 0 pans there over that many seconds (on screen), omitted / 0 = instant (at a cut) */
-  z.object({ type: z.literal("cameraLookAt"), camera: Id, target: Target, duration: z.number().min(0).max(30).optional(), ...timed }),
+  /**
+   * A subject key: from `start` the camera holds on `target`. How it gets there from the previous subject:
+   * "cut" = at once · "pan" = turns in place over `duration` s · "whip" = a fast whip pan. Without `transition`,
+   * a `duration` > 0 means "pan" and none means "cut". `ease` shapes the turn (default easeInOut).
+   */
+  z.object({
+    type: z.literal("cameraLookAt"),
+    camera: Id,
+    target: Target,
+    transition: z.enum(["cut", "pan", "whip"]).optional(),
+    duration: z.number().min(0).max(30).optional(),
+    ease: Ease.optional(),
+    ...timed,
+  }),
   z.object({ type: z.literal("zoom"), camera: Id, focalLength: z.number().min(4).max(600), duration: z.number().positive(), ease: Ease.default("easeInOut"), ...timed }),
   z.object({ type: z.literal("orbit"), camera: Id, around: Target, degrees: z.number(), duration: z.number().positive(), ease: Ease.default("easeInOut"), ...timed }),
 ]);

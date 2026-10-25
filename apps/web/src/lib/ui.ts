@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import type { TransitionStyle } from "@blockshot/core";
 
 /**
  * Editor chrome state (dock sizes, which tab is open, overlays). Kept apart from the document store so UI changes never
@@ -34,6 +35,8 @@ interface UiState {
   rightWidth: number;
   bottomHeight: number;
   leftTab: LeftTab;
+  /** how a newly added subject key arrives (settings → 피사체 전환 기본값) */
+  subjectStyle: TransitionStyle;
   /** window narrower than COMPACT_WIDTH: side panels are drawers (see `overlay`) instead of docks */
   compact: boolean;
   /** the drawer that is open in compact mode */
@@ -51,7 +54,7 @@ interface UiState {
 }
 
 const KEY = "blockshot.ui.v1";
-const PERSISTED = ["leftOpen", "rightOpen", "bottomOpen", "leftWidth", "rightWidth", "bottomHeight", "leftTab"] as const;
+const PERSISTED = ["leftOpen", "rightOpen", "bottomOpen", "leftWidth", "rightWidth", "bottomHeight", "leftTab", "subjectStyle"] as const;
 
 function load(): Partial<UiState> {
   try {
@@ -72,6 +75,7 @@ export const useUi = create<UiState>((set, get) => ({
   rightWidth: 320,
   bottomHeight: 196,
   leftTab: "outliner",
+  subjectStyle: { transition: "pan", duration: 0.8, ease: "easeInOut" },
   compact: false,
   overlay: null,
   paletteOpen: false,

@@ -59,3 +59,39 @@ describe("camera subject change (cameraLookAt)", () => {
     expect(evaluate(compile(spec), 0.5).cameras.cam!.target).toBeNull();
   });
 });
+
+describe("subject keys (피사체 고정 as keyframes)", () => {
+  it("one subject holds the whole time; more keys split it; going back is another key", async () => {
+    const { addSubjectKey, subjectKeys, removeSubjectKey, patchSubjectKey } = await import("../src");
+    let spec = scene([], { rotation: [0, 0, 0] });
+    // first subject, even added at 3 s, is THE subject for the whole time
+    spec = addSubjectKey(spec, "cam", 3, "ana");
+    expect(spec.cameras[0]!.lookAt).toBe("ana");
+    expect(target(spec, 0)[0]).toBeCloseTo(-2, 1);
+    // a second subject takes over from 2 s with a pan; back to Ana at 4 s with a cut
+    spec = addSubjectKey(spec, "cam", 2, "ben", { transition: "pan", duration: 1 });
+    spec = addSubjectKey(spec, "cam", 4, "ana", { transition: "cut" });
+    expect(subjectKeys(spec, "cam").map((k) => [k.t, k.target, k.transition])).toEqual([[0, "ana", "cut"], [2, "ben", "pan"], [4, "ana", "cut"]]);
+    expect(target(spec, 1.9)[0]).toBeCloseTo(-2, 1);
+    expect(target(spec, 3.5)[0]).toBeCloseTo(2, 1);
+    expect(target(spec, 4)[0]).toBeCloseTo(-2, 1);
+    // a key at the same time changes subject instead of stacking
+    spec = addSubjectKey(spec, "cam", 2, "ana");
+    expect(subjectKeys(spec, "cam")).toHaveLength(3);
+    // switch the 2 s key to a whip pan, then remove the camera's own subject: the earliest key takes over the whole time
+    const k2 = subjectKeys(spec, "cam")[1]!;
+    spec = patchSubjectKey(spec, "cam", k2, { target: "ben", how: { transition: "whip" } });
+    expect(subjectKeys(spec, "cam")[1]).toMatchObject({ transition: "whip", duration: 0.3 });
+    spec = removeSubjectKey(spec, "cam", subjectKeys(spec, "cam")[0]!);
+    expect(spec.cameras[0]!.lookAt).toBe("ben");
+    expect(subjectKeys(spec, "cam").map((k) => [k.t, k.target])).toEqual([[0, "ben"], [4, "ana"]]);
+  });
+
+  it("a whip pan turns faster in the middle than a plain pan of the same length", () => {
+    const pan = scene([{ type: "cameraLookAt", camera: "cam", target: "ben", start: 2, transition: "pan", duration: 1 }]);
+    const whip = scene([{ type: "cameraLookAt", camera: "cam", target: "ben", start: 2, transition: "whip", duration: 1 }]);
+    // a quarter in: the whip has barely moved; at the end both arrive
+    expect(Math.abs(yawOf(target(whip, 2.25)) - yawOf(target(whip, 2)))).toBeLessThan(Math.abs(yawOf(target(pan, 2.25)) - yawOf(target(pan, 2))));
+    expect(target(whip, 3)[0]).toBeCloseTo(2, 1);
+  });
+});
