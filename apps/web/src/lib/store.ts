@@ -130,7 +130,11 @@ export const useStudio = create<StudioState>((set, get) => {
     // keep the cut playhead valid after shot edits; in cut view the scene time follows it
     const editTime = Math.min(get().editTime, Math.max(0, editDuration(spec) - 1e-3));
     const hit = locateEdit(spec, editTime);
-    const cutView = view.kind === "shot" && hit;
+    // the scene time follows the cut playhead only while the two agree — a scene-time scrub outside the cut (e.g. the
+    // dope sheet) must not snap back to the cut position on the next edit
+    const was = locateEdit(get().spec, get().editTime);
+    const synced = !was || Math.abs(was.sceneTime - get().time) < 1e-6;
+    const cutView = view.kind === "shot" && hit && synced;
     const time = cutView ? hit.sceneTime : Math.min(get().time, spec.settings.duration);
     return {
       spec, compiled: c, time, sceneState: evaluate(c, time), selection: exists ? sel : null,
@@ -206,6 +210,12 @@ export const useStudio = create<StudioState>((set, get) => {
     setTime(t) {
       const { compiled: c, spec } = get();
       const time = Math.max(0, Math.min(t, spec.settings.duration));
+      // in the cut view keep the cut playhead on the same moment when a shot covers it (the current one first)
+      if (get().view.kind === "shot") {
+        const covers = (id: string | null) => spec.shots.find((x) => x.id === id && time >= x.start && time <= x.end);
+        const shot = covers(get().cutShotId) ?? spec.shots.find((x) => time >= x.start && time < x.end);
+        if (shot) return set({ time, sceneState: evaluate(c, time), editTime: editTimeOf(spec, shot.id, time), cutShotId: shot.id });
+      }
       set({ time, sceneState: evaluate(c, time) });
     },
     setPlaying(playing) {
