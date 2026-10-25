@@ -1494,10 +1494,28 @@
                   }
                 ]
               },
+              "transition": {
+                "type": "string",
+                "enum": [
+                  "cut",
+                  "pan",
+                  "whip"
+                ]
+              },
               "duration": {
                 "type": "number",
                 "minimum": 0,
                 "maximum": 30
+              },
+              "ease": {
+                "type": "string",
+                "enum": [
+                  "linear",
+                  "easeIn",
+                  "easeOut",
+                  "easeInOut",
+                  "step"
+                ]
               },
               "start": {
                 "type": "number",

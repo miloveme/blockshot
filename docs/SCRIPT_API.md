@@ -98,7 +98,7 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 | `.truck(distance, opts)` / `.pedestal(distance, opts)` | 좌우 / 상하 평행 이동 |
 | `.orbit(around, { degrees, start, duration, ease? })` | 원호 이동 |
 | `.zoom(focalLength, { start, duration, ease? })` | 초점거리 변경 |
-| `.lookAt(target, { start, duration? })` | 피사체 고정 대상 변경 (`duration` 초 동안 팬으로 넘어감, 생략 시 즉시 — 컷 지점용) |
+| `.lookAt(target, { start, transition?, duration?, ease? })` | 피사체 키 — `start`부터 이 피사체. `transition`: `"cut"`(즉시) · `"pan"`(`duration`초 회전) · `"whip"`(휩 팬), `ease`로 움직임 형태 |
 | `.id` | |
 
 ### 유틸

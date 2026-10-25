@@ -5,6 +5,7 @@ import { useStudio } from "@/lib/store";
 import { useUi, type MenuItemSpec } from "@/lib/ui";
 import { findCommand, isEnabled, runCommand, shortcutOf, titleOf } from "@/lib/commands";
 import { cx } from "../ui";
+import { addSubjectItems } from "@/lib/subject";
 
 /** Right-click menu for an object (viewport, outliner): the commands that make sense for its kind. */
 export function openObjectMenu(e: { clientX: number; clientY: number }, id: string) {
@@ -22,7 +23,7 @@ export function openObjectMenu(e: { clientX: number; clientY: number }, id: stri
       ? [{ label: "", command: "camera.lookThrough" }, { label: "", command: "camera.matchView" }, { label: "", separator: true }]
       : []),
     ...(actor ? [{ label: "", command: "object.path" }, { label: "", command: "anim.key" }, { label: "", command: "object.bake" }, { label: "", separator: true }] : []),
-    ...(cam ? [{ label: "", command: "anim.key" }, { label: "", separator: true }] : []),
+    ...(cam ? [{ label: "", command: "anim.key" }, { label: "", separator: true }, ...addSubjectItems(id, s.time), { label: "", separator: true }] : []),
     {
       label: `✨ AI에게 “${name}” 연출 요청…`,
       run: () => useUi.getState().set({ paletteOpen: true, paletteAi: true, aiDraft: `@${id} ` }),

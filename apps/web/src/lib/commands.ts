@@ -15,6 +15,7 @@ import { startPath } from "./placement";
 import { copyShareLink, downloadSpec } from "./persist";
 import { getBridge } from "./render";
 import { frameAll, frameSelected } from "./frame";
+import { activeCamera as subjectCamera, openAddSubjectMenu } from "./subject";
 
 /**
  * The editor's command registry — every action a person can take, by name.
@@ -239,6 +240,16 @@ const COMMANDS: Command[] = [
       if (c) st().setView({ kind: "camera", id: c.id });
     },
   })),
+  {
+    id: "camera.subjectKey",
+    title: "피사체 키 넣기 (현재 프레임)…",
+    category: "camera",
+    keys: ["KeyL"],
+    when: sceneView,
+    aliases: "subject look at focus 피사체 고정 타깃",
+    hint: "선택한 카메라(없으면 지금 화면의 카메라)에 현재 시간부터 바라볼 피사체를 넣습니다",
+    run: () => openAddSubjectMenu({ clientX: window.innerWidth / 2 - 120, clientY: window.innerHeight / 2 - 120 }, subjectCamera(), st().time),
+  },
   {
     id: "camera.lookThrough",
     title: "선택한 카메라로 보기",

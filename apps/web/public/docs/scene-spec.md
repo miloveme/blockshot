@@ -142,7 +142,7 @@ LLM과 사람이 가장 많이 쓰는 레이어. 로드 시 `compile()`이 `trac
 | `standUp` | `actor, start, duration?(0.8), to?` | `stand`로 일어나 좌석(의자·소파) 앞 가장자리 너머 0.25 m까지 걸어 나온다(좌석이 아니면 바라보는 방향으로 0.6 m, 또는 `to`). `pose`/포즈 키로 `sit` → 다른 포즈로 바뀔 때도, 그 자리에 머물러 있으면 같은 방식으로 좌석 밖으로 나온다 |
 | `lookAt` | `actor, target, start, end?` | 머리 방향 |
 | `cameraMove` | `camera, to: Vec3, start, duration, ease?` | 카메라 이동 |
-| `cameraLookAt` | `camera, target, start, duration?` | 카메라의 피사체 고정 대상 변경. `duration`(초)을 주면 그동안 이전 피사체에서 새 피사체로 팬·틸트(시선 방향을 일정한 각속도로 회전, 둘 다 움직여도 따라감). 생략·0이면 즉시 전환 — 컷 지점용. 숏 안에서 피사체를 바꾸는 것은 의도된 연출일 때만 |
+| `cameraLookAt` | `camera, target, start, transition?, duration?, ease?` | **피사체 키**. 카메라의 `lookAt`이 처음부터의 피사체이고, 이 키가 `start`부터 피사체를 바꾼다(키들이 시간을 나눠 가짐; 처음 피사체로 돌아가려면 키를 하나 더). `transition`: `cut`(즉시, 컷 지점용) · `pan`(제자리에서 `duration`초 동안 회전, 기본 0.8) · `whip`(빠른 휩 팬, 기본 0.3). `ease`: `easeInOut`(기본)·`easeIn`·`easeOut`·`linear`. `transition` 없이 `duration`만 있으면 pan, 둘 다 없으면 cut. 회전은 시선 방향을 구면 보간하며 두 피사체가 움직여도 따라간다 |
 | `zoom` | `camera, focalLength, start, duration, ease?` | 초점거리 애니메이션 |
 | `orbit` | `camera, around: Vec3 \| ref, degrees, start, duration, ease?` | 대상 중심 원호 이동 |
 
