@@ -31,8 +31,8 @@ import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
  */
 
 type Timing = { start: number; duration?: number; ease?: Ease };
-type ActorOpts = { name?: string; color?: string; height?: number; build?: "slim" | "average" | "heavy"; at?: Vec3; facing?: number; pose?: Pose };
-type PropOpts = { id?: string; at?: Vec3; facing?: number; rotation?: Vec3; scale?: Vec3; color?: string };
+type ActorOpts = { name?: string; color?: string; height?: number; build?: "slim" | "average" | "heavy"; at?: Vec3; facing?: number; pose?: Pose; aim?: Vec3 };
+type PropOpts = { id?: string; at?: Vec3; facing?: number; rotation?: Vec3; scale?: Vec3; color?: string; aim?: Vec3 };
 type CameraOpts = { name?: string; lens?: number; sensor?: Sensor; at?: Vec3; lookAt?: Target; rotation?: Vec3 };
 
 export interface ActorHandle {
@@ -274,7 +274,7 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
     },
     actor(id: string, o: ActorOpts = {}): ActorHandle {
       ensureFreeId(id);
-      spec.actors.push({ id, name: o.name, color: o.color, height: o.height, build: o.build, position: o.at, rotation: o.facing !== undefined ? [0, o.facing, 0] : undefined, pose: o.pose });
+      spec.actors.push({ id, name: o.name, color: o.color, height: o.height, build: o.build, position: o.at, rotation: o.facing !== undefined ? [0, o.facing, 0] : undefined, pose: o.pose, aim: o.aim });
       return makeActor(id);
     },
     /** Handle for something that already exists in the scene (placed by hand or by an earlier script). */
@@ -315,7 +315,7 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
     prop(type: PropType, o: PropOpts = {}) {
       const id = o.id ?? `${type}${++propCounter}`;
       ensureFreeId(id);
-      spec.props.push({ id, type, position: o.at, rotation: o.rotation ?? (o.facing !== undefined ? [0, o.facing, 0] : undefined), scale: o.scale, color: o.color });
+      spec.props.push({ id, type, position: o.at, rotation: o.rotation ?? (o.facing !== undefined ? [0, o.facing, 0] : undefined), scale: o.scale, color: o.color, aim: o.aim });
       return makeProp(id);
     },
     camera(id: string, o: CameraOpts = {}): CameraHandle {

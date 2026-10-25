@@ -293,6 +293,23 @@
               "crouch",
               "climb"
             ]
+          },
+          "aim": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "items": false,
+            "minItems": 3,
+            "maxItems": 3
           }
         },
         "required": [
@@ -408,6 +425,23 @@
             "default": "#9aa3b2",
             "type": "string",
             "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "aim": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "items": false,
+            "minItems": 3,
+            "maxItems": 3
           }
         },
         "required": [

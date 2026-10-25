@@ -16,6 +16,7 @@ const RULES = `Conventions:
 - Y-up, right-handed, meters, seconds, degrees. Floor is y=0. Euler rotation [x,y,z] applied YXZ.
 - Actors/props with rotation y=0 face +Z. Use rotation [0, yaw, 0] to turn them.
 - References are strings: "actorId" or "actorId.part" (parts: ${BODY_PARTS.join(", ")}); "actorId.part@mirrorId" is that point as seen inside a mirror prop.
+  A bare "id" means the object's target point: an actor's face (follows the head when sitting/turning), a prop's box centre. Optional "aim" moves it (actor: offset from the face in the head's frame; prop: point in its own space).
 - Room spaces are centered at the origin: x in [-width/2, width/2], z in [-depth/2, depth/2]. Walls: north(-Z) south(+Z) east(+X) west(-X).
 - Eye-level camera height is 1.5–1.7 m. Wide 18–28mm, normal 35–50mm, tele/close-up 85mm+.
 - Keep the 180-degree rule between cuts: with two people in play, every camera of a cut stays on the same side of the

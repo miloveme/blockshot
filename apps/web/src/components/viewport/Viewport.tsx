@@ -5,10 +5,10 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, PerspectiveCamera, Text } from "@react-three/drei";
 import * as THREE from "three";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
-import { DEG, editDuration, type BoneName, type Vec3 } from "@blockshot/core";
+import { DEG, editDuration, resolveTarget, type BoneName, type Vec3 } from "@blockshot/core";
 import { openObjectMenu } from "../editor/ContextMenu";
 import { useStudio } from "@/lib/store";
-import { commitBoneRotation, commitCamera, commitCameraRotation, commitScale, commitTransform, snapSteps } from "@/lib/actions";
+import { commitAim, commitBoneRotation, commitCamera, commitCameraRotation, commitScale, commitTransform, snapSteps } from "@/lib/actions";
 import { registerBridge } from "@/lib/render";
 import { framedPose } from "@/lib/frame";
 import { stopRecording } from "@/lib/recorder";
@@ -164,6 +164,51 @@ function SelectionRing() {
 }
 
 /** Move / rotate gizmo for the selected object. Drags are applied to the Object3D live and committed on release. */
+/**
+ * Target point marker (editor layer). Selected actor / prop: where cameras aim when it is the subject (default face /
+ * box centre) — click it or turn on "옮기기" to drag it. Selected camera: the point it is aiming at right now.
+ */
+function AimMarker() {
+  const ref = useRef<THREE.Group>(null);
+  const ring = useRef<THREE.MeshBasicMaterial>(null);
+  useFrame(() => {
+    const g = ref.current;
+    if (!g) return;
+    const { selection, view, compiled, time, sceneState, aimEdit, dragging, spec } = useStudio.getState();
+    const isObject = !!selection && (spec.actors.some((a) => a.id === selection) || spec.props.some((p) => p.id === selection));
+    const camTarget = selection ? sceneState.cameras[selection]?.target : undefined;
+    g.visible = view.kind === "free" && (isObject || !!camTarget);
+    if (!g.visible || !selection) return;
+    g.name = isObject ? `aim:${selection}` : "aim-camera";
+    if (dragging !== g.name) g.position.set(...(isObject ? resolveTarget(compiled, selection, time) : camTarget!));
+    if (ring.current) ring.current.color.set(isObject ? (aimEdit ? "#f43f5e" : "#fb7185") : "#38bdf8");
+    markEditor(g);
+  });
+  return (
+    <group
+      ref={ref}
+      visible={false}
+      onClick={(e) => {
+        const s = useStudio.getState();
+        if (!s.selection || s.view.kind !== "free" || !s.spec.actors.some((a) => a.id === s.selection) && !s.spec.props.some((p) => p.id === s.selection)) return;
+        e.stopPropagation();
+        s.setAimEdit(true);
+      }}
+    >
+      <mesh renderOrder={999}>
+        <sphereGeometry args={[0.035, 16, 12]} />
+        <meshBasicMaterial ref={ring} color="#fb7185" depthTest={false} transparent opacity={0.95} />
+      </mesh>
+      {([[0.12, 0, 0], [0, 0.12, 0], [0, 0, 0.12]] as const).map((s, i) => (
+        <mesh key={i} renderOrder={999} scale={[s[0] || 0.006, s[1] || 0.006, s[2] || 0.006]}>
+          <boxGeometry args={[2, 2, 2]} />
+          <meshBasicMaterial color="#ffffff" depthTest={false} transparent opacity={0.7} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 function SelectionGizmo() {
   const { camera, gl, scene, get } = useThree();
   // Created inside the effect (not useMemo): dispose() is permanent, and StrictMode re-runs effects.
@@ -184,6 +229,17 @@ function SelectionGizmo() {
       const orbit = get().controls as { enabled: boolean } | null;
       if (orbit) orbit.enabled = !e.value;
       const store = useStudio.getState();
+      if (obj?.name.startsWith("aim:")) {
+        // the target point of the selected actor / prop: stored as `aim` on release
+        const id = obj.name.slice(4);
+        if (e.value) {
+          store.setDragging(obj.name);
+          return;
+        }
+        commitAim(id, [obj.position.x, obj.position.y, obj.position.z]);
+        store.setDragging(null);
+        return;
+      }
       if (obj?.name.startsWith("bone:")) {
         // a bone of the selected actor: rotation is keyed at the current time on release
         const bone = obj.name.slice(5) as BoneName;
@@ -250,6 +306,13 @@ function SelectionGizmo() {
       return;
     }
     tc.setSpace("world");
+    // target point editing: the gizmo moves the aim marker of the selected actor / prop
+    const aimObj = useStudio.getState().aimEdit ? scene.getObjectByName(`aim:${want}`) : undefined;
+    if (aimObj) {
+      if (tc.object !== aimObj) tc.attach(aimObj);
+      tc.setMode("translate");
+      return;
+    }
     if (cur !== `obj:${want}`) {
       const obj = scene.getObjectByName(`obj:${want}`);
       if (obj) tc.attach(obj);
@@ -407,6 +470,7 @@ function Scene() {
       <ShotCamera active={!free} />
       {view.kind === "camera" && pilot ? <CameraPilot /> : null}
       <SelectionRing />
+      <AimMarker />
       <SelectionGizmo />
       <PlacementController />
       <PathOverlay />

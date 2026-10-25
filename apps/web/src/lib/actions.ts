@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  aimFromWorld,
   addActor, addCamera, setBoneRotation, addProp, aspectLabel, isAnimated, kindOf, patchEntity, removeEntity, removeKeysAt, resolutionForAspect, upsertKey,
   type BlockshotSpec, type BoneName, type PropType, type TrackProperty, type Vec3,
 } from "@blockshot/core";
@@ -229,4 +230,18 @@ export function commitScale(id: string, scale: Vec3) {
     }
     return null;
   });
+}
+
+/**
+ * Target point (피사체 고정 조준점) of an actor / prop. `aim` undefined resets to the default (face / box centre).
+ */
+export function setAim(id: string, aim: Vec3 | undefined) {
+  state().edit((s) => (kindOf(s, id) === "actor" || kindOf(s, id) === "prop" ? patchEntity(s, id, { aim: aim ? roundVec(aim) : undefined }) : null));
+}
+
+/** Target point dragged in the viewport to world point `world` (at the current time). */
+export function commitAim(id: string, world: Vec3) {
+  const { compiled, time } = state();
+  const aim = aimFromWorld(compiled, id, time, world);
+  if (aim) setAim(id, aim);
 }

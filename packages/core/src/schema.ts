@@ -92,6 +92,12 @@ export const Actor = z.object({
   position: Vec3.default([0, 0, 0]),
   rotation: Vec3.default([0, 0, 0]),
   pose: Pose.default("stand"),
+  /**
+   * Target point — where a camera aims when this actor is its subject ("id" without a part).
+   * Offset in meters from the centre of the head, in the head's own frame (x left, y up, z forward), so it follows
+   * the head when the actor sits, walks or turns. Default (omitted) = the face.
+   */
+  aim: Vec3.optional(),
 });
 export type Actor = z.infer<typeof Actor>;
 
@@ -126,6 +132,11 @@ export const Prop = z.object({
   rotation: Vec3.default([0, 0, 0]),
   scale: Vec3.default([1, 1, 1]),
   color: Color.default("#9aa3b2"),
+  /**
+   * Target point — where a camera aims when this prop is its subject. A point in the prop's own space (meters at
+   * scale 1, from its origin on the floor; scale and rotation apply). Default (omitted) = the centre of its box.
+   */
+  aim: Vec3.optional(),
 });
 export type Prop = z.infer<typeof Prop>;
 

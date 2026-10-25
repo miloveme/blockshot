@@ -8,7 +8,7 @@ import { bakeNav, crouchSpans, surfaceSpans, navRadiusOf, routeLegs, staticActor
 import { BONES, REST_HEIGHT, applyLayer, blendPoses, clonePose, smoothstep, solveRig, toLocal, toWorld, type BoneName, type RigPose, type Skeleton } from "./rig";
 import { Q } from "./quat";
 import { driveKeys, KEY_STEP, motionAt, motionFromKeys, smoothPath, type Motion } from "./vehicle";
-import { PROP_CATALOG } from "./catalog";
+import { PROP_CATALOG, propSize } from "./catalog";
 import { basePose, envelope, GESTURE_DEFS, handLayer, handShapeLayer, lookLayer, RELAXED_HANDS, sampleGesture, solveArm } from "./poses";
 
 const WALK_SPEED = 1.3;
@@ -722,16 +722,73 @@ function resolveImpl(scene: CompiledScene, target: AimTarget, t: number, rigAwar
   }
   if (scene.spec.actors.some((a) => a.id === id)) {
     const core = actorCore(scene, id, t);
-    const which = (part as BodyPart) ?? "chest";
+    const scale = core.actor.height / REST_HEIGHT;
+    // a bare actor id means its target point (default: the face)
+    if (!part) {
+      const aim = core.actor.aim ?? [0, 0, 0];
+      if (!rigAware) {
+        const head = partPosition({ ...core, height: core.actor.height }, "head");
+        return toWorld([aim[0] * scale, aim[1] * scale, aim[2] * scale], head, [0, core.rotation[1], 0]);
+      }
+      const { skeleton } = computeRig(scene, id, t, core, null);
+      return toWorld(offsetIn(skeleton.head, [aim[0], HEAD_CENTER + aim[1], aim[2]], scale), core.position, core.rotation);
+    }
+    const which = part as BodyPart;
     if (!rigAware) return partPosition({ ...core, height: core.actor.height }, which);
     const { skeleton } = computeRig(scene, id, t, core, null);
-    return rigPart(skeleton, which, core.actor.height / REST_HEIGHT, core.position, core.rotation);
+    return rigPart(skeleton, which, scale, core.position, core.rotation);
+  }
+  const prop = scene.spec.props.find((p) => p.id === id);
+  if (prop) {
+    // props can move (vehicles): use their animated transform when there is one
+    const pk = scene.tracks.get(trackKey(id, "position"));
+    const rk = scene.tracks.get(trackKey(id, "rotation"));
+    const position = pk ? (sampleKeys(pk, t) as Vec3) : prop.position;
+    const rotation = rk ? (sampleKeys(rk, t) as Vec3) : prop.rotation;
+    return toWorld(propAimLocal(scene.spec, prop), position, rotation);
   }
   const camKeys = scene.tracks.get(trackKey(id, "position"));
   if (camKeys) return sampleKeys(camKeys, t) as Vec3;
-  const prop = scene.spec.props.find((p) => p.id === id);
-  if (prop) return prop.position;
   return [0, 0, 0];
+}
+
+/** Height of the head sphere's centre above the head bone (rest metres) — the face, the default actor target point. */
+const HEAD_CENTER = 0.09;
+
+/** A prop's target point in its own space after scale: `aim`, or the centre of its box. */
+export function propAimLocal(spec: BlockshotSpec, prop: Prop): Vec3 {
+  const aim = prop.aim ?? defaultPropAim(spec, prop);
+  return [aim[0] * prop.scale[0], aim[1] * prop.scale[1], aim[2] * prop.scale[2]];
+}
+
+/** Default prop target point (meters at scale 1): the centre of its bounding box. */
+export function defaultPropAim(spec: BlockshotSpec, prop: Pick<Prop, "type" | "asset">): Vec3 {
+  return [0, propSize(prop, spec.assets)[1] / 2, 0];
+}
+
+/**
+ * Inverse of the target point: the `aim` value that puts the target point of `id` at world point `world` at time t
+ * (used when the user drags the target point in the viewport). Null for unknown / non-aimable ids.
+ */
+export function aimFromWorld(scene: CompiledScene, id: string, t: number, world: Vec3): Vec3 | null {
+  const round = (v: Vec3): Vec3 => [Math.round(v[0] * 1000) / 1000, Math.round(v[1] * 1000) / 1000, Math.round(v[2] * 1000) / 1000];
+  if (scene.spec.actors.some((a) => a.id === id)) {
+    const core = actorCore(scene, id, t);
+    const scale = core.actor.height / REST_HEIGHT;
+    const { skeleton } = computeRig(scene, id, t, core, null);
+    const centre = offsetIn(skeleton.head, [0, HEAD_CENTER, 0], scale);
+    const local = toLocal(world, core.position, core.rotation);
+    const d = Q.rotate(Q.inv(skeleton.head.rot), [local[0] - centre[0], local[1] - centre[1], local[2] - centre[2]]);
+    return round([d[0] / scale, d[1] / scale, d[2] / scale]);
+  }
+  const prop = scene.spec.props.find((p) => p.id === id);
+  if (prop) {
+    const pk = scene.tracks.get(trackKey(id, "position"));
+    const rk = scene.tracks.get(trackKey(id, "rotation"));
+    const local = toLocal(world, pk ? (sampleKeys(pk, t) as Vec3) : prop.position, rk ? (sampleKeys(rk, t) as Vec3) : prop.rotation);
+    return round([local[0] / (prop.scale[0] || 1), local[1] / (prop.scale[1] || 1), local[2] / (prop.scale[2] || 1)]);
+  }
+  return null;
 }
 
 const offsetIn = (bone: Skeleton[BoneName], v: Vec3, scale: number): Vec3 => {

@@ -222,7 +222,8 @@ describe("evaluate integration", () => {
     const s = base([{ type: "reach", actor: "a", target: "box", hand: "right", start: 1, duration: 2 }]);
     const c = compile(s);
     const hand = resolveTarget(c, "a.hand_r", 2);
-    const wristTarget: Vec3 = [-0.2, 1.1, 0.45];
+    // a bare prop id is its target point: the centre of the 0.2 m box (origin y 1.1 + 0.1)
+    const wristTarget: Vec3 = [-0.2, 1.2, 0.45];
     // hand_r is the palm (4 cm past the wrist), so it lands within a hand's length of the object
     expect(dist(hand, wristTarget)).toBeLessThan(0.09);
     expect(dist(resolveTarget(c, "a.hand_r", 0.5), wristTarget)).toBeGreaterThan(0.5);

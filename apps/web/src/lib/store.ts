@@ -88,6 +88,9 @@ interface StudioState {
   setView(v: ViewMode): void;
   select(id: string | null): void;
   selectBone(bone: BoneName | null): void;
+  /** the move gizmo grabs the selected object's target point instead of the object */
+  aimEdit: boolean;
+  setAimEdit(on: boolean): void;
   setDraggingBone(bone: BoneName | null): void;
   setGizmoMode(m: GizmoMode): void;
   setSnap(on: boolean): void;
@@ -274,7 +277,11 @@ export const useStudio = create<StudioState>((set, get) => {
       set({ gestureBase: null });
     },
     select(selection) {
-      set({ selection, selectedBone: null });
+      set({ selection, selectedBone: null, aimEdit: false });
+    },
+    aimEdit: false,
+    setAimEdit(aimEdit) {
+      set({ aimEdit });
     },
     selectBone(selectedBone) {
       set({ selectedBone });

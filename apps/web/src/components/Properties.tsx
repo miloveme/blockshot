@@ -1,11 +1,11 @@
 "use client";
 
-import { GESTURES, HAND_SHAPES, LENS_PRESETS, POSES, SEATS, addGesture, addHandShape, addHold, addReach, addSitDown, addStandUp, describeAction, labeledActions, patchActionAt, keyTimes, kindOf, BODY_BONES, bakeActor, clearBoneKeys, hasBakedKeys, hasBoneKeys, keyBones, keyCurrentPose, mirrorBonePose, setBoneRotation, snapshotPose, unbakeActor, type BoneName, type BonePose, movesOf, patchMoveAt, removeActionAt, patchSubjectKey, removeSubjectKey, subjectKeys, type SubjectKey, type Gesture, type HandShape, type Pose } from "@blockshot/core";
+import { GESTURES, HAND_SHAPES, LENS_PRESETS, POSES, SEATS, defaultPropAim, addGesture, addHandShape, addHold, addReach, addSitDown, addStandUp, describeAction, labeledActions, patchActionAt, keyTimes, kindOf, BODY_BONES, bakeActor, clearBoneKeys, hasBakedKeys, hasBoneKeys, keyBones, keyCurrentPose, mirrorBonePose, setBoneRotation, snapshotPose, unbakeActor, type BoneName, type BonePose, movesOf, patchMoveAt, removeActionAt, patchSubjectKey, removeSubjectKey, subjectKeys, type SubjectKey, type Gesture, type HandShape, type Pose } from "@blockshot/core";
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { hasModel, importGlb } from "@/lib/models";
 import { startPath } from "@/lib/placement";
-import { commitTransform, insertKeyAtCurrentTime, matchCameraToFreeView, patch, removeKeysAtTime, setLens, setPoseCmd } from "@/lib/actions";
+import { commitTransform, insertKeyAtCurrentTime, setAim, matchCameraToFreeView, patch, removeKeysAtTime, setLens, setPoseCmd } from "@/lib/actions";
 import { getBridge } from "@/lib/render";
 import { addSubject, FREE, FREE_LABEL, openKeyMenu, subjectOptions, toTarget, TRANSITION_LABEL } from "@/lib/subject";
 import { ColorField, NumField, Row, SelectField, TextField, Vec3Field } from "./fields";
@@ -163,6 +163,12 @@ export function Properties() {
         </Row>
         {actor || cam ? <KeyButtons id={id} /> : null}
       </PanelSection>
+
+      {actor || prop ? (
+        <PanelSection id="aim" title="타겟 포인트" icon={Crosshair}>
+          <AimControls id={id} />
+        </PanelSection>
+      ) : null}
 
       {actor ? (
         <>
@@ -656,5 +662,68 @@ function OnAirStatus({ cameraId }: { cameraId: string }) {
     <button type="button" onClick={() => useStudio.getState().select(onAir)} className="mt-0.5 flex max-w-full items-center gap-1.5 truncate text-[10px] text-ink-3 hover:text-ink" title="송출 중인 카메라를 선택">
       <Tally /> 송출 중: {name} →
     </button>
+  );
+}
+
+/** Actor presets for the target point: offsets from the face in the head's frame (meters). */
+const AIM_PRESETS: Array<{ label: string; aim: [number, number, number] | undefined }> = [
+  { label: "얼굴", aim: undefined },
+  { label: "가슴", aim: [0, -0.42, 0.04] },
+  { label: "허리", aim: [0, -0.72, 0.02] },
+];
+
+/**
+ * Where cameras aim when this actor / prop is the subject (피사체 고정). Shown as a pink point in the free view;
+ * "옮기기" hands the move gizmo to it.
+ */
+function AimControls({ id }: { id: string }) {
+  const spec = useStudio((s) => s.spec);
+  const aimEdit = useStudio((s) => s.aimEdit);
+  const actor = spec.actors.find((a) => a.id === id);
+  const prop = spec.props.find((p) => p.id === id);
+  if (!actor && !prop) return null;
+  const custom = (actor ?? prop)!.aim;
+  const shown = custom ?? (actor ? ([0, 0, 0] as [number, number, number]) : defaultPropAim(spec, prop!));
+  const toggle = () => {
+    const s = useStudio.getState();
+    if (s.view.kind !== "free") s.setView({ kind: "free" });
+    s.setAimEdit(!aimEdit);
+  };
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Row label={actor ? "얼굴 기준" : "물체 기준"}>
+        <Vec3Field value={shown} step={0.05} onCommit={(v) => setAim(id, v)} />
+      </Row>
+      <div className="flex flex-wrap gap-1 pl-16">
+        <button
+          type="button"
+          onClick={toggle}
+          className={`rounded px-2 py-0.5 text-[11px] ${aimEdit ? "bg-rose-500 text-white" : "bg-raised hover:bg-hover"}`}
+          title="뷰포트의 분홍 점을 이동 기즈모로 옮깁니다 (점을 클릭해도 켜짐)"
+        >
+          🎯 {aimEdit ? "옮기는 중 — 끄기" : "뷰포트에서 옮기기"}
+        </button>
+        {actor
+          ? AIM_PRESETS.map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                className={`rounded px-2 py-0.5 text-[11px] ${JSON.stringify(p.aim) === JSON.stringify(custom) ? "bg-accent/30 text-ink" : "bg-raised hover:bg-hover"}`}
+                onClick={() => setAim(id, p.aim)}
+              >
+                {p.label}
+              </button>
+            ))
+          : null}
+        {custom && !actor ? (
+          <button type="button" className="rounded bg-raised px-2 py-0.5 text-[11px] hover:bg-hover" onClick={() => setAim(id, undefined)} title="물체 중앙으로">
+            중앙으로
+          </button>
+        ) : null}
+      </div>
+      <p className="text-[10px] leading-relaxed text-ink-3">
+        카메라가 {actor ? "이 인물을" : "이 물체를"} 피사체로 잡으면 이 점을 바라봅니다. 기본은 {actor ? "얼굴이고, 앉거나 고개를 돌려도 머리를 따라갑니다" : "물체의 중앙입니다"}.
+      </p>
+    </div>
   );
 }
