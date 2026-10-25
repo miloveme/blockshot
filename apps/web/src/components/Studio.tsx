@@ -22,11 +22,14 @@ import { StatusBar } from "./editor/StatusBar";
 import { CommandPalette } from "./editor/CommandPalette";
 import { ShortcutsDialog } from "./editor/ShortcutsDialog";
 import { ContextMenu } from "./editor/ContextMenu";
+import { NotebookText, Video } from "lucide-react";
 
 const Viewport = dynamic(() => import("./viewport/Viewport"), {
   ssr: false,
   loading: () => <LoadingScreen label="3D 뷰포트를 준비하는 중…" fill="h-full" />,
 });
+
+const hudButton = "pointer-events-auto flex h-7 items-center gap-1.5 rounded-md bg-black/55 px-2 text-[11px] text-white/90 backdrop-blur-sm hover:bg-black/75";
 
 function ShotHud() {
   const sceneState = useStudio((s) => s.sceneState);
@@ -50,33 +53,91 @@ function ShotHud() {
         {cam ? `${spec.cameras.find((c) => c.id === cam.id)?.name ?? cam.id} · ${cam.focalLength.toFixed(0)}mm` : "no camera"}
         {view.kind === "shot" && shot ? ` · ${shot.id}` : ""}
       </div>
-      {shot?.description && view.kind === "shot" ? (
-        <div className="pointer-events-none absolute bottom-3 left-1/2 max-w-[80%] -translate-x-1/2 rounded-md bg-black/60 px-3 py-1 text-center text-xs text-white/90 backdrop-blur-sm">{shot.description}</div>
-      ) : null}
+      {shot?.description && view.kind === "shot" ? <ShotNote shotId={shot.id} text={shot.description} /> : null}
     </>
   );
 }
 
-/** Frame + label over the picture-in-picture the viewport draws in free view (see SceneRenderer). */
+/** The shot's description: an icon in the top-right corner; click to read it, click again to fold it back. */
+function ShotNote({ shotId, text }: { shotId: string; text: string }) {
+  const open = useUi((s) => s.noteOpen);
+  const toggle = () => useUi.getState().set({ noteOpen: !open });
+  return (
+    <div className="pointer-events-none absolute right-3 top-3 flex max-w-[55%] flex-col items-end gap-1.5">
+      <button type="button" className={`${hudButton} ${open ? "ring-1 ring-white/40" : ""}`} onClick={toggle} title={open ? "컷 설명 접기" : "컷 설명 보기"} aria-expanded={open}>
+        <NotebookText className="h-3.5 w-3.5" />
+        <span className="font-mono">{shotId}</span>
+      </button>
+      {open ? (
+        <button
+          type="button"
+          onClick={toggle}
+          title="클릭하면 접힙니다"
+          className="pointer-events-auto max-h-[60%] overflow-y-auto whitespace-pre-wrap rounded-md bg-black/70 px-3 py-2 text-left text-xs leading-relaxed text-white/90 backdrop-blur-sm"
+        >
+          {text}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Picture-in-picture of the selected (or on-air) camera in free view. Folded to an icon in the top-right corner by
+ * default: click opens it, click on it folds it back, double-click switches to that camera's view.
+ * The picture itself is drawn by the viewport (SceneRenderer) only while it is open.
+ */
 function PipFrame() {
   const selection = useStudio((s) => s.selection);
   const sceneState = useStudio((s) => s.sceneState);
   const cameras = useStudio((s) => s.spec.cameras);
+  const open = useUi((s) => s.pipOpen);
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const id = selection && sceneState.cameras[selection] ? selection : sceneState.activeCameraId;
   const cam = id ? sceneState.cameras[id] : undefined;
   if (!cam || !id) return null;
   const name = cameras.find((c) => c.id === id)?.name ?? id;
+  const setOpen = (v: boolean) => useUi.getState().set({ pipOpen: v });
+  // a double-click also fires two clicks: wait briefly so it switches views instead of folding the preview
+  const onClick = (next: boolean) => {
+    if (clickTimer.current) clearTimeout(clickTimer.current);
+    clickTimer.current = setTimeout(() => {
+      clickTimer.current = null;
+      setOpen(next);
+    }, 220);
+  };
+  const onDoubleClick = () => {
+    if (clickTimer.current) clearTimeout(clickTimer.current);
+    clickTimer.current = null;
+    useStudio.getState().setView({ kind: "camera", id });
+  };
+  if (!open) {
+    return (
+      <button
+        type="button"
+        className={`${hudButton} absolute right-3 top-3 text-cam`}
+        onClick={() => onClick(true)}
+        onDoubleClick={onDoubleClick}
+        title={`${name} 미리보기 — 클릭: 열기 · 더블클릭: 이 카메라 시점으로`}
+      >
+        <Video className="h-3.5 w-3.5" />
+        <span>{name}</span>
+      </button>
+    );
+  }
   return (
-    <div className="pointer-events-none absolute right-[10px] top-[10px] w-[30%] rounded-sm ring-1 ring-cam/80" style={{ aspectRatio: `${cam.aspect}` }}>
-      <div className="absolute bottom-1 right-1 flex items-center gap-1 text-[10px] text-cam">
-        <span className="rounded bg-black/60 px-1.5 py-0.5">
-          {name} · {cam.focalLength.toFixed(0)}mm
-        </span>
-        <button className="pointer-events-auto rounded bg-black/60 px-1.5 py-0.5 hover:bg-black" title="이 카메라 시점으로 보기" onClick={() => useStudio.getState().setView({ kind: "camera", id })}>
-          ↗
-        </button>
-      </div>
-    </div>
+    <button
+      type="button"
+      className="absolute right-[10px] top-[10px] w-[30%] cursor-pointer rounded-sm ring-1 ring-cam/80 hover:ring-2"
+      style={{ aspectRatio: `${cam.aspect}` }}
+      onClick={() => onClick(false)}
+      onDoubleClick={onDoubleClick}
+      title="클릭: 접기 · 더블클릭: 이 카메라 시점으로"
+    >
+      <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-cam">
+        {name} · {cam.focalLength.toFixed(0)}mm
+      </span>
+    </button>
   );
 }
 

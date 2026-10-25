@@ -35,6 +35,10 @@ interface UiState {
   rightWidth: number;
   bottomHeight: number;
   leftTab: LeftTab;
+  /** free view: the camera picture-in-picture is shown (otherwise just an icon in the top-right corner) */
+  pipOpen: boolean;
+  /** cut view: the shot's description is shown (otherwise just an icon in the top-right corner) */
+  noteOpen: boolean;
   /** how a newly added subject key arrives (settings → 피사체 전환 기본값) */
   subjectStyle: TransitionStyle;
   /** window narrower than COMPACT_WIDTH: side panels are drawers (see `overlay`) instead of docks */
@@ -54,7 +58,7 @@ interface UiState {
 }
 
 const KEY = "blockshot.ui.v1";
-const PERSISTED = ["leftOpen", "rightOpen", "bottomOpen", "leftWidth", "rightWidth", "bottomHeight", "leftTab", "subjectStyle"] as const;
+const PERSISTED = ["leftOpen", "rightOpen", "bottomOpen", "leftWidth", "rightWidth", "bottomHeight", "leftTab", "subjectStyle", "pipOpen", "noteOpen"] as const;
 
 function load(): Partial<UiState> {
   try {
@@ -75,6 +79,8 @@ export const useUi = create<UiState>((set, get) => ({
   rightWidth: 320,
   bottomHeight: 196,
   leftTab: "outliner",
+  pipOpen: false,
+  noteOpen: false,
   subjectStyle: { transition: "pan", duration: 0.8, ease: "easeInOut" },
   compact: false,
   overlay: null,

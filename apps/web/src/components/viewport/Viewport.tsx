@@ -8,6 +8,7 @@ import { TransformControls } from "three/examples/jsm/controls/TransformControls
 import { DEG, editDuration, resolveTarget, type BoneName, type Vec3 } from "@blockshot/core";
 import { openObjectMenu } from "../editor/ContextMenu";
 import { useStudio } from "@/lib/store";
+import { useUi } from "@/lib/ui";
 import { commitAim, commitBoneRotation, commitCamera, commitCameraRotation, commitScale, commitTransform, snapSteps } from "@/lib/actions";
 import { registerBridge } from "@/lib/render";
 import { framedPose } from "@/lib/frame";
@@ -356,7 +357,8 @@ function SceneRenderer() {
     gl.setViewport(0, 0, size.width, size.height);
     gl.render(scene, camera);
     const s = useStudio.getState();
-    const id = s.view.kind === "free" ? pipCameraId() : null;
+    // the PiP is collapsed to an icon unless the user opened it (see PipFrame)
+    const id = s.view.kind === "free" && useUi.getState().pipOpen ? pipCameraId() : null;
     const c = id ? s.sceneState.cameras[id] : undefined;
     if (!c) return;
     const pipCam = (pipRef.current ??= new THREE.PerspectiveCamera(35, 1, 0.05, 500));
