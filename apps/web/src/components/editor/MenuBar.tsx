@@ -53,7 +53,7 @@ const MENUS: Array<{ id: string; label: string; items: () => MenuItemSpec[] }> =
   {
     id: "view",
     label: "보기",
-    items: () => [c("view.layout3d"), c("view.layoutSplit"), c("view.layoutPlan"), sep, c("view.left"), c("view.right"), c("view.bottom"), sep, c("view.palette"), c("help.shortcuts")],
+    items: () => [c("view.frameSelected"), c("view.frameAll"), sep, c("view.layout3d"), c("view.layoutSplit"), c("view.layoutPlan"), sep, c("view.left"), c("view.right"), c("view.bottom"), sep, c("view.palette"), c("help.shortcuts")],
   },
   { id: "ai", label: "AI", items: () => [c("ai.ask"), c("ai.panel"), c("ai.copyLink")] },
   { id: "help", label: "도움말", items: () => [c("help.guide"), c("help.shortcuts"), c("help.api")] },

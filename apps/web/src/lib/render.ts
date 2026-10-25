@@ -19,6 +19,8 @@ export interface ViewportBridge {
   advance: (timestamp: number) => void;
   /** free-view camera pose (for "match camera to view") */
   freeView: () => { position: Vec3; target: Vec3 } | null;
+  /** eases the edit-view orbit camera so `target` fills the view (F / A); false when the edit view is not live */
+  frame: (target: { center: Vec3; radius: number }) => boolean;
 }
 
 let bridge: ViewportBridge | null = null;

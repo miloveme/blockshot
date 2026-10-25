@@ -10,6 +10,7 @@ import { openObjectMenu } from "../editor/ContextMenu";
 import { useStudio } from "@/lib/store";
 import { commitBoneRotation, commitCamera, commitCameraRotation, commitScale, commitTransform, snapSteps } from "@/lib/actions";
 import { registerBridge } from "@/lib/render";
+import { framedPose } from "@/lib/frame";
 import { stopRecording } from "@/lib/recorder";
 import { Mannequin } from "./Mannequin";
 import { PropObject } from "./Props";
@@ -314,9 +315,27 @@ function SceneRenderer() {
   return null;
 }
 
+/** An eased orbit-camera move in flight (frame selected / frame all). */
+let flight: { from: THREE.Vector3; fromTarget: THREE.Vector3; to: THREE.Vector3; toTarget: THREE.Vector3; t0: number } | null = null;
+const FLIGHT_TIME = 0.35;
+
 /** Exposes the scene to the offline renderer and the free-view pose to editor commands. */
 function Bridge() {
   const { scene, gl, advance, get } = useThree();
+  useFrame(({ camera, controls, clock }) => {
+    if (!flight) return;
+    const c = controls as unknown as { target: THREE.Vector3; update: () => void } | null;
+    if (!c?.target || useStudio.getState().view.kind !== "free") {
+      flight = null;
+      return;
+    }
+    const k = Math.min(1, (clock.elapsedTime - flight.t0) / FLIGHT_TIME);
+    const e = k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2; // ease in-out cubic
+    camera.position.lerpVectors(flight.from, flight.to, e);
+    c.target.lerpVectors(flight.fromTarget, flight.toTarget, e);
+    c.update();
+    if (k >= 1) flight = null;
+  });
   useEffect(() => {
     registerBridge({
       scene,
@@ -328,6 +347,21 @@ function Bridge() {
         const target = (controls as { target?: THREE.Vector3 } | null)?.target;
         if (!target) return null;
         return { position: [camera.position.x, camera.position.y, camera.position.z], target: [target.x, target.y, target.z] };
+      },
+      frame: (t) => {
+        if (useStudio.getState().view.kind !== "free") return false;
+        const { camera, controls, clock } = get();
+        const c = controls as unknown as { target?: THREE.Vector3; addEventListener?: (e: string, f: () => void) => void; removeEventListener?: (e: string, f: () => void) => void } | null;
+        if (!c?.target || !(camera instanceof THREE.PerspectiveCamera)) return false;
+        const pose = framedPose(camera, c.target, t);
+        flight = { from: camera.position.clone(), fromTarget: c.target.clone(), to: pose.position, toTarget: pose.target, t0: clock.elapsedTime };
+        // grabbing the view mid-flight hands it straight back to the user
+        const stop = () => {
+          flight = null;
+          c.removeEventListener?.("start", stop);
+        };
+        c.addEventListener?.("start", stop);
+        return true;
       },
     });
     return () => registerBridge(null);

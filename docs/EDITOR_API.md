@@ -54,7 +54,7 @@ interface Command {
 | 오브젝트 | `object.move/rotate/scale`(W/E/R) · `object.snap`(S) · `object.path`(P) · `object.bake` · `object.unbake` |
 | 애니메이션 | `anim.play`(Space) · `anim.key`(K) · `anim.unkey`(⌥K) · `anim.autokey`(⇧K) · `anim.record`(⇧R) · `anim.prevKey/nextKey`(↓/↑) · `anim.prevFrame/nextFrame`(←/→) · `anim.start/end`(Home/End) |
 | 카메라 | `camera.lookThrough` · `camera.matchView`(⌘⌥0) · `camera.pilot`(C) · `camera.lens18…85` |
-| 보기 | `view.free`(V) · `view.cut`(0) · `view.camera1…9`(1–9) · `view.cycleLayout`(T) · `view.left/right/bottom`(⌥1/2/3) · `view.palette`(⌘K) |
+| 보기 | `view.frameSelected`(F) · `view.frameAll`(A, ⇧F) · `view.free`(V) · `view.cut`(0) · `view.camera1…9`(1–9) · `view.cycleLayout`(T) · `view.left/right/bottom`(⌥1/2/3) · `view.palette`(⌘K) |
 | 컷 편집 | `cut.split`(⌘B) · `cut.razor`(B) · `cut.select`(A) · `cut.copy/cut/paste/duplicate` · `cut.in/out`(I/O) · `cut.prevEdit/nextEdit`(↑/↓) … |
 | 렌더 · AI · 도움말 | `render.panel`(⌘⇧E) · `ai.ask`(⌘J) · `ai.panel`(⌘I) · `ai.copyLink` · `help.shortcuts`(?) · `help.api` |
 

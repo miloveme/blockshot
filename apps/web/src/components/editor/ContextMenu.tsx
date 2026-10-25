@@ -16,6 +16,8 @@ export function openObjectMenu(e: { clientX: number; clientY: number }, id: stri
   const prop = spec.props.find((p) => p.id === id);
   const name = actor?.name ?? cam?.name ?? id;
   const items: MenuItemSpec[] = [
+    { label: "", command: "view.frameSelected" },
+    { label: "", separator: true },
     ...(cam
       ? [{ label: "", command: "camera.lookThrough" }, { label: "", command: "camera.matchView" }, { label: "", separator: true }]
       : []),

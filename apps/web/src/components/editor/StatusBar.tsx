@@ -28,9 +28,10 @@ export function StatusBar() {
   else if (tool?.kind === "path") hints = [["클릭", "지점 추가"], ["⌫", "되돌리기"], ["Enter", "완료"], ["Esc", "취소"]];
   else if (tool?.kind === "place") hints = [["클릭", "배치"], ["Shift+클릭", "연속 배치"], ["Esc", "취소"]];
   else if (view.kind === "shot") hints = [["Space", "재생"], ["B", "면도날"], ["I / O", "구간"], ["⌘B", "자르기"], ["V", "편집 시점"]];
-  else if (actor) hints = [["W E R", "이동·회전·크기"], ["K", "키"], ["P", "경로"], ["⇧D", "복제"], ["우클릭", "메뉴"]];
-  else if (cam) hints = [["W E", "이동·회전"], ["K", "키"], ["1–9", "카메라 시점"], ["우클릭", "메뉴"]];
-  else hints = [["클릭", "선택"], ["⇧A", "인물 추가"], ["⌘K", "명령"], ["?", "단축키"]];
+  else if (actor) hints = [["F", "포커스"], ["W E R", "이동·회전·크기"], ["K", "키"], ["P", "경로"], ["⇧D", "복제"], ["우클릭", "메뉴"]];
+  else if (cam) hints = [["F", "포커스"], ["W E", "이동·회전"], ["K", "키"], ["1–9", "카메라 시점"], ["우클릭", "메뉴"]];
+  else if (prop) hints = [["F", "포커스"], ["W E R", "이동·회전·크기"], ["⇧D", "복제"], ["우클릭", "메뉴"]];
+  else hints = [["클릭", "선택"], ["A", "전체 보기"], ["⇧A", "인물 추가"], ["⌘K", "명령"], ["?", "단축키"]];
 
   const ModeIcon = view.kind === "shot" ? Clapperboard : view.kind === "camera" ? Camera : Orbit;
   const mode = view.kind === "shot" ? "컷 재생" : view.kind === "camera" ? `카메라 · ${spec.cameras.find((c) => c.id === view.id)?.name ?? view.id}` : "편집 시점";

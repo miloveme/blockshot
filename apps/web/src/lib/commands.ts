@@ -14,6 +14,7 @@ import { startRecording, stopRecording } from "./recorder";
 import { startPath } from "./placement";
 import { copyShareLink, downloadSpec } from "./persist";
 import { getBridge } from "./render";
+import { frameAll, frameSelected } from "./frame";
 
 /**
  * The editor's command registry — every action a person can take, by name.
@@ -288,6 +289,17 @@ const COMMANDS: Command[] = [
   { id: "view.layoutSplit", title: "레이아웃 · 3D + 탑뷰", category: "view", checked: () => st().layout === "split", run: () => st().setLayout("split") },
   { id: "view.layoutPlan", title: "레이아웃 · 탑뷰", category: "view", checked: () => st().layout === "plan", run: () => st().setLayout("plan") },
   { id: "view.cycleLayout", title: "레이아웃 전환", category: "view", keys: ["KeyT"], hidden: true, run: () => st().setLayout(st().layout === "3d" ? "split" : st().layout === "split" ? "plan" : "3d") },
+  {
+    id: "view.frameSelected",
+    title: () => (st().selection ? "선택한 것으로 화면 맞추기 (포커스)" : "전체 보기"),
+    category: "view",
+    keys: ["KeyF"],
+    // works from any view: in a camera / cut view it switches to the edit view first (F has no cut-editing meaning)
+    aliases: "focus frame selected zoom to 포커스 이동 중앙",
+    hint: "선택한 인물·소품·카메라(포즈 편집 중이면 그 뼈)가 화면 가운데 꽉 차게 편집 시점을 옮깁니다",
+    run: frameSelected,
+  },
+  { id: "view.frameAll", title: "전체 보기 (모두 화면에 맞추기)", category: "view", keys: ["KeyA", "Shift+KeyF"], when: sceneView, aliases: "frame all home view all 전체", run: frameAll },
   { id: "view.left", title: "왼쪽 패널 (아웃라이너·에셋)", category: "view", keys: ["Alt+Digit1"], checked: () => dockVisible(ui(), "left"), run: () => toggleDock("left") },
   { id: "view.right", title: "오른쪽 패널 (속성)", category: "view", keys: ["Alt+Digit2"], checked: () => dockVisible(ui(), "right"), run: () => toggleDock("right") },
   { id: "view.bottom", title: "타임라인", category: "view", keys: ["Alt+Digit3"], checked: () => ui().bottomOpen, run: () => ui().set({ bottomOpen: !ui().bottomOpen }) },
