@@ -113,3 +113,8 @@ export function setDock(side: Side, open: boolean) {
 }
 
 export const toggleDock = (side: Side) => setDock(side, !dockVisible(useUi.getState(), side));
+
+// dev-only handle for debugging / scripted screenshots (scripts/guide-shots.mjs)
+if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
+  (window as unknown as { __ui: typeof useUi }).__ui = useUi;
+}
