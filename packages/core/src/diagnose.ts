@@ -1,6 +1,6 @@
 import type { BlockshotSpec, Vec3 } from "./schema";
-import { compile, evaluate, type ActorState, type CompiledScene } from "./evaluate";
-import { REST_HEIGHT, solveRig, type BoneName, type Skeleton } from "./rig";
+import { compile, contactTarget, contactWeight, evaluate, type ActorState, type CompiledScene, type ContactLayer } from "./evaluate";
+import { ARM, REST_HEIGHT, RIG, solveRig, toWorld, type BoneName, type Skeleton } from "./rig";
 import { Q } from "./quat";
 import { contactPoints, FOOT_PATCHES, groundUnder, JOINT_RANGES } from "./inspect";
 
@@ -14,7 +14,7 @@ import { contactPoints, FOOT_PATCHES, groundUnder, JOINT_RANGES } from "./inspec
  * not be checked is listed in `notEvaluated` rather than silently passing.
  */
 
-export type DiagnosticKind = "foot_slide" | "foot_penetration" | "floating" | "root_stutter" | "root_jerk" | "turn_snap" | "joint_range" | "simultaneous_gestures";
+export type DiagnosticKind = "contact_drift" | "foot_slide" | "foot_penetration" | "floating" | "root_stutter" | "root_jerk" | "turn_snap" | "joint_range" | "simultaneous_gestures";
 
 export interface Diagnostic {
   kind: DiagnosticKind;
@@ -32,7 +32,26 @@ export interface Diagnostic {
   suggestion: string;
 }
 
+/** How well one `contact` action held over the part of its span where it is fully on. */
+export interface ContactResidual {
+  /** the action's id (or act<n>) */
+  id: string;
+  actor: string;
+  part: string;
+  on: string;
+  /** where the contact is fully on (inside the checked range); null when that never happens in the range */
+  range: [number, number] | null;
+  /** worst / average distance from where it should be (m): palm to surface, or how far a planted foot moved / lifted */
+  max: number;
+  mean: number;
+  status: "ok" | "exceeds" | "not_evaluated";
+  reason?: "out_of_reach" | "leg_too_short" | "conflict";
+  message?: string;
+}
+
 export interface Tolerances {
+  /** a declared contact further than this from its target is broken (m) */
+  contactResidual: number;
   /** a sole closer than this to the floor counts as touching it (m) */
   contact: number;
   /** a planted foot moving faster than this slides (m/s) */
@@ -51,7 +70,7 @@ export interface Tolerances {
   simultaneity: number;
 }
 
-export const DEFAULT_TOLERANCES: Tolerances = { contact: 0.03, slideSpeed: 0.15, slideDistance: 0.04, penetration: 0.02, float: 0.04, accel: 6, yawRate: 540, simultaneity: 0.2 };
+export const DEFAULT_TOLERANCES: Tolerances = { contactResidual: 0.01, contact: 0.03, slideSpeed: 0.15, slideDistance: 0.04, penetration: 0.02, float: 0.04, accel: 6, yawRate: 540, simultaneity: 0.2 };
 
 export interface MotionReport {
   range: [number, number];
@@ -60,6 +79,8 @@ export interface MotionReport {
   diagnostics: Diagnostic[];
   /** per actor: worst values, so a clean report still says how close it came */
   summary: Record<string, { maxSlide: number; maxPenetration: number; maxFloat: number; maxAccel: number; maxYawRate: number }>;
+  /** every declared contact (contact actions) and how well it held */
+  contacts: ContactResidual[];
   notEvaluated: Array<{ check: string; reason: string }>;
 }
 
@@ -272,6 +293,15 @@ export function analyzeMotion(input: BlockshotSpec | CompiledScene, opts: Analyz
   }
 
   if (want("simultaneous_gestures")) diagnostics.push(...simultaneity(scene, actorIds, from, to, tol.simultaneity));
+  const contacts = contactResiduals(scene, { from, to, fps, actors: actorIds, tolerance: tol.contactResidual });
+  if (want("contact_drift"))
+    for (const c of contacts)
+      if (c.status === "exceeds")
+        diagnostics.push({
+          kind: "contact_drift", severity: c.max > tol.contactResidual * 5 ? "error" : "warning", actor: c.actor, part: `${c.part} on ${c.on}`, range: c.range!,
+          measured: r3(c.max), limit: tol.contactResidual, unit: "m", message: c.message!,
+          suggestion: c.reason === "out_of_reach" ? "The target is beyond the arm: move the actor closer, lean the spine toward it, or end the contact earlier." : c.reason === "leg_too_short" ? "The body moved away from the planted foot: end the foot contact before the walk / turn, or let the foot step." : "Another layer fights the contact (a gesture or keyed arm on the same limb, or an unreachable orientation): remove it for that span or move the target.",
+        });
 
   const order = { error: 0, warning: 1, review: 2 };
   diagnostics.sort((a, b) => order[a.severity] - order[b.severity] || a.range[0] - b.range[0]);
@@ -281,12 +311,83 @@ export function analyzeMotion(input: BlockshotSpec | CompiledScene, opts: Analyz
     actors: actorIds,
     diagnostics,
     summary,
+    contacts,
     notEvaluated: [
-      { check: "declared contacts (hand on thigh, foot on a mark)", reason: "the Spec has no contact declarations yet; only soles vs floor are checked" },
+      { check: "contacts that are not declared", reason: "hands are only checked where a contact action says where they should be; soles are always checked against the floor" },
       { check: "mesh interpenetration and occlusion", reason: "checks use rig contact patches and a schematic evaluator, not the rendered mesh" },
       { check: "balance", reason: "no mass model; support is approximated by sole contact" },
     ],
   };
+}
+
+/** Measures every declared contact over [from, to] (sampled at `fps`) where its weight is full. */
+export function contactResiduals(input: BlockshotSpec | CompiledScene, opts: { from?: number; to?: number; fps?: number; actors?: string[]; tolerance?: number } = {}): ContactResidual[] {
+  const scene = "compiled" in input ? input : compile(input);
+  const { spec } = scene;
+  const from = Math.max(0, opts.from ?? 0);
+  const to = Math.min(spec.settings.duration, opts.to ?? spec.settings.duration);
+  const fps = opts.fps ?? 30;
+  const tol = opts.tolerance ?? DEFAULT_TOLERANCES.contactResidual;
+  const out: ContactResidual[] = [];
+  for (const actor of spec.actors) {
+    if (opts.actors && !opts.actors.includes(actor.id)) continue;
+    const layers = (scene.acts.get(actor.id) ?? []).filter((l): l is ContactLayer => l.kind === "contact" && !l.implicit);
+    for (const layer of layers) {
+      const lo = Math.max(from, layer.start);
+      const hi = Math.min(to, layer.end);
+      const on = Array.isArray(layer.on) ? `[${layer.on.join(", ")}]` : String(layer.on);
+      const res: ContactResidual = { id: layer.id, actor: actor.id, part: layer.part, on, range: null, max: 0, mean: 0, status: "not_evaluated" };
+      out.push(res);
+      if (hi < lo) continue;
+      const foot = layer.part.startsWith("foot");
+      const side = layer.part.endsWith("_l") ? "left" : "right";
+      const s = actor.height / REST_HEIGHT;
+      let first: Vec3 | null = null;
+      let sum = 0;
+      let count = 0;
+      let worstReach = 0;
+      const n = Math.max(1, Math.round((hi - lo) * fps));
+      for (let i = 0; i <= n; i++) {
+        const t = Math.min(hi, lo + i / fps);
+        if (contactWeight(layer, t) < 0.999) continue;
+        const a = evaluate(scene, t).actors[actor.id]!;
+        const sk = solveRig(a.rig, s);
+        const cp = contactPoints(a, sk);
+        let d: number;
+        if (foot) {
+          const ball = cp[side === "left" ? "ball_l" : "ball_r"]!;
+          first ??= ball;
+          const lowest = Math.min(...FOOT_PATCHES[side].map((pid) => cp[pid]![1] - groundUnder(spec, cp[pid]!)));
+          d = Math.hypot(ball[0] - first[0], ball[2] - first[2]) + Math.max(0, Math.abs(lowest) - 0.012);
+          const hip = toWorld(sk[`${side}UpperLeg`].pos, a.position, a.rotation);
+          const ankle = toWorld(sk[`${side}Foot`].pos, a.position, a.rotation);
+          worstReach = Math.max(worstReach, Math.hypot(ankle[0] - hip[0], ankle[1] - hip[1], ankle[2] - hip[2]) / ((-RIG.leftLowerLeg.offset[1] - RIG.leftFoot.offset[1]) * s));
+        } else {
+          const target = contactTarget(scene, layer, t, sk, s, a.position, a.rotation);
+          const want = toWorld([target.at[0] + target.normal[0] * 0.004 * s, target.at[1] + target.normal[1] * 0.004 * s, target.at[2] + target.normal[2] * 0.004 * s], a.position, a.rotation);
+          const palm = cp[side === "left" ? "palm_l" : "palm_r"]!;
+          d = Math.hypot(palm[0] - want[0], palm[1] - want[1], palm[2] - want[2]);
+          const shoulder = sk[`${side}UpperArm`].pos;
+          worstReach = Math.max(worstReach, Math.hypot(target.at[0] - shoulder[0], target.at[1] - shoulder[1], target.at[2] - shoulder[2]) / ((ARM.upper + ARM.lower + 0.08) * s));
+        }
+        res.range = res.range ? [res.range[0], r2(t)] : [r2(t), r2(t)];
+        res.max = Math.max(res.max, d);
+        sum += d;
+        count++;
+      }
+      if (!count) continue;
+      res.mean = r3(sum / count);
+      res.max = r3(res.max);
+      res.status = res.max > tol ? "exceeds" : "ok";
+      if (res.status === "exceeds") {
+        res.reason = worstReach > 0.995 ? (foot ? "leg_too_short" : "out_of_reach") : "conflict";
+        res.message = foot
+          ? `${actor.id}'s planted ${side} foot moves or lifts ${res.max} m (${res.reason === "leg_too_short" ? "the body moved further than the leg reaches" : "the pose fights the plant"}).`
+          : `${actor.id}'s ${side} palm is ${res.max} m from ${on} (${res.reason === "out_of_reach" ? "beyond the arm's reach" : "something else holds the arm"}).`;
+      }
+    }
+  }
+  return out;
 }
 
 const dirOf = (q: Skeleton[BoneName]["rot"]) => Q.rotate(q, [0, -1, 0]);
@@ -323,7 +424,7 @@ const ARM_BONES = ["leftShoulder", "leftUpperArm", "leftLowerArm", "rightShoulde
 /** Start times of big upper-body moves per actor: gesture / reach / hold layers and arm bone keys that swing ≥ 30°. */
 function gestureStarts(scene: CompiledScene, id: string): number[] {
   const starts: number[] = [];
-  for (const l of scene.acts.get(id) ?? []) if (l.kind !== "hand") starts.push(l.start);
+  for (const l of scene.acts.get(id) ?? []) if (l.kind !== "hand" && l.kind !== "contact" && l.kind !== "rise") starts.push(l.start);
   for (const bone of ARM_BONES) {
     const keys = scene.tracks.get(`${id}/bone:${bone}`);
     if (!keys) continue;

@@ -65,7 +65,10 @@
 - [x] walkTo 처음·끝 가감속(도착 시간 유지), 모서리 둥글게, 정지 후 정착 두 걸음, 제자리 회전 스텝(turnTo)
 - [ ] P0-A 나머지: `get_capabilities`(지원 범위·리그·접촉 모드·결정론 범위), `inspect_surfaces`(허벅지·좌석·팔걸이 표면 ID)
 - [ ] P0-B 실제 렌더 검토 `render_review`(오버레이·슬로모션·가림/가시성 검사)
-- [ ] P0-C 접촉 제약 Spec(`contact`/`support`/`preserve`) + `solve_motion`(손–허벅지 등 몸 표면 접촉 유지, `infeasible` 원인 반환)
+- [x] P0-C 1단계: `contact` 액션(손→자기 몸 표면 thigh/knee·점·소품·참조, 발→floor 고정; 다른 층 다음에 IK로 적용, 블렌드), `inspectRig.surfaces`, `contactResiduals`·진단 `contact_drift`, `solveMotion`/MCP `solve_motion`(solved·solved_with_issues·infeasible+원인·완화 제안·preserve 검사·invalid), 스크립트 `a.contact()`
+- [x] standUp 재작성: 발 고정한 채 골반이 발 위로 오며 일어서기(일어서기 동안 sit→stand 블렌드), 남은 거리는 짧은 걸음 / 지정한 `to`면 걸어가기
+- [x] 소파 장면 fixture `examples/sofa-confrontation.json`(세 사람, 손 접촉·기울기·시차 반응, 기립→걷기→회전→손가락질, 3카메라) + 회귀 테스트(진단 오류 0, 접촉 잔차 < 5 mm, 걷기만 수정해도 접촉 유지)
+- [ ] P0-C 나머지: 접촉 모드(뒤꿈치·앞꿈치 피벗)·`support` 지정·명시적 `clearance`/`joint_limit` 제약, 목표 우선순위(required/preferred)와 자동 완화(`allowedRelaxations`), 리비전 참조(`sceneRef`)
 - [ ] P0-D 움직임 생성 계약 MG-01~08: `generate_motion`(경계 상태·부분 구간), 골반·상체·팔·머리 선후관계/비대칭, 연속 특성(속도·보폭·발 방향·지지 비대칭) 조합, 생성 출처·seed 기록, 보정 훼손 보고
 - [ ] P0-E 연출 계획 DP-01~08: `plan_performance`·`inspect_plan`·`revise_plan`(미적용 패치 기본)·`compare_candidates`, 가정/지시 구분, 배우별 의도·주의, 카메라 의도를 사건에 연결
 - [ ] P0-F Blender 기준선·측정: 평가 manifest, 사용량(토큰·시간·계산) 로그, 소파 장면 첫 비교

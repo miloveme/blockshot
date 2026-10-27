@@ -3,7 +3,8 @@
 > **구현 상태 (2026-10-28, 커밋 646f94d 기준)** — 체크리스트는 [ROADMAP.md](ROADMAP.md) "M2.5 모션 품질".
 >
 > - 완료: P0-A 일부(`inspectRig`·`contactPoints`, MCP `inspect_rig`, `evaluate {contacts}` — `get_capabilities`·`inspect_surfaces` 미구현), P0-B 일부(`analyzeMotion`, MCP `analyze_motion` — `render_review`·가시성 검사 미구현), MG-01/02/05/06 일부(발 고정 보행·제자리 회전 스텝: 거리 기반 위상, 디딘 발 월드 고정, 처음·끝 가감속, 모서리 곡선, 정착 걸음).
-> - 남음: P0-C 접촉 제약·`solve_motion`, P0-D 생성 기반 계약(`generate_motion`·출처 기록), P0-E 연출 계획(`plan_performance`·`revise_plan`), P0-F Blender 기준선·측정 체계, P1-B/C/D, §17 비교 시험과 G0~G5.
+> - P0-C 1단계 완료: `contact` 액션(손→몸 표면·점·소품, 발→바닥), `solve_motion`(잔차·infeasible 원인·preserve), standUp 발 고정, 소파 장면 fixture(`packages/core/examples/sofa-confrontation.json`).
+> - 남음: P0-C 나머지(접촉 모드·support·우선순위/자동 완화·리비전 참조), P0-D 생성 기반 계약(`generate_motion`·출처 기록), P0-E 연출 계획(`plan_performance`·`revise_plan`), P0-F Blender 기준선·측정 체계, P1-B/C/D, §17 비교 시험과 G0~G5.
 > - 아래 본문은 받은 요구사항 원문(v2.0)이다. 제안 MCP 이름·필드는 논의용이며, 구현된 도구는 `packages/mcp/src/tools.ts`가 기준이다. v1 제안서는 git 기록에 있다.
 
 

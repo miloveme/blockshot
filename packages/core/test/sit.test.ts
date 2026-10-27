@@ -74,7 +74,8 @@ describe("sitDown / standUp", () => {
     const chair = spec.props.find((p) => p.id === "chair1")!;
     expect(up.position[2] - chair.position[2]).toBeCloseTo(0.46 / 2 + STAND_CLEAR, 3); // yaw 0 → +Z, clear of the 0.46 m seat
     const target = addStandUp(addSitDown(scene(), "actor1", "chair1", { start: 0 }), "actor1", { start: 3, to: [2, 0, 2] });
-    expect(at(target, 5).position).toEqual([2, 0, 2]);
+    // an explicit spot: it rises, then walks there at a walking pace
+    expect(at(target, 7).position.map((v) => Math.round(v * 1000) / 1000)).toEqual([2, 0, 2]);
   });
 
   it("a deep (scaled) sofa needs a longer step out", () => {

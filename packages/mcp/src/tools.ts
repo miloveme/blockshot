@@ -1,7 +1,7 @@
 import { deflateRawSync, inflateRawSync } from "node:zlib";
 import {
-  analyzeMotion, applyAddon, addonIssues, buildAnimatePrompt, buildPrompt, compile, contactPoints, describeScene, evaluate, groundUnder, inspectRig, lintLayout, parseAddon, renderPreviewSvg, validateSpec,
-  type BlockshotSpec, type DiagnosticKind, type Issue,
+  analyzeMotion, applyAddon, solveMotion, addonIssues, buildAnimatePrompt, buildPrompt, compile, contactPoints, describeScene, evaluate, groundUnder, inspectRig, lintLayout, parseAddon, renderPreviewSvg, validateSpec,
+  type BlockshotSpec, type DiagnosticKind, type Issue, type SolveOptions,
 } from "@blockshot/core";
 import { SCENE_SPEC_MD, SCRIPT_API_MD } from "./docs.generated";
 
@@ -102,7 +102,7 @@ Workflow
 2. run_script { source } → validated scene (spec) + summary + studio link. Iterate: pass the previous spec back as "base" to ADD animation to an existing scene (the script then uses scene.use("<id>") instead of creating things).
 3. preview { spec, t, view: "camera"|"top" } → a PNG of that moment (stick-figure skeletons + prop boxes through the real camera; top view shows facing and camera frustums). Look at it before you answer; check several times.
 4. evaluate { spec, times } → exact numbers (positions, poses, camera state) when you need to verify distances, facing, timing; contacts: true adds world positions of heels, balls, toes, palms and seat.
-   analyze_motion { spec } → what looks wrong and where: feet sliding / sinking / floating, body stutters and jerks, snapping turns, joints past a human range, actors gesturing in the same instant. Run it after every change to motion and fix what it reports (each finding has a suggestion). inspect_rig { spec, actor } → bone lengths at that actor's height, bone roles and contact patches — read it instead of guessing rig numbers when you write bone keys.
+   analyze_motion { spec } → what looks wrong and where: feet sliding / sinking / floating, body stutters and jerks, snapping turns, joints past a human range, actors gesturing in the same instant. Run it after every change to motion and fix what it reports (each finding has a suggestion). solve_motion { spec, contacts } → keep hands on thighs / knees / objects and feet planted (IK), with residuals and infeasible reasons — use it instead of hand-keying arms onto a body. inspect_rig { spec, actor } → bone lengths at that actor's height, bone roles and contact patches — read it instead of guessing rig numbers when you write bone keys.
 5. open_link { spec } → the URL to give the user.
    The user placed things by hand in the studio and wants them animated? They copy a link with the studio's 링크 복사 button; load_link { url } reads it (actors, props, cameras, ids), then add animation with run_script { base } / apply_addon without moving anything.
 6. MP4 / real 3D renders: not on this hosted server. Call local_setup: it has the exact commands to install the local server (no token needed), register it in Claude Code / Codex / other clients, switch an existing hosted registration to local, and verify it. Do it yourself if you can run shell commands (ask the user first); otherwise give the user the link — the studio exports the MP4 in their browser.
@@ -276,6 +276,54 @@ export const BASE_TOOLS: Tool[] = [
       const errors = report.diagnostics.filter((d) => d.severity === "error").length;
       const head = report.diagnostics.length ? `${report.diagnostics.length} findings (${errors} errors).` : "No problems found in the checked range.";
       return ok(text(`${head}\n\n${json(report)}`));
+    },
+  },
+  {
+    name: "solve_motion",
+    description:
+      "Adds contact constraints and checks they hold: a hand resting on the actor's own thigh / knee (it stays there however the torso leans or the arm was keyed), a hand on a point / prop / \"actor.part\", a foot planted on the floor where it is at start. The engine enforces contacts with IK after every other layer. Returns status solved | solved_with_issues (contacts hold, other motion errors remain) | infeasible (a contact does not hold — with constraintIds, range, reason out_of_reach / leg_too_short / conflict and suggestedRelaxations; or a preserved actor changed) | invalid, per-contact residuals (m), the motion diagnostics and the new spec. Contacts are ordinary \"contact\" actions: edit / remove them like any action.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        spec: SPEC_PROP,
+        contacts: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              actor: { type: "string" },
+              part: { type: "string", enum: ["hand_l", "hand_r", "foot_l", "foot_r"] },
+              on: { description: "thigh_l | thigh_r | knee_l | knee_r (own body), floor (feet), [x,y,z], a prop id or \"actor.part\"" },
+              start: { type: "number" },
+              end: { type: "number" },
+              blend: { type: "number" },
+            },
+            required: ["actor", "part", "on", "start"],
+          },
+        },
+        remove: { type: "array", items: { type: "string" }, description: "action ids to remove first" },
+        preserve: { type: "array", items: { type: "string" }, description: "actor ids whose motion must stay exactly the same" },
+        from: { type: "number" },
+        to: { type: "number" },
+        tolerances: { type: "object" },
+      },
+      required: ["spec"],
+    },
+    async run(a, plat) {
+      const p = parseSpecArg(a.spec);
+      if ("error" in p) return fail(p.error);
+      const result = solveMotion(p.spec, {
+        contacts: Array.isArray(a.contacts) ? (a.contacts as SolveOptions["contacts"]) : undefined,
+        remove: Array.isArray(a.remove) ? a.remove.map(String) : undefined,
+        preserve: Array.isArray(a.preserve) ? a.preserve.map(String) : undefined,
+        from: typeof a.from === "number" ? a.from : undefined,
+        to: typeof a.to === "number" ? a.to : undefined,
+        tolerances: a.tolerances && typeof a.tolerances === "object" ? (a.tolerances as Record<string, number>) : undefined,
+      });
+      if (result.status === "invalid") return fail(`The contacts do not fit the scene:\n${fmtIssues(result.errors ?? [])}`);
+      const { spec, ...report } = result;
+      return ok(text([`${result.status}.`, json(report), `Open in studio: ${shareLink(plat.origin, spec!)}`, `spec:\n${json(spec)}`].join("\n\n")));
     },
   },
   {

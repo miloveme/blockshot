@@ -1294,6 +1294,95 @@
             "properties": {
               "type": {
                 "type": "string",
+                "const": "contact"
+              },
+              "actor": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              },
+              "part": {
+                "type": "string",
+                "enum": [
+                  "hand_l",
+                  "hand_r",
+                  "foot_l",
+                  "foot_r"
+                ]
+              },
+              "on": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "thigh_l",
+                      "thigh_r",
+                      "knee_l",
+                      "knee_r"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "const": "floor"
+                  },
+                  {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "prefixItems": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ],
+                        "items": false,
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*(\\.[a-z_]+)?(@[a-zA-Z][a-zA-Z0-9_-]*)?$"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "end": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "blend": {
+                "default": 0.3,
+                "type": "number",
+                "minimum": 0,
+                "maximum": 2
+              },
+              "start": {
+                "type": "number",
+                "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              }
+            },
+            "required": [
+              "type",
+              "actor",
+              "part",
+              "on",
+              "start"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
                 "const": "sitDown"
               },
               "actor": {

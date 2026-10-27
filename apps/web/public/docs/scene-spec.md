@@ -133,6 +133,7 @@ LLM과 사람이 가장 많이 쓰는 레이어. 로드 시 `compile()`이 `trac
 | --- | --- | --- |
 | `walkTo` | `actor, to: Vec3 \| Vec3[], start, duration?, speed?, direct?` | 위치 이동 + 진행 방향으로 회전 + `walk` 포즈. `duration` 없으면 `speed`(기본 1.3 m/s)로 계산. **자동 길찾기**: 가구·벽·서 있는 인물에 막힌 구간만 우회 경로로 바뀐다(`direct: true`면 직선 그대로). 소품 안쪽 목적지는 그 옆에서 멈춘다 — [NAVIGATION.md](NAVIGATION.md). **발 고정 보행**: 걸음은 이동 거리로 진행되고 디딘 발은 월드에 고정된다. 경로 전체의 처음과 끝에서만 가감속(도착 시간 유지, 바로 이어지는 walkTo 사이에서는 멈추지 않음), 모서리는 짧은 곡선으로 돌고, 멈춘 뒤 두 걸음으로 발을 모은다 |
 | `runTo` | 위와 동일 (기본 speed 3.5) | `run` 포즈 |
+| `contact` | `actor, part: hand_l\|hand_r\|foot_l\|foot_r, on, start, end?, blend? (0.3)` | 손·발을 무언가에 붙여 둔다(IK, 다른 모든 층 다음에 적용). `on`: 자기 몸 표면 `thigh_l/r`·`knee_l/r`(몸이 기울어도 따라감), 점·소품·`인물.부위`, 발은 `floor`(시작 시점 위치에 고정). 손이 닿지 않거나 몸이 멀어지면 `solve_motion`/`analyze_motion`이 원인과 함께 알려 준다 |
 | `turnTo` | `actor, target: Vec3 \| ref \| yaw(number), start, duration?` | 제자리 회전 — 서 있는 인물은 발을 옮겨 디디며 돈다(디딘 발은 월드에 고정, 60°마다 한 걸음, 초당 5걸음 이하) |
 | `pose` | `actor, pose, start` | 포즈 전환 — 이전 포즈에서 0.35초 동안 관절별로 부드럽게 섞인다(`ActorState.blend`) |
 | `sitDown` | `actor, on: 의자/소파 소품 id, start, duration?(1), offset?(0)` | 좌석 앞(열린 쪽, 0.6 m)으로 돌아 걸어간 뒤 좌석까지 들어가(이동 키; 등받이 뒤/옆에서 출발해도 통과하지 않음) 좌석이 향한 방향으로 돌고 마지막 0.35초에 `sit`으로 내려앉는다. 소파는 `offset`(m, 소파 폭 방향)으로 여러 명이 나눠 앉는다. `on`은 `chair`/`sofa`여야 한다(검증 오류) |

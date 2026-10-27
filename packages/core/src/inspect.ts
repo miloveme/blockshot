@@ -1,4 +1,4 @@
-import type { BlockshotSpec, Vec3 } from "./schema";
+import type { BlockshotSpec, BodySurface, Vec3 } from "./schema";
 import { BONES, RIG, REST_HEIGHT, solveRig, toWorld, type BoneName, type Skeleton } from "./rig";
 import { Q } from "./quat";
 import type { ActorState } from "./evaluate";
@@ -42,6 +42,25 @@ export const CONTACT_PATCHES: readonly ContactPatch[] = patches;
 /** Sole patches per foot, heel → toe. */
 export const FOOT_PATCHES = { left: ["heel_l", "ball_l", "toe_l"], right: ["heel_r", "ball_r", "toe_r"] } as const;
 
+/**
+ * Body surfaces a hand can rest on (`contact` actions with `on: "thigh_l"` …), bone-local like the patches: a point on
+ * the skin of the mannequin and the outward normal there. The FRONT of the thigh (local +Z) is its top when seated.
+ */
+export const SURFACES: Record<BodySurface, { bone: BoneName; local: Vec3; normal: Vec3 }> = {
+  thigh_l: { bone: "leftUpperLeg", local: [0, -0.25, 0.07], normal: [0, 0, 1] },
+  thigh_r: { bone: "rightUpperLeg", local: [0, -0.25, 0.07], normal: [0, 0, 1] },
+  knee_l: { bone: "leftUpperLeg", local: [0, -0.41, 0.065], normal: [0, 0, 1] },
+  knee_r: { bone: "rightUpperLeg", local: [0, -0.41, 0.065], normal: [0, 0, 1] },
+};
+
+/** A body surface point and its outward normal in ACTOR space (metres, scaled) for a posed skeleton. */
+export function surfaceInActor(sk: Skeleton, surface: BodySurface, scale: number): { at: Vec3; normal: Vec3 } {
+  const def = SURFACES[surface];
+  const b = sk[def.bone];
+  const r = Q.rotate(b.rot, [def.local[0] * scale, def.local[1] * scale, def.local[2] * scale]);
+  return { at: [b.pos[0] + r[0], b.pos[1] + r[1], b.pos[2] + r[2]], normal: Q.rotate(b.rot, def.normal) };
+}
+
 /** Semantic role → bone, so an author can ask for "left_foot" without knowing the rig's naming scheme. */
 export const BONE_ROLES: Record<string, BoneName> = {
   pelvis: "hips", spine: "spine", chest: "chest", neck: "neck", head: "head",
@@ -73,6 +92,8 @@ export interface RigReport {
   bones: Array<{ name: BoneName; role?: string; parent: BoneName | null; offset: Vec3; length: number }>;
   segments: Record<"thigh" | "shin" | "upperArm" | "forearm" | "hipHeight" | "footLength", number>;
   patches: Array<ContactPatch & { localScaled: Vec3 }>;
+  /** surfaces of this actor's body that a hand can rest on (contact `on`) — they move with the body */
+  surfaces: Array<{ id: BodySurface; bone: BoneName; local: Vec3; normal: Vec3; localScaled: Vec3 }>;
   ranges: typeof JOINT_RANGES;
   /** what this rig does not model, so callers do not assume it */
   notModeled: string[];
@@ -109,6 +130,7 @@ export function inspectRig(spec: Pick<BlockshotSpec, "actors">, actorId: string)
       footLength: r4(0.2 * s),
     },
     patches: CONTACT_PATCHES.map((p) => ({ ...p, localScaled: scaled(p.local, s) })),
+    surfaces: (Object.keys(SURFACES) as BodySurface[]).map((id) => ({ id, ...SURFACES[id], localScaled: scaled(SURFACES[id].local, s) })),
     ranges: JOINT_RANGES,
     notModeled: ["mass / centre of mass (balance checks are kinematic approximations)", "soft-body or mesh deformation (patches sit on rigid primitives)", "build (slim/heavy) widens the mesh but not the skeleton"],
   };

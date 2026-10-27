@@ -159,6 +159,13 @@ export const Camera = z.object({
 });
 export type Camera = z.infer<typeof Camera>;
 
+/** body parts a `contact` action can hold in place */
+export const CONTACT_PARTS = ["hand_l", "hand_r", "foot_l", "foot_r"] as const;
+export type ContactPart = (typeof CONTACT_PARTS)[number];
+/** surfaces of the actor's OWN body a hand can rest on (they move with the body) */
+export const BODY_SURFACES = ["thigh_l", "thigh_r", "knee_l", "knee_r"] as const;
+export type BodySurface = (typeof BODY_SURFACES)[number];
+
 /** every action has a start time and an optional label (`id`) so edits can address it ("patchActions" / "removeActions") */
 const timed = { start: z.number().min(0), id: Id.optional() };
 
@@ -193,6 +200,20 @@ export const Action = z.discriminatedUnion("type", [
   z.object({ type: z.literal("hold"), actor: Id, prop: Id, hand: z.enum(["left", "right"]).default("right"), at: z.enum(HOLD_AT).default("carry"), duration: z.number().positive().default(4), then: z.enum(["keep", "put"]).default("keep"), ...timed }),
   /** reach a hand toward a point / object / body part (IK) — pointing, touching, handing over — and hold it for `duration` */
   z.object({ type: z.literal("reach"), actor: Id, target: Target, hand: z.enum(["left", "right"]).default("right"), duration: z.number().positive().default(1.5), ...timed }),
+  /**
+   * Keep a hand or foot touching something from `start` to `end` (IK, blended in/out over `blend` s). A hand on the
+   * actor's own body surface (thigh / knee) stays there however the body leans or the arm was keyed; a hand on a point,
+   * prop or someone's body part follows it; a foot on "floor" stays planted where it was at `start`.
+   */
+  z.object({
+    type: z.literal("contact"),
+    actor: Id,
+    part: z.enum(CONTACT_PARTS),
+    on: z.union([z.enum(BODY_SURFACES), z.literal("floor"), Target]),
+    end: z.number().positive().optional(),
+    blend: z.number().min(0).max(2).default(0.3),
+    ...timed,
+  }),
   /** walk onto a chair / sofa, turn to face the way it faces and lower into the seat */
   z.object({ type: z.literal("sitDown"), actor: Id, on: Id, duration: z.number().positive().default(1), offset: z.number().default(0), ...timed }),
   /** rise from the seat and step forward (or to `to`) */

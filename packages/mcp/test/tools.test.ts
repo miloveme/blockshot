@@ -55,6 +55,18 @@ describe("shared MCP tools on the node platform", () => {
     expect(ev[0].actors.a.floor).toBe(0);
   });
 
+  it("solve_motion: a hand on the thigh holds, a far point is infeasible with a reason", async () => {
+    const seated = { specVersion: "0.1", settings: { duration: 2 }, actors: [{ id: "a", pose: "sit" }] };
+    const ok = (await call("solve_motion", { spec: seated, contacts: [{ actor: "a", part: "hand_l", on: "thigh_l", start: 0 }] })).content[0].text as string;
+    expect(ok.startsWith("solved.")).toBe(true);
+    expect(JSON.parse(ok.split("\n\n")[1]!).contacts[0].status).toBe("ok");
+    const far = (await call("solve_motion", { spec: seated, contacts: [{ id: "far", actor: "a", part: "hand_r", on: [0, 0.5, 1.5], start: 0 }] })).content[0].text as string;
+    const report = JSON.parse(far.split("\n\n")[1]!);
+    expect(far.startsWith("infeasible.")).toBe(true);
+    expect(report.failures[0].constraintIds).toEqual(["far"]);
+    expect((await call("solve_motion", { spec: seated, contacts: [{ actor: "a", part: "foot_l", on: "thigh_l", start: 0 }] })).isError).toBe(true);
+  });
+
   it("the hosted server explains how to install the local one instead of rendering", async () => {
     const r = (await handleRpc({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "render_video", arguments: {} } }, platform, [...BASE_TOOLS, ...REMOTE_EXTRA_TOOLS])) as { result: { isError: boolean; content: { text: string }[] } };
     expect(r.result.isError).toBe(true);

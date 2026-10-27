@@ -3,6 +3,8 @@ import {
   SPEC_VERSION,
   type Action,
   type BodyPart,
+  type BodySurface,
+  type ContactPart,
   type Ease,
   type Gesture,
   type HandShape,
@@ -60,6 +62,8 @@ export interface ActorHandle {
   hold(prop: { id: string } | string, opts: { start: number; at?: "ear" | "mouth" | "chest" | "carry"; hand?: "left" | "right"; duration?: number; then?: "keep" | "put" }): ActorHandle;
   /** Reach a hand toward a point / object / body part (IK) and hold it for `duration`. */
   reach(target: Target, opts: { start: number; hand?: "left" | "right"; duration?: number }): ActorHandle;
+  /** Keep a hand on a body surface ("thigh_l", "knee_r" …), a point / prop / "actor.part", or a foot planted on "floor", from `start` to `end` (IK, survives leaning and keyed arms). */
+  contact(part: ContactPart, on: BodySurface | "floor" | Target, opts: { start: number; end?: number; blend?: number }): ActorHandle;
   pose(name: Pose, opts: { start: number }): ActorHandle;
   /** Keyframe one bone by hand: `keys` are [time, [x°, y°, z°]] (Euler XYZ degrees, 0 = rest). Between its first and last key the bone follows these keys instead of the automatic motion. */
   bone(bone: BoneName, keys: Array<[number, Vec3]>, ease?: Ease): ActorHandle;
@@ -181,6 +185,7 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
       handShape: (shape, o) => (action({ type: "handShape", actor: id, shape, ...o }), handle),
       hold: (prop, o) => (action({ type: "hold", actor: id, prop: typeof prop === "string" ? prop : prop.id, ...o }), handle),
       reach: (target, o) => (action({ type: "reach", actor: id, target, ...o }), handle),
+      contact: (part, on, o) => (action({ type: "contact", actor: id, part, on, ...o }), handle),
       lookAt: (target, o) => (action({ type: "lookAt", actor: id, target, ...o }), handle),
       bone: (bone, keys, ease) => (keys.forEach(([t, v]) => addKey(id, `bone:${bone}`, t, v, ease)), handle),
       boneFn: (bone, range, fn) => (scene.animate(id, `bone:${bone}`, range, fn), handle),

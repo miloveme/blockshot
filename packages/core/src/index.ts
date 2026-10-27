@@ -31,3 +31,4 @@ export * from "./axis";
 export * from "./subject";
 export * from "./inspect";
 export * from "./diagnose";
+export * from "./solve";

@@ -74,6 +74,7 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 | --- | --- |
 | `.walkTo(to, { start, duration?, speed?, direct? })` | `to`는 Vec3 또는 경유점 배열. 막힌 구간은 엔진이 알아서 우회(`direct: true`면 직선). 발은 엔진이 디딤마다 고정한다 — 경유점이 여럿이면 짧은 walkTo를 여러 번 잇기보다 한 번에 넘기는 편이 자연스럽다 |
 | `.runTo(to, { start, duration?, speed? })` | |
+| `.contact(part, on, { start, end?, blend? })` | 손(`hand_l`/`hand_r`)을 몸 표면(`thigh_l`·`knee_r` …)·점·소품·참조에, 발(`foot_l`/`foot_r`)을 `"floor"`에 붙여 둔다 — 상체를 기울여도, 팔을 키로 잡아도 손이 그 자리에 남는다 |
 | `.turnTo(target, { start, duration? })` | target: Vec3 · 참조 · yaw(도). 서 있으면 발을 옮겨 디디며 돈다 |
 | `.pose(name, { start })` | `stand` `walk` `run` `sit` `point` `talk` `idle` — 이전 포즈에서 0.35초 블렌드 |
 | `.sitDown(seat, { start, duration?, offset? })` | 의자/소파(핸들·id)로 걸어가 앉기. 소파는 `offset`(m)으로 자리를 나눈다 |

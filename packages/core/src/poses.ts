@@ -337,6 +337,20 @@ function solveLeg3(ankle: Vec3, yaw: number, pitch: number, toes: number): { thi
   return { thigh: Q.toEuler(qThigh), shin: Q.toEuler(Q.mul(Q.inv(qThigh), qShin)), foot: Q.toEuler(Q.mul(Q.inv(qShin), qFoot)), toes: [toes, 0, 0] };
 }
 
+/**
+ * Leg IK on any pose: thigh / shin / foot / toes rotations that put `side`'s ankle at `ankle` (actor space, metres) with
+ * the foot flat and pointing `footYaw` (radians, actor space) — for a planted foot (`contact` on the floor).
+ */
+export function solveLegIK(base: RigPose, side: "left" | "right", ankle: Vec3, footYaw: number, scale: number): Layer {
+  const sk = solveRig(base, scale);
+  const hip = sk[`${side}UpperLeg`].pos;
+  const qh = sk.hips.rot;
+  const rel = Q.rotate(Q.inv(qh), [(ankle[0] - hip[0]) / scale, (ankle[1] - hip[1]) / scale, (ankle[2] - hip[2]) / scale]);
+  const fwd = Q.rotate(qh, [0, 0, 1]);
+  const leg = solveLeg3(rel, footYaw - Math.atan2(fwd[0], fwd[2]), 0, 0);
+  return { [`${side}UpperLeg`]: leg.thigh, [`${side}LowerLeg`]: leg.shin, [`${side}Foot`]: leg.foot, [`${side}Toes`]: leg.toes };
+}
+
 function unit(v: Vec3, fallback: Vec3): Vec3 {
   const l = Math.hypot(...v);
   return l < 1e-9 ? fallback : [v[0] / l, v[1] / l, v[2] / l];

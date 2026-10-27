@@ -1,16 +1,22 @@
-import type { Action, BodyPart, Ease, Gesture, HandShape, HoldAt, Key, Pose, BlockshotSpec, Prop, Target, TrackProperty, Vec3 } from "./schema";
+import type { Action, BodyPart, BodySurface, ContactPart, Ease, Gesture, HandShape, HoldAt, Key, Pose, BlockshotSpec, Prop, Target, TrackProperty, Vec3 } from "./schema";
 import { applyEase, DEG, unwrapYaw, vec, yawTowards } from "./math";
 import { verticalFov } from "./camera";
 import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
 import { seatPose, standOutPoint } from "./catalog";
 import { planAroundMovers, timeRouteOnGrid, type Mover } from "./nav-time";
 import { bakeNav, crouchSpans, surfaceSpans, navRadiusOf, routeLegs, staticActors, type Circle, type NavGrid } from "./nav";
-import { BONES, REST_HEIGHT, applyLayer, blendPoses, clonePose, smoothstep, solveRig, toLocal, toWorld, type BoneName, type RigPose, type Skeleton } from "./rig";
+import { BONES, REST_HEIGHT, applyLayer, blendPoses, clonePose, smoothstep, solveRig, toLocal, toWorld, type BoneName, type Layer, type RigPose, type Skeleton } from "./rig";
 import { Q } from "./quat";
 import { driveKeys, KEY_STEP, motionAt, motionFromKeys, smoothPath, type Motion } from "./vehicle";
 import { PROP_CATALOG, propSize } from "./catalog";
-import { basePose, envelope, gaitPose, turnStepPose, TURN_STEP_ANGLE, type GaitTrack, type TurnTrack, GESTURE_DEFS, handLayer, handShapeLayer, lookLayer, RELAXED_HANDS, sampleGesture, solveArm, strideFor } from "./poses";
+import { CONTACT_PATCHES, surfaceInActor } from "./inspect";
+import { actionLabels } from "./actions";
+import { BODY_SURFACES } from "./schema";
+import { basePose, envelope, gaitPose, solveLegIK, turnStepPose, TURN_STEP_ANGLE, type GaitTrack, type TurnTrack, GESTURE_DEFS, handLayer, handShapeLayer, lookLayer, RELAXED_HANDS, sampleGesture, solveArm, strideFor } from "./poses";
 
+const BODY_SURFACE_SET = new Set<string>(BODY_SURFACES);
+/** how far in front of the pelvis the feet rest while seated (rest metres) — where the pelvis goes when rising */
+const SEATED_FOOT_FORWARD = 0.42;
 const WALK_SPEED = 1.3;
 const RUN_SPEED = 3.5;
 const TURN_TIME = 0.3;
@@ -83,7 +89,24 @@ export type ActLayer =
   | { kind: "gesture"; gesture: Gesture; start: number; end: number; side: "left" | "right"; intensity: number }
   | { kind: "reach"; target: Target; hand: "left" | "right"; start: number; end: number }
   | { kind: "hand"; shape: HandShape; hand: "left" | "right" | "both"; start: number; end: number }
+  | ContactLayer
+  /** getting up out of a seat: the sit → stand blend spans the whole rise instead of the usual POSE_BLEND */
+  | { kind: "rise"; start: number; end: number }
   | HoldLayer;
+
+/** A hand or foot kept touching something (see the `contact` action). */
+export interface ContactLayer {
+  kind: "contact";
+  part: ContactPart;
+  on: BodySurface | "floor" | Target;
+  start: number;
+  end: number;
+  blend: number;
+  /** the action it came from (for reports) */
+  id: string;
+  /** added by the engine (standUp plants the feet), not written by the author */
+  implicit?: boolean;
+}
 
 /** An actor picks up a prop and uses it (see the `hold` action). */
 export interface HoldLayer {
@@ -294,7 +317,7 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
         // hand-made legs stay as written; any leg that would cut through furniture / a wall / a standing actor is re-pathed
         const nav = navFor(scene, a.actor, a.start);
         const routed = routeLegs(nav.grid, points, nav.avoid);
-        points = routed.points;
+        points = dropTinyLegs(routed.points);
         if (routed.failed) scene.unreachable.add(a);
       }
       scene.routes.set(a, points);
@@ -357,9 +380,13 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       wPos.length = 0;
       wPos.push(...rounded);
       // a walk that continues an earlier one (or flows into the next) keeps its pace at that end
-      const chainedIn = prevPose === "walk" || prevPose === "run";
+      const before = sampleKeys(pos, Math.max(0, a.start - 0.05)) as Vec3;
+      const chainedIn = prevPose === "walk" || prevPose === "run" || Math.hypot(startPos[0] - before[0], startPos[2] - before[2]) > 0.01;
       const chainedOut = spec.actions.some((b) => b !== a && (b.type === "walkTo" || b.type === "runTo") && b.actor === a.actor && Math.abs(b.start - endT) < 0.05);
-      const warp = paceRamp(a.start, endT, gait === "run" ? RUN_RAMP : WALK_RAMP, !chainedIn, !chainedOut);
+      // already moving in: speed up / slow down from that speed instead of from a standstill
+      const pace = total / Math.max(1e-3, endT - a.start);
+      const vIn = Math.hypot(startPos[0] - before[0], startPos[2] - before[2]) / 0.05;
+      const warp = paceRamp(a.start, endT, gait === "run" ? RUN_RAMP : WALK_RAMP, true, !chainedOut, chainedIn ? vIn / pace : 0);
       for (const k of wRot) insertKey(rot, { ...k, t: warp.inv(k.t) });
       for (const k of wPose) insertKey(pose, { ...k, t: warp.inv(k.t) });
       for (const k of wPos) insertKey(pos, { ...k, t: warp.inv(k.t) });
@@ -452,9 +479,28 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       const yaw = (sampleKeys(rot, a.start) as Vec3)[1] * DEG;
       // out of the seat past its front edge (a deep or scaled sofa needs more than one step), else one step forward
       const to: Vec3 = a.to ?? standOutPoint(spec, from) ?? [from[0] + Math.sin(yaw) * STAND_STEP, from[1], from[2] + Math.cos(yaw) * STAND_STEP];
+      // 1) rise: the pelvis comes forward over the feet (where they rest while seated) and up, the feet stay planted;
+      // 2) whatever is left to the standing spot is walked — a short step out, or a real walk to an explicit `to`
+      const scale = actor.height / REST_HEIGHT;
+      const over: Vec3 = [from[0] + Math.sin(yaw) * SEATED_FOOT_FORWARD * scale, from[1], from[2] + Math.cos(yaw) * SEATED_FOOT_FORWARD * scale];
+      const rest = Math.hypot(to[0] - over[0], to[2] - over[2]);
+      const stepping = rest > 0.08;
+      const riseEnd = a.start + (stepping && !a.to ? a.duration * 0.65 : a.duration);
+      const riseTo = stepping ? over : to;
       insertKey(pos, { t: a.start, value: from, ease: "linear" });
-      insertKey(pos, { t: a.start + a.duration, value: to, ease: "easeOut" });
+      // a gentle S-curve (dense keys): a cubic ease would jerk the pelvis at both ends
+      const riseSteps = Math.max(4, Math.ceil((riseEnd - a.start) * 60));
+      for (let k = 1; k <= riseSteps; k++) {
+        const u = smoothstep(k / riseSteps);
+        insertKey(pos, { t: a.start + ((riseEnd - a.start) * k) / riseSteps, value: [from[0] + (riseTo[0] - from[0]) * u, from[1] + (riseTo[1] - from[1]) * u, from[2] + (riseTo[2] - from[2]) * u], ease: "linear" });
+      }
       insertKey(pose, { t: a.start, value: "stand", ease: "step" });
+      const list = scene.acts.get(a.actor) ?? [];
+      const label = actionLabels(spec.actions)[spec.actions.indexOf(a)] ?? "standUp";
+      list.push({ kind: "rise", start: a.start, end: riseEnd });
+      for (const part of ["foot_l", "foot_r"] as const) list.push({ kind: "contact", part, on: "floor", start: a.start, end: riseEnd, blend: 0.12, id: `${label}:${part}`, implicit: true });
+      scene.acts.set(a.actor, list);
+      if (stepping) compileAction(scene, { type: "walkTo", actor: a.actor, to, start: riseEnd, direct: !a.to, ...(a.to ? {} : { duration: a.start + a.duration - riseEnd }) }, track);
       break;
     }
     case "gesture": {
@@ -581,6 +627,12 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       list.push(layer);
       scene.acts.set(a.actor, list);
       scene.holds.set(a.prop, [...prior, layer]);
+      break;
+    }
+    case "contact": {
+      const list = scene.acts.get(a.actor) ?? [];
+      list.push({ kind: "contact", part: a.part, on: a.on, start: a.start, end: a.end ?? Infinity, blend: a.blend, id: actionLabels(spec.actions)[spec.actions.indexOf(a)] ?? "contact" });
+      scene.acts.set(a.actor, list);
       break;
     }
     case "reach": {
@@ -843,13 +895,18 @@ function rigPart(sk: Skeleton, part: BodyPart, scale: number, position: Vec3, ro
  * The actor's final pose at time t: base pose (blended from the previous one) → head look-at → gestures → reach IK.
  * `lookTarget` is a world point or null (null also keeps body-part lookups from recursing through look-at).
  */
-function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnType<typeof actorCore>, lookTarget: Vec3 | null): { pose: RigPose; skeleton: Skeleton } {
+function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnType<typeof actorCore>, lookTarget: Vec3 | null, noContacts = false): { pose: RigPose; skeleton: Skeleton } {
   const scale = core.actor.height / REST_HEIGHT;
   const withHands = (p: RigPose) => ({ hips: p.hips, rot: { ...RELAXED_HANDS, ...p.rot } });
   const gait = gaitAt(scene, id, t);
   const cycle = (name: Pose, time: number) => ((name === "walk" || name === "run") && gait ? gaitPose(name === "run", gait.phase, gait.stride, gait.track, undefined, gait.root) : basePose(name, time));
   let pose = withHands(cycle(core.pose, core.poseTime));
-  if (core.blend < 1 && core.prevPose !== core.pose) {
+  // rising from a seat: the blend out of "sit" lasts the whole rise
+  const rise = (scene.acts.get(id) ?? []).find((l) => l.kind === "rise" && t >= l.start && t < l.end);
+  if (rise) {
+    const k = smoothstep((t - rise.start) / Math.max(1e-3, rise.end - rise.start));
+    pose = blendPoses(withHands(basePose("sit", 0)), pose, k);
+  } else if (core.blend < 1 && core.prevPose !== core.pose) {
     const gaitLegs = (core.pose === "walk" || core.pose === "run") && gait ? pose : null;
     pose = blendPoses(withHands(cycle(core.prevPose, core.prevPoseTime)), pose, smoothstep(core.blend));
     // setting off: the gait already starts with tiny steps from a standstill, so it owns the legs and pelvis outright —
@@ -864,7 +921,7 @@ function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnTyp
     let legs = gait.turn ? turnStepPose(gait.phase, gait.yaw, gait.turnTrack, gait.turnFrom) : gaitPose(gait.run, gait.phase, 0, gait.track, undefined, gait.root);
     // (the foot that was in the air when the turn took over eases from its walk path onto the turn's)
     if (gait.turn && gait.handoff > 0) {
-      const walk = gaitPose(gait.run, gait.phase, 0, gait.track, undefined, gait.root);
+      const walk = gaitPose(gait.run, gait.phase, 0, gait.walkTrack ?? gait.track, undefined, gait.root);
       legs = blendPoses(legs, walk, smoothstep(gait.handoff));
     }
     const w = smoothstep(gait.settle);
@@ -891,6 +948,8 @@ function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnTyp
       pose = applyLayer(pose, handShapeLayer(layer.shape, layer.hand), envelope(u, d, true));
     } else if (layer.kind === "hold") {
       pose = applyHold(pose, layer, u, scale, core);
+    } else if (layer.kind === "contact" || layer.kind === "rise") {
+      continue; // contacts after the bone keys, below; the rise is part of the base pose
     } else {
       const w = envelope(u, d, true);
       if (w <= 0) continue;
@@ -899,7 +958,92 @@ function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnTyp
     }
   }
   pose = applyBoneKeys(scene, id, t, pose);
+  // contacts come last: they hold a hand / foot on its target whatever the actions and hand-keyed bones did
+  if (!noContacts) for (const layer of scene.acts.get(id) ?? []) if (layer.kind === "contact") pose = applyContact(scene, id, t, core, pose, layer, scale);
   return { pose, skeleton: solveRig(pose, scale) };
+}
+
+// ---- contacts ------------------------------------------------------------------------------------------
+
+/** 0 → 1 → 0 over a contact's span (already on from the start when it begins at 0). */
+export function contactWeight(layer: Pick<ContactLayer, "start" | "end" | "blend">, t: number): number {
+  if (t < layer.start || t > layer.end) return 0;
+  const b = Math.max(1e-3, layer.blend);
+  const fadeIn = layer.start <= 0 ? 1 : smoothstep((t - layer.start) / b);
+  const fadeOut = Number.isFinite(layer.end) ? smoothstep((layer.end - t) / b) : 1;
+  return Math.min(fadeIn, fadeOut);
+}
+
+const plantCache = new WeakMap<ContactLayer, { ankle: Vec3; yaw: number }>();
+const PALM_GAP = 0.004;
+
+/** Where a contact's target is now: a point in actor space, the outward normal there and whether it rides on the body. */
+export function contactTarget(scene: CompiledScene, layer: ContactLayer, t: number, sk: Skeleton, scale: number, position: Vec3, rotation: Vec3): { at: Vec3; normal: Vec3 } {
+  if ((BODY_SURFACE_SET as Set<string>).has(layer.on as string)) return surfaceInActor(sk, layer.on as BodySurface, scale);
+  const world = resolveImpl(scene, layer.on as Target, t, false);
+  return { at: toLocal(world, position, rotation), normal: [0, 1, 0] };
+}
+
+function applyContact(scene: CompiledScene, id: string, t: number, core: ReturnType<typeof actorCore>, pose: RigPose, layer: ContactLayer, scale: number): RigPose {
+  const w = contactWeight(layer, t);
+  if (w <= 0) return pose;
+  const side = layer.part.endsWith("_l") ? "left" : "right";
+  if (layer.part.startsWith("foot")) {
+    // planted where the foot was when the contact began (measured on the pose without contacts)
+    let plant = plantCache.get(layer);
+    if (!plant) {
+      const t0 = Math.max(0, layer.start);
+      const c0 = actorCore(scene, id, t0);
+      const sk0 = computeRig(scene, id, t0, c0, null, true).skeleton;
+      const foot = sk0[`${side}Foot`];
+      const fwd = Q.rotate(foot.rot, [0, 0, 1]);
+      plant = { ankle: toWorld(foot.pos, c0.position, c0.rotation), yaw: Math.atan2(fwd[0], fwd[2]) + c0.rotation[1] * DEG };
+      plantCache.set(layer, plant);
+    }
+    const goal = toLocal(plant.ankle, core.position, core.rotation);
+    return applyLayer(pose, solveLegIK(pose, side, goal, plant.yaw - core.rotation[1] * DEG, scale), w);
+  }
+  // a hand: put the PALM on the target, palm facing it — a couple of passes correct for the palm sitting off the wrist
+  const sk = solveRig(pose, scale);
+  const target = contactTarget(scene, layer, t, sk, scale, core.position, core.rotation);
+  const want: Vec3 = [target.at[0] + target.normal[0] * PALM_GAP * scale, target.at[1] + target.normal[1] * PALM_GAP * scale, target.at[2] + target.normal[2] * PALM_GAP * scale];
+  const palmToward: Vec3 = [-target.normal[0], -target.normal[1], -target.normal[2]];
+  let goal: Vec3 = [want[0] + target.normal[0] * 0.04 * scale, want[1] + target.normal[1] * 0.04 * scale, want[2] + target.normal[2] * 0.04 * scale];
+  let layerOut: Layer = {};
+  for (let i = 0; i < 4; i++) {
+    layerOut = solveArm(pose, side, goal, scale, palmToward).layer;
+    const palm = palmIn(solveRig(applyLayer(pose, layerOut, 1), scale), side, scale);
+    const err: Vec3 = [want[0] - palm[0], want[1] - palm[1], want[2] - palm[2]];
+    if (Math.hypot(...err) < 5e-4) break;
+    goal = [goal[0] + err[0], goal[1] + err[1], goal[2] + err[2]];
+  }
+  return applyLayer(pose, layerOut, w);
+}
+
+/** The palm patch in actor space. */
+function palmIn(sk: Skeleton, side: "left" | "right", scale: number): Vec3 {
+  const patch = CONTACT_PATCHES.find((p) => p.id === (side === "left" ? "palm_l" : "palm_r"))!;
+  const b = sk[patch.bone];
+  const r = Q.rotate(b.rot, [patch.local[0] * scale, patch.local[1] * scale, patch.local[2] * scale]);
+  return [b.pos[0] + r[0], b.pos[1] + r[1], b.pos[2] + r[2]];
+}
+
+/**
+ * Removes route points a few centimetres from their neighbour (grid snapping at the start / end of a routed leg): a
+ * 3 cm leg at 45° would otherwise make the body snap round for one frame.
+ */
+function dropTinyLegs(points: Vec3[], min = 0.12): Vec3[] {
+  if (points.length < 3) return points;
+  const out: Vec3[] = [points[0]!];
+  for (let i = 1; i < points.length - 1; i++) {
+    const p = points[i]!;
+    const prev = out[out.length - 1]!;
+    if (Math.hypot(p[0] - prev[0], p[2] - prev[2]) >= min) out.push(p);
+  }
+  const last = points[points.length - 1]!;
+  if (out.length > 1 && Math.hypot(last[0] - out[out.length - 1]![0], last[2] - out[out.length - 1]![2]) < min) out.pop();
+  out.push(last);
+  return out;
 }
 
 // ---- path corners --------------------------------------------------------------------------------------
@@ -959,27 +1103,32 @@ const RAMP_KEY_STEP = 1 / 30;
  * `fwd(t)` = the constant-pace time whose position the body has reached at real time t; `inv` is its inverse (where a
  * constant-pace key lands in real time). `ramps` = the real-time spans where speed changes.
  */
-function paceRamp(t0: number, t1: number, ramp: number, easeIn: boolean, easeOut: boolean) {
+function paceRamp(t0: number, t1: number, ramp: number, easeIn: boolean, easeOut: boolean, v0 = 0) {
   const D = t1 - t0;
-  const e = D > 0 ? Math.min(ramp, D / 4) / D : 0;
-  const ein = easeIn ? e : 0;
+  // a short walk ramps over more of its length (all of the speed-up has to fit in it)
+  const e = D > 0 ? Math.min(ramp, easeIn && easeOut ? D / 2.5 : D / 1.6) / D : 0;
+  // `v0` = the speed it already has when it starts (as a fraction of the constant pace); ramping from ~cruise is no ramp
+  const vin = Math.max(0, Math.min(1.5, v0));
+  const ein = easeIn && Math.abs(vin - 1) > 0.05 ? e : 0;
   const eout = easeOut ? e : 0;
   if (D <= 0 || (ein === 0 && eout === 0)) return { fwd: (t: number) => t, inv: (t: number) => t, ramps: [] as Array<[number, number]> };
-  // speed: rises linearly over [0, ein], flat, falls over [1 - eout, 1]; area 1
-  const vmax = 1 / (1 - ein / 2 - eout / 2);
+  // speed: from vin rises (or falls) linearly to vmax over [0, ein], flat, falls to 0 over [1 - eout, 1]; area 1
+  const vmax = (1 - (vin * ein) / 2) / (1 - ein / 2 - eout / 2);
+  const k = ein > 0 ? (vmax - vin) / (2 * ein) : 0;
+  const yIn = ein > 0 ? ((vin + vmax) / 2) * ein : 0;
   const P = (x: number) => {
     if (x <= 0) return 0;
     if (x >= 1) return 1;
-    if (ein > 0 && x < ein) return (vmax * x * x) / (2 * ein);
+    if (ein > 0 && x < ein) return vin * x + k * x * x;
     if (eout > 0 && x > 1 - eout) return 1 - (vmax * (1 - x) ** 2) / (2 * eout);
-    return vmax * (x - ein / 2);
+    return yIn + vmax * (x - ein);
   };
   const Pinv = (y: number) => {
     if (y <= 0) return 0;
     if (y >= 1) return 1;
-    if (ein > 0 && y < (vmax * ein) / 2) return Math.sqrt((2 * ein * y) / vmax);
+    if (ein > 0 && y < yIn) return Math.abs(k) < 1e-9 ? y / Math.max(1e-9, vin) : (-vin + Math.sqrt(Math.max(0, vin * vin + 4 * k * y))) / (2 * k);
     if (eout > 0 && y > 1 - (vmax * eout) / 2) return 1 - Math.sqrt((2 * eout * (1 - y)) / vmax);
-    return y / vmax + ein / 2;
+    return ein + (y - yIn) / vmax;
   };
   const ramps: Array<[number, number]> = [];
   if (ein > 0) ramps.push([t0, t0 + ein * D]);
@@ -1017,6 +1166,8 @@ interface GaitTable {
   handoff: Float32Array;
   /** sample index where the current turn began (-1 outside turns) */
   turnStart: Int32Array;
+  /** phase where the current walk / turn began (a foot down since before then counts from that moment) */
+  spanStart: Float64Array;
   /** body position per sample, rest metres (world / scale) */
   rx: Float64Array;
   rz: Float64Array;
@@ -1048,6 +1199,7 @@ function gaitTable(scene: CompiledScene, id: string) {
   const yaw = new Float64Array(n);
   const handoff = new Float32Array(n);
   const turnStart = new Int32Array(n).fill(-1);
+  const spanStart = new Float64Array(n);
   const rx = new Float64Array(n);
   const rz = new Float64Array(n);
   for (let k = 0; k < n; k++) {
@@ -1071,11 +1223,13 @@ function gaitTable(scene: CompiledScene, id: string) {
     if (!g && turning(i)) {
       // a turn on the spot: steps paced by the angle turned, then a settling step like after a walk
       used = true;
-      if (i > 0 && settle[i - 1]! > 0 && !turns[i - 1]) {
+      // straight out of a walk (still walking, or its settling steps): hand the feet over where they are
+      if (i > 0 && !turns[i - 1] && (settle[i - 1]! > 0 || gaitOf(i - 1))) {
         const h = Math.round(HANDOFF_TIME * GAIT_RATE);
         for (let k = 0; k < h && i + k < n; k++) handoff[i + k] = 1 - (k + 1) / (h + 1);
       }
       const began = i;
+      const turnFrom = phase[i]!;
       let j = i;
       while (j < n - 1 && !gaitOf(j) && (turning(j) || turning(j + 1) || turning(j + 2))) j++;
       for (let k = i; k < j; k++) {
@@ -1086,6 +1240,7 @@ function gaitTable(scene: CompiledScene, id: string) {
         turns[k] = 1;
         settle[k] = 1;
         turnStart[k] = began;
+        spanStart[k] = turnFrom;
       }
       i = j;
       // both feet step once more after the turn, so neither is left twisted on the floor
@@ -1100,6 +1255,7 @@ function gaitTable(scene: CompiledScene, id: string) {
         turns[i + k + 1] = 1;
         settle[i + k + 1] = Math.min(1, 3 * (1 - (k + 1) / m));
         turnStart[i + k + 1] = began;
+        spanStart[i + k + 1] = turnFrom;
       }
       turns[i] = 1;
       settle[i] = 1;
@@ -1130,6 +1286,7 @@ function gaitTable(scene: CompiledScene, id: string) {
     }
     const run = g === "run";
     for (let k = i; k <= j; k++) runs[k] = run ? 1 : 0;
+    const walkFrom = phase[i]!;
     for (let k = i; k < j; k++) {
       const d = travel[k - i]!;
       // walking on the spot: steps at the old timed cadence that land where they lift
@@ -1138,6 +1295,7 @@ function gaitTable(scene: CompiledScene, id: string) {
       odo[k + 1] = odo[k]! + (total > 0.05 ? d : dt * (run ? 1.4 : 0.9) * L);
       phase[k + 1] = phase[k]! + (total > 0.05 ? (L > 1e-3 ? Math.min(d / L, 0.05) : 0) : dt * (run ? 1.4 : 0.9));
     }
+    for (let k = i; k <= j; k++) spanStart[k] = walkFrom;
     i = j;
     // the walk is over: keep stepping on the spot (no travel, zero stride) up to the next touchdown, so the foot that was
     // still behind or in the air comes down beside the other instead of being dragged into the standing pose
@@ -1153,6 +1311,7 @@ function gaitTable(scene: CompiledScene, id: string) {
         stride[i + k + 1] = 0;
         odo[i + k + 1] = odo[i + k]!;
         runs[i + k + 1] = run ? 1 : 0;
+        spanStart[i + k + 1] = walkFrom;
         // fully the gait at first, handing the legs over to the standing pose over the last third
         settle[i + k + 1] = Math.min(1, 3 * (1 - (k + 1) / m));
       }
@@ -1160,12 +1319,12 @@ function gaitTable(scene: CompiledScene, id: string) {
       i += k;
     }
   }
-  const table: GaitTable | null = used ? { phase, stride, odo, settle, run: runs, turn: turns, yaw, handoff, turnStart, rx, rz } : null;
+  const table: GaitTable | null = used ? { phase, stride, odo, settle, run: runs, turn: turns, yaw, handoff, turnStart, spanStart, rx, rz } : null;
   perScene.set(id, table);
   return table;
 }
 
-function gaitAt(scene: CompiledScene, id: string, t: number): { phase: number; stride: number; track: GaitTrack; settle: number; run: boolean; turn: boolean; handoff: number; yaw: number; turnTrack: TurnTrack; turnFrom?: { phase: number; feet: Record<"left" | "right", Vec3> }; root: Vec3 } | null {
+function gaitAt(scene: CompiledScene, id: string, t: number): { phase: number; stride: number; track: GaitTrack; settle: number; run: boolean; turn: boolean; handoff: number; yaw: number; turnTrack: TurnTrack; turnFrom?: { phase: number; feet: Record<"left" | "right", Vec3> }; walkTrack?: GaitTrack; root: Vec3 } | null {
   const table = gaitTable(scene, id);
   if (!table) return null;
   const { phase, stride, odo } = table;
@@ -1178,11 +1337,12 @@ function gaitAt(scene: CompiledScene, id: string, t: number): { phase: number; s
   const x = Math.max(0, Math.min(last, t * GAIT_RATE));
   const now = lerpAt(phase, x);
   // phase → sample index (phase never decreases). Where the phase stood still (standing before the walk), the LAST such
-  // sample: a foot that was already down when the walk began counts from the moment the body started moving
-  const indexOf = (ph: number) => {
-    if (Math.abs(ph - now) < 1e-9) return x;
+  // sample: a foot that was already down when the walk / turn began (`begun`) counts from the moment it began
+  const indexer = (begun: number, nowPh: number, xs: number) => (raw: number) => {
+    const ph = raw < nowPh ? Math.max(raw, begun) : raw;
+    if (Math.abs(ph - nowPh) < 1e-9) return xs;
     // the past is searched up to now; a phase still ahead (the next touchdown) in the rest of the table
-    const top = ph < now ? Math.min(last, Math.ceil(x)) : last;
+    const top = ph < nowPh ? Math.min(last, Math.ceil(xs)) : last;
     if (phase[0]! > ph + 1e-9) return 0;
     let lo = 0;
     let hi = top;
@@ -1195,14 +1355,20 @@ function gaitAt(scene: CompiledScene, id: string, t: number): { phase: number; s
     return lo + (span > 1e-9 ? Math.max(0, Math.min(1, (ph - phase[lo]!) / span)) : 0);
   };
   const rootAt = (i: number): Vec3 => [lerpAt(table.rx, i), lerpAt(table.rz, i), lerpAt(table.yaw, i)];
-  const track: GaitTrack = { odo: (ph) => lerpAt(odo, indexOf(ph)), stride: (ph) => lerpAt(stride, indexOf(ph)), root: (ph) => rootAt(indexOf(ph)) };
-  // where the feet were when the current turn began (walk feet, if it followed a walk) — the turn steps start from there
+  const trackFor = (indexOf: (ph: number) => number): GaitTrack => ({ odo: (ph) => lerpAt(odo, indexOf(ph)), stride: (ph) => lerpAt(stride, indexOf(ph)), root: (ph) => rootAt(indexOf(ph)) });
+  const indexOf = indexer(table.spanStart[Math.round(x)]!, now, x);
+  const track = trackFor(indexOf);
+  // a turn that took over from a walk: the walk's own history (its feet are where the turn starts from, and where the
+  // cross-fade comes from)
   const ts = table.turnStart[Math.round(x)]!;
   let turnFrom: { phase: number; feet: Record<"left" | "right", Vec3> } | undefined;
+  let walkTrack: GaitTrack | undefined;
   if (ts > 0 && table.handoff[ts]! > 0) {
+    const walkBegun = table.spanStart[ts - 1]!;
     const feet = {} as Record<"left" | "right", Vec3>;
-    gaitPose(table.run[ts - 1] === 1, phase[ts]!, 0, track, feet, rootAt(ts));
+    gaitPose(table.run[ts - 1] === 1, phase[ts]!, 0, trackFor(indexer(walkBegun, phase[ts]!, ts)), feet, rootAt(ts));
     turnFrom = { phase: phase[ts]!, feet };
+    walkTrack = trackFor(indexer(walkBegun, now, x));
   }
   return {
     phase: now,
@@ -1216,6 +1382,7 @@ function gaitAt(scene: CompiledScene, id: string, t: number): { phase: number; s
     turnTrack: { yaw: (ph) => lerpAt(table.yaw, indexOf(ph)) },
     stride: lerpAt(stride, x),
     track,
+    walkTrack,
   };
 }
 

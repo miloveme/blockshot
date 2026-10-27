@@ -1,4 +1,4 @@
-import { BlockshotSpec, type Target } from "./schema";
+import { BlockshotSpec, BODY_SURFACES, type Target } from "./schema";
 import { parseRef } from "./mirror";
 import { PROP_CATALOG, SEATS } from "./catalog";
 
@@ -112,6 +112,14 @@ export function validateSpec(input: unknown): ValidationResult {
       const prop = spec.props.find((x) => x.id === a.prop);
       if (!prop) errors.push({ path: `${p}.prop`, message: `Unknown prop id "${a.prop}". Props: ${spec.props.map((x) => x.id).join(", ") || "none"}` });
       else if (PROP_CATALOG[prop.type].surface || prop.type === "door" || prop.type === "window" || prop.type === "mirror") errors.push({ path: `${p}.prop`, message: `"${a.prop}" is a ${prop.type}; hold needs something small enough to pick up (phone, cup, box …)` });
+    }
+    if (a.type === "contact") {
+      const foot = a.part.startsWith("foot");
+      const body = typeof a.on === "string" && (BODY_SURFACES as readonly string[]).includes(a.on);
+      if (foot && a.on !== "floor") errors.push({ path: `${p}.on`, message: `A foot contact goes on "floor" (it stays planted where it is at start)` });
+      if (!foot && a.on === "floor") errors.push({ path: `${p}.on`, message: `A hand contact goes on a body surface (${BODY_SURFACES.join(", ")}), a point [x,y,z], a prop id or "actor.part"` });
+      if (!foot && !body && a.on !== "floor") checkTarget(a.on, `${p}.on`);
+      if (a.end !== undefined && a.end <= a.start) errors.push({ path: `${p}.end`, message: `Contact end (${a.end}) must be after start (${a.start})` });
     }
     if ("camera" in a) checkCamera(a.camera, `${p}.camera`);
     if ("target" in a && a.target !== null) checkTarget(a.target, `${p}.target`);
