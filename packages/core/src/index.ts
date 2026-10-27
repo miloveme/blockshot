@@ -29,3 +29,5 @@ export * from "./motion";
 export * from "./preview";
 export * from "./axis";
 export * from "./subject";
+export * from "./inspect";
+export * from "./diagnose";

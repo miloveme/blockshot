@@ -41,8 +41,8 @@ a) File/Node sanity, works without any MCP client:
    printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n' | node /ABSOLUTE/PATH/.blockshot/blockshot-mcp.mjs
    → prints ONE JSON line containing the tool list and exits. If it errors: wrong Node version (<22), truncated download (re-download), or wrong path.
 b) Client sees it: claude mcp list (shows "blockshot-local … Connected"), or /mcp inside Claude Code; for Codex: codex mcp list.
-c) In the NEW session the local server must expose exactly these 11 tools:
-   get_guide, run_script, validate_spec, apply_addon, animate_prompt, evaluate, preview, load_link, open_link, render_video, render_still
-   How to tell local from hosted: the local server has NO local_setup tool, and its render_video description starts with "LOCAL ONLY". The hosted server has 12 tools (the shared ones + local_setup + render_video + render_still stubs that only explain how to install).
+c) In the NEW session the local server must expose exactly these 13 tools:
+   get_guide, run_script, validate_spec, apply_addon, animate_prompt, evaluate, analyze_motion, inspect_rig, preview, load_link, open_link, render_video, render_still
+   How to tell local from hosted: the local server has NO local_setup tool, and its render_video description starts with "LOCAL ONLY". The hosted server has 14 tools (the shared ones + local_setup + render_video + render_still stubs that only explain how to install).
 d) Functional test: call run_script with a tiny scene, then render_still (t=0); a PNG must come back. render_video writes a file under ~/Blockshot/renders/ (or the "output" path) and returns its path. If render_* fails with "Google Chrome was not found" → install Chrome or set BLOCKSHOT_CHROME; if it says the studio did not become ready → check the machine can reach BLOCKSHOT_URL.
 Only after (a) and (b) succeed, report success; mention if you could not run (c)/(d) in the current session.

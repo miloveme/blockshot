@@ -9,7 +9,7 @@ import { BONES, REST_HEIGHT, applyLayer, blendPoses, clonePose, smoothstep, solv
 import { Q } from "./quat";
 import { driveKeys, KEY_STEP, motionAt, motionFromKeys, smoothPath, type Motion } from "./vehicle";
 import { PROP_CATALOG, propSize } from "./catalog";
-import { basePose, envelope, GESTURE_DEFS, handLayer, handShapeLayer, lookLayer, RELAXED_HANDS, sampleGesture, solveArm } from "./poses";
+import { basePose, envelope, gaitPose, turnStepPose, TURN_STEP_ANGLE, type GaitTrack, type TurnTrack, GESTURE_DEFS, handLayer, handShapeLayer, lookLayer, RELAXED_HANDS, sampleGesture, solveArm, strideFor } from "./poses";
 
 const WALK_SPEED = 1.3;
 const RUN_SPEED = 3.5;
@@ -316,8 +316,14 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
         timed = planned.path;
         if (planned.adjusted) scene.routes.set(a, timed.map((tp) => tp.p));
       }
-      insertKey(pos, { t: a.start, value: startPos, ease: "linear" });
-      insertKey(rot, { t: a.start, value: startRot, ease: "linear" });
+      // keys go to local lists first: the whole walk is then re-timed so the body speeds up from a standstill and slows
+      // down into the final stop (arrival time unchanged) instead of jumping to full pace — which also lets the
+      // distance-driven gait start and finish with short steps rather than sliding feet
+      const wPos: CKey[] = [];
+      const wRot: CKey[] = [];
+      const wPose: CKey[] = [];
+      insertKey(wPos, { t: a.start, value: startPos, ease: "linear" });
+      insertKey(wRot, { t: a.start, value: startRot, ease: "linear" });
       // where along the walk the body has to duck (under a beam, a low lintel …)
       const ducks = nav ? crouchSpans(nav.grid, timed.map((tp) => tp.p)) : [];
       const climbs = nav ? surfaceSpans(nav.grid, timed.map((tp) => tp.p), 3) : [];
@@ -329,20 +335,36 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
         const dist = Math.hypot(tp.p[0] - from.p[0], tp.p[2] - from.p[2]);
         const moving = dist > 1e-6;
         const segDur = tp.t - from.t;
+        // the body turns through a corner, half before and half after it (the path is rounded there too); the first leg
+        // turns from the standing heading as it sets off
+        const next = timed[i + 2];
+        const turnsAfter = next !== undefined && Math.hypot(next.p[0] - tp.p[0], next.p[2] - tp.p[2]) > 1e-6;
         if (moving) {
           yaw = unwrapYaw(yaw, yawTowards(from.p, tp.p));
-          insertKey(rot, { t: from.t + Math.min(TURN_TIME, segDur / 2), value: [startRot[0], yaw, startRot[2]], ease: "easeInOut" });
+          insertKey(wRot, { t: from.t + Math.min(i === 0 ? TURN_TIME : CORNER_TIME, segDur / 2), value: [startRot[0], yaw, startRot[2]], ease: i === 0 ? "easeInOut" : "linear" });
         }
-        // hold the heading to the end of the leg, so the next turn happens at the start of the next leg
-        insertKey(rot, { t: tp.t, value: [startRot[0], yaw, startRot[2]], ease: "linear" });
-        insertKey(pos, { t: tp.t, value: tp.p, ease: "linear" });
+        // hold the heading until the next corner begins
+        insertKey(wRot, { t: moving && turnsAfter ? tp.t - Math.min(CORNER_TIME, segDur / 2) : tp.t, value: [startRot[0], yaw, startRot[2]], ease: "linear" });
+        insertKey(wPos, { t: tp.t, value: tp.p, ease: "linear" });
         const mid = along + dist / 2;
         const want: Pose = !moving ? "stand" : ducks.some(([f, t]) => mid >= f && mid <= t) ? "crouch" : climbs.some(([f, t]) => mid >= f && mid <= t) ? "climb" : gait;
-        if (want !== lastPose) insertKey(pose, { t: from.t, value: want, ease: "step" });
+        if (want !== lastPose) insertKey(wPose, { t: from.t, value: want, ease: "step" });
         lastPose = want;
         along += dist;
       });
       const endT = timed[timed.length - 1]!.t;
+      const rounded = roundCorners([...wPos]);
+      wPos.length = 0;
+      wPos.push(...rounded);
+      // a walk that continues an earlier one (or flows into the next) keeps its pace at that end
+      const chainedIn = prevPose === "walk" || prevPose === "run";
+      const chainedOut = spec.actions.some((b) => b !== a && (b.type === "walkTo" || b.type === "runTo") && b.actor === a.actor && Math.abs(b.start - endT) < 0.05);
+      const warp = paceRamp(a.start, endT, gait === "run" ? RUN_RAMP : WALK_RAMP, !chainedIn, !chainedOut);
+      for (const k of wRot) insertKey(rot, { ...k, t: warp.inv(k.t) });
+      for (const k of wPose) insertKey(pose, { ...k, t: warp.inv(k.t) });
+      for (const k of wPos) insertKey(pos, { ...k, t: warp.inv(k.t) });
+      // dense keys through the speed ramps (a ramp inside one long straight leg would otherwise interpolate linearly)
+      for (const [r0, r1] of warp.ramps) for (let u = r0; u < r1; u += RAMP_KEY_STEP) insertKey(pos, { t: u, value: sampleKeys(wPos, warp.fwd(u)), ease: "linear" });
       insertKey(pose, { t: endT, value: prevPose === "walk" || prevPose === "run" || prevPose === "crouch" || prevPose === "climb" ? "stand" : prevPose, ease: "step" });
       break;
     }
@@ -824,9 +846,30 @@ function rigPart(sk: Skeleton, part: BodyPart, scale: number, position: Vec3, ro
 function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnType<typeof actorCore>, lookTarget: Vec3 | null): { pose: RigPose; skeleton: Skeleton } {
   const scale = core.actor.height / REST_HEIGHT;
   const withHands = (p: RigPose) => ({ hips: p.hips, rot: { ...RELAXED_HANDS, ...p.rot } });
-  let pose = withHands(basePose(core.pose, core.poseTime));
+  const gait = gaitAt(scene, id, t);
+  const cycle = (name: Pose, time: number) => ((name === "walk" || name === "run") && gait ? gaitPose(name === "run", gait.phase, gait.stride, gait.track, undefined, gait.root) : basePose(name, time));
+  let pose = withHands(cycle(core.pose, core.poseTime));
   if (core.blend < 1 && core.prevPose !== core.pose) {
-    pose = blendPoses(withHands(basePose(core.prevPose, core.prevPoseTime)), pose, smoothstep(core.blend));
+    const gaitLegs = (core.pose === "walk" || core.pose === "run") && gait ? pose : null;
+    pose = blendPoses(withHands(cycle(core.prevPose, core.prevPoseTime)), pose, smoothstep(core.blend));
+    // setting off: the gait already starts with tiny steps from a standstill, so it owns the legs and pelvis outright —
+    // blending them with the previous pose would drag the planted feet along
+    if (gaitLegs) {
+      pose.hips = gaitLegs.hips;
+      for (const b of LEG_BONES) pose.rot[b] = gaitLegs.rot[b];
+    }
+  }
+  // just stopped: the last step lands before the legs go back to the standing pose; turning on the spot steps round
+  if (gait && gait.settle > 0 && core.pose !== "walk" && core.pose !== "run") {
+    let legs = gait.turn ? turnStepPose(gait.phase, gait.yaw, gait.turnTrack, gait.turnFrom) : gaitPose(gait.run, gait.phase, 0, gait.track, undefined, gait.root);
+    // (the foot that was in the air when the turn took over eases from its walk path onto the turn's)
+    if (gait.turn && gait.handoff > 0) {
+      const walk = gaitPose(gait.run, gait.phase, 0, gait.track, undefined, gait.root);
+      legs = blendPoses(legs, walk, smoothstep(gait.handoff));
+    }
+    const w = smoothstep(gait.settle);
+    pose = { hips: lerp3(pose.hips, legs.hips, w), rot: { ...pose.rot } };
+    for (const b of LEG_BONES) pose.rot[b] = lerp3(pose.rot[b] ?? [0, 0, 0], legs.rot[b]!, w);
   }
   if (lookTarget) {
     const local = toLocal(lookTarget, core.position, core.rotation);
@@ -857,6 +900,323 @@ function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnTyp
   }
   pose = applyBoneKeys(scene, id, t, pose);
   return { pose, skeleton: solveRig(pose, scale) };
+}
+
+// ---- path corners --------------------------------------------------------------------------------------
+
+/** seconds the body spends turning through a path corner on each side of it */
+const CORNER_TIME = 0.4;
+
+/**
+ * Rounds the corners of a walked polyline (constant-pace position keys): each bend becomes a short quadratic curve
+ * starting CORNER_TIME before the corner and ending CORNER_TIME after it, so the body's velocity turns smoothly instead of
+ * snapping to the new direction in one frame. Pauses (repeated positions) are left alone.
+ */
+function roundCorners(keys: CKey[]): CKey[] {
+  if (keys.length < 3) return keys;
+  const out: CKey[] = [keys[0]!];
+  for (let i = 1; i < keys.length - 1; i++) {
+    const a = keys[i - 1]!;
+    const c = keys[i]!;
+    const b = keys[i + 1]!;
+    const pa = a.value as Vec3;
+    const pc = c.value as Vec3;
+    const pb = b.value as Vec3;
+    const d1: Vec3 = [pc[0] - pa[0], 0, pc[2] - pa[2]];
+    const d2: Vec3 = [pb[0] - pc[0], 0, pb[2] - pc[2]];
+    const l1 = Math.hypot(d1[0], d1[2]);
+    const l2 = Math.hypot(d2[0], d2[2]);
+    const bend = l1 > 1e-6 && l2 > 1e-6 ? Math.acos(Math.max(-1, Math.min(1, (d1[0] * d2[0] + d1[2] * d2[2]) / (l1 * l2)))) : 0;
+    if (bend < 0.2) {
+      out.push(c);
+      continue;
+    }
+    const tau = Math.min(CORNER_TIME, (c.t - a.t) / 2, (b.t - c.t) / 2);
+    const p0 = sampleKeys(keys, c.t - tau) as Vec3;
+    const p2 = sampleKeys(keys, c.t + tau) as Vec3;
+    const steps = Math.max(6, Math.ceil(2 * tau * 60)); // dense: linear between keys must not reintroduce velocity steps
+    for (let k = 0; k <= steps; k++) {
+      const u = k / steps;
+      const w0 = (1 - u) * (1 - u);
+      const w1 = 2 * u * (1 - u);
+      const w2 = u * u;
+      out.push({ t: c.t - tau + 2 * tau * u, value: [w0 * p0[0] + w1 * pc[0] + w2 * p2[0], w0 * p0[1] + w1 * pc[1] + w2 * p2[1], w0 * p0[2] + w1 * pc[2] + w2 * p2[2]], ease: "linear" });
+    }
+  }
+  out.push(keys[keys.length - 1]!);
+  return out;
+}
+
+// ---- walk pacing --------------------------------------------------------------------------------------
+
+/** seconds to reach full pace from a standstill (and to stop) */
+const WALK_RAMP = 0.5;
+const RUN_RAMP = 0.7;
+const RAMP_KEY_STEP = 1 / 30;
+
+/**
+ * Time warp for a walk from t0 to t1: trapezoidal speed (accelerate over `ramp` s, cruise, decelerate), same arrival.
+ * `fwd(t)` = the constant-pace time whose position the body has reached at real time t; `inv` is its inverse (where a
+ * constant-pace key lands in real time). `ramps` = the real-time spans where speed changes.
+ */
+function paceRamp(t0: number, t1: number, ramp: number, easeIn: boolean, easeOut: boolean) {
+  const D = t1 - t0;
+  const e = D > 0 ? Math.min(ramp, D / 4) / D : 0;
+  const ein = easeIn ? e : 0;
+  const eout = easeOut ? e : 0;
+  if (D <= 0 || (ein === 0 && eout === 0)) return { fwd: (t: number) => t, inv: (t: number) => t, ramps: [] as Array<[number, number]> };
+  // speed: rises linearly over [0, ein], flat, falls over [1 - eout, 1]; area 1
+  const vmax = 1 / (1 - ein / 2 - eout / 2);
+  const P = (x: number) => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    if (ein > 0 && x < ein) return (vmax * x * x) / (2 * ein);
+    if (eout > 0 && x > 1 - eout) return 1 - (vmax * (1 - x) ** 2) / (2 * eout);
+    return vmax * (x - ein / 2);
+  };
+  const Pinv = (y: number) => {
+    if (y <= 0) return 0;
+    if (y >= 1) return 1;
+    if (ein > 0 && y < (vmax * ein) / 2) return Math.sqrt((2 * ein * y) / vmax);
+    if (eout > 0 && y > 1 - (vmax * eout) / 2) return 1 - Math.sqrt((2 * eout * (1 - y)) / vmax);
+    return y / vmax + ein / 2;
+  };
+  const ramps: Array<[number, number]> = [];
+  if (ein > 0) ramps.push([t0, t0 + ein * D]);
+  if (eout > 0) ramps.push([t1 - eout * D, t1]);
+  return { fwd: (t: number) => t0 + D * P((t - t0) / D), inv: (t: number) => t0 + D * Pinv((t - t0) / D), ramps };
+}
+
+const LEG_BONES = ["leftUpperLeg", "leftLowerLeg", "leftFoot", "leftToes", "rightUpperLeg", "rightLowerLeg", "rightFoot", "rightToes"] as const;
+
+// ---- gait phase ----------------------------------------------------------------------------------------
+
+const GAIT_RATE = 60;
+/** turning on the spot counts as this much travel per radian (rest metres), so a turn takes steps */
+const TURN_TRAVEL = 0.12;
+/** seconds to cross-fade from a walk's last step into turning on the spot */
+const HANDOFF_TIME = 0.2;
+/** cycles (two steps) per second at most when turning on the spot */
+const MAX_STEP_RATE = 2.5;
+/** heading changes slower than this (deg/s) are a drift, not a turn that needs steps */
+const TURN_MIN_RATE = 25;
+/** seconds after a walk ends for the trailing foot to step in beside the other */
+const SETTLE_TIME = 0.7;
+interface GaitTable {
+  phase: Float64Array;
+  stride: Float64Array;
+  odo: Float64Array;
+  /** 1 while the feet settle after a walk (the gait still owns the legs), 0 otherwise */
+  settle: Float32Array;
+  run: Uint8Array;
+  /** 1 where the steps belong to turning on the spot (not a walk) */
+  turn: Uint8Array;
+  /** body yaw (degrees, unwrapped) per sample */
+  yaw: Float64Array;
+  /** 1 → 0 over the first moments of a turn that interrupts a walk's settling step (cross-fade between the two) */
+  handoff: Float32Array;
+  /** sample index where the current turn began (-1 outside turns) */
+  turnStart: Int32Array;
+  /** body position per sample, rest metres (world / scale) */
+  rx: Float64Array;
+  rz: Float64Array;
+}
+const gaitCache = new WeakMap<CompiledScene, Map<string, GaitTable | null>>();
+
+/**
+ * Where each walking actor is in its step cycle: cycles of distance travelled (plus a little for turning), sampled over the
+ * whole scene. Driving the legs by distance instead of time is what keeps a planted foot from sliding — slower travel
+ * means slower steps. A walk / run that goes nowhere (walking on the spot) keeps the old time-based cadence.
+ */
+function gaitTable(scene: CompiledScene, id: string) {
+  let perScene = gaitCache.get(scene);
+  if (!perScene) gaitCache.set(scene, (perScene = new Map()));
+  if (perScene.has(id)) return perScene.get(id)!;
+  const actor = scene.spec.actors.find((a) => a.id === id)!;
+  const scale = actor.height / REST_HEIGHT;
+  const pos = scene.tracks.get(trackKey(id, "position"))!;
+  const rot = scene.tracks.get(trackKey(id, "rotation"))!;
+  const poseKeys = scene.tracks.get(trackKey(id, "pose"))!;
+  const n = Math.ceil(scene.spec.settings.duration * GAIT_RATE) + 2;
+  const dt = 1 / GAIT_RATE;
+  const phase = new Float64Array(n);
+  const stride = new Float64Array(n);
+  const odo = new Float64Array(n);
+  const settle = new Float32Array(n);
+  const runs = new Uint8Array(n);
+  const turns = new Uint8Array(n);
+  const yaw = new Float64Array(n);
+  const handoff = new Float32Array(n);
+  const turnStart = new Int32Array(n).fill(-1);
+  const rx = new Float64Array(n);
+  const rz = new Float64Array(n);
+  for (let k = 0; k < n; k++) {
+    yaw[k] = (sampleKeys(rot, k * dt) as Vec3)[1];
+    const at = sampleKeys(pos, k * dt) as Vec3;
+    rx[k] = at[0] / scale;
+    rz[k] = at[2] / scale;
+  }
+  // turning on the spot: standing (or talking / pointing) while the heading changes faster than a slow drift
+  const STEPPABLE = new Set<Pose>(["stand", "idle", "talk", "point"]);
+  const turning = (k: number) => k < n - 1 && STEPPABLE.has(sampleKeys(poseKeys, k * dt) as Pose) && Math.abs(yaw[k + 1]! - yaw[k]!) > TURN_MIN_RATE * dt;
+  let used = false;
+  const gaitOf = (i: number) => {
+    const p = sampleKeys(poseKeys, i * dt) as Pose;
+    return p === "walk" || p === "run" ? p : null;
+  };
+  let i = 0;
+  stride[0] = strideFor(false, 0);
+  while (i < n - 1) {
+    const g = gaitOf(i);
+    if (!g && turning(i)) {
+      // a turn on the spot: steps paced by the angle turned, then a settling step like after a walk
+      used = true;
+      if (i > 0 && settle[i - 1]! > 0 && !turns[i - 1]) {
+        const h = Math.round(HANDOFF_TIME * GAIT_RATE);
+        for (let k = 0; k < h && i + k < n; k++) handoff[i + k] = 1 - (k + 1) / (h + 1);
+      }
+      const began = i;
+      let j = i;
+      while (j < n - 1 && !gaitOf(j) && (turning(j) || turning(j + 1) || turning(j + 2))) j++;
+      for (let k = i; k < j; k++) {
+        // nobody steps faster than ~5 steps a second: a quicker spin twists over the planted foot instead
+        phase[k + 1] = phase[k]! + Math.min(MAX_STEP_RATE * dt, Math.abs(yaw[k + 1]! - yaw[k]!) / (2 * TURN_STEP_ANGLE));
+        stride[k + 1] = 0;
+        odo[k + 1] = odo[k]!;
+        turns[k] = 1;
+        settle[k] = 1;
+        turnStart[k] = began;
+      }
+      i = j;
+      // both feet step once more after the turn, so neither is left twisted on the floor
+      const target = Math.ceil(phase[i]! * 2 + 1e-6) / 2 + 0.56;
+      const m = Math.round(SETTLE_TIME * GAIT_RATE);
+      const p0 = phase[i]!;
+      let k = 0;
+      for (; k < m && i + k < n - 1 && !gaitOf(i + k + 1) && !turning(i + k + 1); k++) {
+        phase[i + k + 1] = p0 + (target - p0) * smoothstep((k + 1) / m);
+        stride[i + k + 1] = 0;
+        odo[i + k + 1] = odo[i + k]!;
+        turns[i + k + 1] = 1;
+        settle[i + k + 1] = Math.min(1, 3 * (1 - (k + 1) / m));
+        turnStart[i + k + 1] = began;
+      }
+      turns[i] = 1;
+      settle[i] = 1;
+      turnStart[i] = began;
+      i += k;
+      continue;
+    }
+    if (!g) {
+      phase[i + 1] = phase[i]!;
+      stride[i + 1] = stride[i]!;
+      odo[i + 1] = odo[i]!;
+      i++;
+      continue;
+    }
+    used = true;
+    // one continuous walk / run: measure it first, so walking on the spot can fall back to the timed cadence
+    let j = i;
+    while (j < n - 1 && gaitOf(j) === g) j++;
+    const travel: number[] = [];
+    let total = 0;
+    for (let k = i; k < j; k++) {
+      const a = sampleKeys(pos, k * dt) as Vec3;
+      const b = sampleKeys(pos, (k + 1) * dt) as Vec3;
+      const turn = Math.abs(((sampleKeys(rot, (k + 1) * dt) as Vec3)[1] - (sampleKeys(rot, k * dt) as Vec3)[1]) * DEG);
+      const d = Math.hypot(b[0] - a[0], b[2] - a[2]) / scale + turn * TURN_TRAVEL;
+      travel.push(d);
+      total += d;
+    }
+    const run = g === "run";
+    for (let k = i; k <= j; k++) runs[k] = run ? 1 : 0;
+    for (let k = i; k < j; k++) {
+      const d = travel[k - i]!;
+      // walking on the spot: steps at the old timed cadence that land where they lift
+      const L = total > 0.05 ? strideFor(run, d / dt) : 0;
+      stride[k + 1] = L;
+      odo[k + 1] = odo[k]! + (total > 0.05 ? d : dt * (run ? 1.4 : 0.9) * L);
+      phase[k + 1] = phase[k]! + (total > 0.05 ? (L > 1e-3 ? Math.min(d / L, 0.05) : 0) : dt * (run ? 1.4 : 0.9));
+    }
+    i = j;
+    // the walk is over: keep stepping on the spot (no travel, zero stride) up to the next touchdown, so the foot that was
+    // still behind or in the air comes down beside the other instead of being dragged into the standing pose
+    if (i < n - 1 && !gaitOf(i)) {
+      // two more touchdowns: the trailing foot comes in, then the other squares up beside it
+      const target = Math.ceil(phase[i]! * 2 + 1e-6) / 2 + 0.56;
+      const m = Math.round(SETTLE_TIME * GAIT_RATE);
+      const p0 = phase[i]!;
+      let k = 0;
+      // (a turn on the spot that starts right away takes over the stepping)
+      for (; k < m && i + k < n - 1 && !gaitOf(i + k + 1) && !turning(i + k); k++) {
+        phase[i + k + 1] = p0 + (target - p0) * smoothstep((k + 1) / m);
+        stride[i + k + 1] = 0;
+        odo[i + k + 1] = odo[i + k]!;
+        runs[i + k + 1] = run ? 1 : 0;
+        // fully the gait at first, handing the legs over to the standing pose over the last third
+        settle[i + k + 1] = Math.min(1, 3 * (1 - (k + 1) / m));
+      }
+      settle[i] = 1;
+      i += k;
+    }
+  }
+  const table: GaitTable | null = used ? { phase, stride, odo, settle, run: runs, turn: turns, yaw, handoff, turnStart, rx, rz } : null;
+  perScene.set(id, table);
+  return table;
+}
+
+function gaitAt(scene: CompiledScene, id: string, t: number): { phase: number; stride: number; track: GaitTrack; settle: number; run: boolean; turn: boolean; handoff: number; yaw: number; turnTrack: TurnTrack; turnFrom?: { phase: number; feet: Record<"left" | "right", Vec3> }; root: Vec3 } | null {
+  const table = gaitTable(scene, id);
+  if (!table) return null;
+  const { phase, stride, odo } = table;
+  const last = phase.length - 1;
+  const lerpAt = (arr: Float64Array, x: number) => {
+    const i = Math.max(0, Math.min(last - 1, Math.floor(x)));
+    const k = Math.max(0, Math.min(1, x - i));
+    return arr[i]! + (arr[i + 1]! - arr[i]!) * k;
+  };
+  const x = Math.max(0, Math.min(last, t * GAIT_RATE));
+  const now = lerpAt(phase, x);
+  // phase → sample index (phase never decreases). Where the phase stood still (standing before the walk), the LAST such
+  // sample: a foot that was already down when the walk began counts from the moment the body started moving
+  const indexOf = (ph: number) => {
+    if (Math.abs(ph - now) < 1e-9) return x;
+    // the past is searched up to now; a phase still ahead (the next touchdown) in the rest of the table
+    const top = ph < now ? Math.min(last, Math.ceil(x)) : last;
+    if (phase[0]! > ph + 1e-9) return 0;
+    let lo = 0;
+    let hi = top;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (phase[mid]! <= ph + 1e-9) lo = mid;
+      else hi = mid;
+    }
+    const span = phase[hi]! - phase[lo]!;
+    return lo + (span > 1e-9 ? Math.max(0, Math.min(1, (ph - phase[lo]!) / span)) : 0);
+  };
+  const rootAt = (i: number): Vec3 => [lerpAt(table.rx, i), lerpAt(table.rz, i), lerpAt(table.yaw, i)];
+  const track: GaitTrack = { odo: (ph) => lerpAt(odo, indexOf(ph)), stride: (ph) => lerpAt(stride, indexOf(ph)), root: (ph) => rootAt(indexOf(ph)) };
+  // where the feet were when the current turn began (walk feet, if it followed a walk) — the turn steps start from there
+  const ts = table.turnStart[Math.round(x)]!;
+  let turnFrom: { phase: number; feet: Record<"left" | "right", Vec3> } | undefined;
+  if (ts > 0 && table.handoff[ts]! > 0) {
+    const feet = {} as Record<"left" | "right", Vec3>;
+    gaitPose(table.run[ts - 1] === 1, phase[ts]!, 0, track, feet, rootAt(ts));
+    turnFrom = { phase: phase[ts]!, feet };
+  }
+  return {
+    phase: now,
+    root: rootAt(x),
+    turnFrom,
+    settle: table.settle[Math.round(x)]!,
+    run: table.run[Math.round(x)] === 1,
+    turn: table.turn[Math.round(x)] === 1,
+    handoff: table.handoff[Math.round(x)]!,
+    yaw: lerpAt(table.yaw, x),
+    turnTrack: { yaw: (ph) => lerpAt(table.yaw, indexOf(ph)) },
+    stride: lerpAt(stride, x),
+    track,
+  };
 }
 
 const BONE_FADE = 0.25;

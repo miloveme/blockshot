@@ -383,8 +383,11 @@ describe("moving people avoid each other (prioritized space-time planning)", () 
     const spec = world([], [walk("a", [6, 0, 4]), walk("b", [-6, 0, -4], 0)]);
     const c = compile(spec);
     expect([...c.routes.values()][0]).toEqual([[-6, 0, 0], [6, 0, 4]]);
+    // exactly where it would be if b were not there at all
+    const alone = evaluate(compile(world([], [walk("a", [6, 0, 4])])), 3).actors.a!.position;
     const t1 = evaluate(c, 3).actors.a!.position;
-    expect(t1[0]).toBeCloseTo(-6 + (12 / Math.hypot(12, 4)) * 1.3 * 3, 3);
+    expect(t1[0]).toBeCloseTo(alone[0], 4);
+    expect(t1[2]).toBeCloseTo(alone[2], 4);
   });
 
   it("is deterministic", () => {

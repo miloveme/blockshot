@@ -87,10 +87,18 @@ blockshot/
   - 시선(`lookAt`)·카메라 피사체 고정(`cameraLookAt`)은 움직이는 대상을 따라가야 하므로 키가 아닌 **구간(segment)** 으로 저장하고 평가 시 해석
 - `evaluate(compiled, t)`는 순수 함수. 결과 `SceneState`는 인물(위치·회전·포즈·poseTime·시선점), 카메라(위치·주시점·FOV), 활성 샷/카메라를 담는다.
 
+### 3.1.1 발 고정 보행·진단 (`poses.ts` `gaitPose`/`turnStepPose`, `evaluate.ts` 보행 표, `inspect.ts`, `diagnose.ts`)
+
+- **보행 위상은 시간이 아니라 이동 거리**로 진행한다. 인물마다 장면 전체를 60Hz로 한 번 훑어 위상·보폭·주행거리·루트 위치/방향 표(`gaitTable`, CompiledScene별 WeakMap 캐시)를 만든다. 느릴수록 보폭이 √속도로 줄어 출발·정지가 잔걸음이 된다.
+- 디딘 발은 **월드에 고정**: 착지 위상의 루트 위치·방향으로 착지점을 정하고, 지금 몸 기준으로 되돌려 다리를 IK로 푼다(직진은 시상면 2본 IK, 그 외 3D 2본 IK — 무릎은 X축 힌지만). 스윙 발은 이륙점→다음 착지점(표에 미래 루트가 있으므로 미리 앎)을 월드에서 보간해 속도 0으로 떠나고 닿는다. 골반 높이는 지지 다리가 닿는 만큼(착지 직전 발도 미리 반영해 끊김 없음).
+- walkTo 타이밍: 경로 전체 처음·끝 가감속(사다리꼴 속도, 도착 시간 유지, 연결된 walkTo 사이는 생략), 모서리 둥글게(±0.4초 2차 곡선, 몸 회전도 모서리 중심으로). 멈춘 뒤 0.7초 동안 두 걸음(정착)으로 발을 모은다.
+- 제자리 회전(stand/idle/talk/point 중 방향이 25°/s 넘게 바뀌는 구간): 60°마다 한 걸음, 디딘 발은 월드 고정, 걷기에서 바로 이어지면 실제 발 위치에서 시작.
+- `inspectRig`(리그 치수·역할·접촉 패치·관절 범위·규약)와 `analyzeMotion`(발 미끄러짐·관통·뜸·루트 급정지/급가속·급회전·관절 범위·다인 동시 제스처, 원인·위치·권장 수정 + `notEvaluated`)은 렌더러와 같은 evaluate를 쓴다. MCP `analyze_motion`·`inspect_rig`·`evaluate {contacts}`로 노출.
+
 ### 3.2 렌더러 (apps/web/viewport)
 
 - React는 **구조**(어떤 객체가 있는지)만 렌더, 매 프레임 변환은 `useFrame`에서 `useStudio.getState().sceneState`를 읽어 직접 적용 → 60fps에서 React 리렌더 없음
-- 마네킹 포즈는 `poseTime` 기반 절차적 애니메이션 (walk/run 사이클 등). 관절은 이름으로 조회(`pelvis`, `shoulderL` …) → M4 pose 패스에서 OpenPose 키포인트로 매핑
+- 마네킹 포즈는 core가 계산한 `ActorState.rig`(본 회전)를 그대로 적용한다 (walk/run은 발 고정 보행, 3.1.1). 관절은 이름으로 조회(`pelvis`, `shoulderL` …) → M4 pose 패스에서 OpenPose 키포인트로 매핑
 - 뷰포트 컨테이너는 렌더 해상도 화면비로 고정 → 미리보기 프레이밍 = 출력 프레이밍
 - 방 벽은 안쪽을 향한 단면 평면 → 밖에서 보면 투시(돌하우스), 안의 카메라에는 벽
 

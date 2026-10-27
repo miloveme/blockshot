@@ -40,6 +40,21 @@ describe("shared MCP tools on the node platform", () => {
     expect(ev[1].actors.a.bones.head[1]).toBeCloseTo(40, 0);
   });
 
+  it("analyze_motion finds a gliding body; inspect_rig and evaluate contacts report the rig", async () => {
+    const glide = { specVersion: "0.1", settings: { duration: 3 }, actors: [{ id: "a" }], tracks: [{ target: "a", property: "position", keys: [{ t: 0.5, value: [0, 0, 0] }, { t: 1.5, value: [0, 0, 2] }] }] };
+    const text: string = (await call("analyze_motion", { spec: glide })).content[0].text;
+    const report = JSON.parse(text.slice(text.indexOf("{")));
+    expect(report.diagnostics.some((d: { kind: string; actor: string }) => d.kind === "foot_slide" && d.actor === "a")).toBe(true);
+    const clean = JSON.parse(((await call("analyze_motion", { spec: { ...glide, tracks: [] } })).content[0].text as string).split("\n\n")[1]!);
+    expect(clean.diagnostics).toEqual([]);
+    const rig = JSON.parse((await call("inspect_rig", { spec: { ...glide, actors: [{ id: "a", height: 1.9 }] }, actor: "a" })).content[0].text);
+    expect(rig.segments.thigh).toBeCloseTo(0.44 * (1.9 / 1.72), 3);
+    expect((await call("inspect_rig", { spec: glide, actor: "zz" })).isError).toBe(true);
+    const ev = JSON.parse((await call("evaluate", { spec: glide, times: [0], contacts: true })).content[0].text);
+    expect(Math.abs(ev[0].actors.a.contacts.heel_l[1])).toBeLessThan(0.015);
+    expect(ev[0].actors.a.floor).toBe(0);
+  });
+
   it("the hosted server explains how to install the local one instead of rendering", async () => {
     const r = (await handleRpc({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "render_video", arguments: {} } }, platform, [...BASE_TOOLS, ...REMOTE_EXTRA_TOOLS])) as { result: { isError: boolean; content: { text: string }[] } };
     expect(r.result.isError).toBe(true);

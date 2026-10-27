@@ -1,7 +1,7 @@
 import { deflateRawSync, inflateRawSync } from "node:zlib";
 import {
-  applyAddon, addonIssues, buildAnimatePrompt, buildPrompt, compile, describeScene, evaluate, lintLayout, parseAddon, renderPreviewSvg, validateSpec,
-  type BlockshotSpec, type Issue,
+  analyzeMotion, applyAddon, addonIssues, buildAnimatePrompt, buildPrompt, compile, contactPoints, describeScene, evaluate, groundUnder, inspectRig, lintLayout, parseAddon, renderPreviewSvg, validateSpec,
+  type BlockshotSpec, type DiagnosticKind, type Issue,
 } from "@blockshot/core";
 import { SCENE_SPEC_MD, SCRIPT_API_MD } from "./docs.generated";
 
@@ -101,12 +101,14 @@ Workflow
 1. get_guide topic "script" (API) — and "spec" when you need raw JSON.
 2. run_script { source } → validated scene (spec) + summary + studio link. Iterate: pass the previous spec back as "base" to ADD animation to an existing scene (the script then uses scene.use("<id>") instead of creating things).
 3. preview { spec, t, view: "camera"|"top" } → a PNG of that moment (stick-figure skeletons + prop boxes through the real camera; top view shows facing and camera frustums). Look at it before you answer; check several times.
-4. evaluate { spec, times } → exact numbers (positions, poses, camera state) when you need to verify distances, facing, timing.
+4. evaluate { spec, times } → exact numbers (positions, poses, camera state) when you need to verify distances, facing, timing; contacts: true adds world positions of heels, balls, toes, palms and seat.
+   analyze_motion { spec } → what looks wrong and where: feet sliding / sinking / floating, body stutters and jerks, snapping turns, joints past a human range, actors gesturing in the same instant. Run it after every change to motion and fix what it reports (each finding has a suggestion). inspect_rig { spec, actor } → bone lengths at that actor's height, bone roles and contact patches — read it instead of guessing rig numbers when you write bone keys.
 5. open_link { spec } → the URL to give the user.
    The user placed things by hand in the studio and wants them animated? They copy a link with the studio's 링크 복사 button; load_link { url } reads it (actors, props, cameras, ids), then add animation with run_script { base } / apply_addon without moving anything.
 6. MP4 / real 3D renders: not on this hosted server. Call local_setup: it has the exact commands to install the local server (no token needed), register it in Claude Code / Codex / other clients, switch an existing hosted registration to local, and verify it. Do it yourself if you can run shell commands (ask the user first); otherwise give the user the link — the studio exports the MP4 in their browser.
 
 Conventions: Y-up, metres, seconds, degrees. rotation.y = 0 faces +Z. An actor's local +X is the actor's LEFT. Time starts at 0.
+Walking is foot-locked: walkTo/runTo plan the steps from the distance travelled, plant each foot in the world, ease in and out of the whole route and step round on turnTo — do not hand-key leg bones for ordinary walking.
 Acting: prefer actions (walkTo, sitDown, gesture, hold, drive…), use scene.sequence/animate/boneFn and interpolate/spring/noise for procedural motion, and bone keyframes ("bone:<name>" tracks) for specific postures — all of it stays editable by the user.
 `;
 
@@ -201,7 +203,16 @@ export const BASE_TOOLS: Tool[] = [
   {
     name: "evaluate",
     description: "Exact scene state at the given times (seconds): actor position / facing / pose / selected bone angles, prop positions, camera states. Use it to verify distances, timing and facing instead of guessing from pictures.",
-    inputSchema: { type: "object", properties: { spec: SPEC_PROP, times: { type: "array", items: { type: "number" }, maxItems: 40 }, bones: { type: "array", items: { type: "string" }, description: "bone names to include (degrees), e.g. rightUpperArm" } }, required: ["spec", "times"] },
+    inputSchema: {
+      type: "object",
+      properties: {
+        spec: SPEC_PROP,
+        times: { type: "array", items: { type: "number" }, maxItems: 40 },
+        bones: { type: "array", items: { type: "string" }, description: "bone names to include (degrees), e.g. rightUpperArm" },
+        contacts: { type: "boolean", description: "also return world positions of each actor's contact patches (heel_l/r, ball_l/r, toe_l/r, palm_l/r, seat) and the floor height under the feet" },
+      },
+      required: ["spec", "times"],
+    },
     async run(a) {
       const p = parseSpecArg(a.spec);
       if ("error" in p) return fail(p.error);
@@ -212,13 +223,72 @@ export const BASE_TOOLS: Tool[] = [
         const s = evaluate(compiled, Number(t));
         return {
           t: s.t,
-          actors: Object.fromEntries(Object.values(s.actors).map((x) => [x.id, { position: r2(x.position), yaw: Math.round(x.rotation[1]), pose: x.pose, ...(bones.length ? { bones: Object.fromEntries(bones.map((b) => [b, r2((x.rig.rot[b as keyof typeof x.rig.rot] ?? [0, 0, 0]).map((n) => (n * 180) / Math.PI))])) } : {}) }])),
+          actors: Object.fromEntries(
+            Object.values(s.actors).map((x) => {
+              const cp = a.contacts === true ? contactPoints(x) : null;
+              const r3 = (v: readonly number[]) => v.map((n) => Math.round(n * 1000) / 1000);
+              return [
+                x.id,
+                {
+                  position: r2(x.position),
+                  yaw: Math.round(x.rotation[1]),
+                  pose: x.pose,
+                  ...(bones.length ? { bones: Object.fromEntries(bones.map((b) => [b, r2((x.rig.rot[b as keyof typeof x.rig.rot] ?? [0, 0, 0]).map((n) => (n * 180) / Math.PI))])) } : {}),
+                  ...(cp ? { contacts: Object.fromEntries(Object.entries(cp).map(([k, v]) => [k, r3(v)])), floor: Math.round(groundUnder(p.spec, cp.heel_l!) * 1000) / 1000 } : {}),
+                },
+              ];
+            }),
+          ),
           props: Object.fromEntries(Object.values(s.props).map((x) => [x.id, { position: r2(x.position), rotation: r2(x.rotation ?? [0, 0, 0]) }])),
           cameras: Object.fromEntries(Object.values(s.cameras).map((c) => [c.id, { position: r2(c.position), target: c.target ? r2(c.target) : null, focalLength: Math.round(c.focalLength) }])),
           activeCamera: s.activeCameraId,
         };
       });
       return ok(text(json(frames)));
+    },
+  },
+  {
+    name: "analyze_motion",
+    description:
+      "Checks motion with the same evaluator the renderer uses and reports what looks wrong, where and why: foot_slide (a planted foot moving), foot_penetration / floating (soles in or above the floor), root_stutter (the body nearly stops mid-walk), root_jerk (abrupt speed/direction change), turn_snap, joint_range (knees/elbows/head/spine past a human range), simultaneous_gestures (different actors starting big arm moves in the same instant — a review note, not an error). Each finding: actor, part, time range, measured value vs limit, a suggested fix. Also lists what it could not check. Run it after writing or changing motion.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        spec: SPEC_PROP,
+        from: { type: "number" },
+        to: { type: "number" },
+        actors: { type: "array", items: { type: "string" } },
+        checks: { type: "array", items: { type: "string", enum: ["foot_slide", "foot_penetration", "floating", "root_stutter", "root_jerk", "turn_snap", "joint_range", "simultaneous_gestures"] } },
+        tolerances: { type: "object", description: "override limits: contact, slideSpeed, slideDistance, penetration, float (m / m/s), accel (m/s²), yawRate (deg/s), simultaneity (s)" },
+      },
+      required: ["spec"],
+    },
+    async run(a) {
+      const p = parseSpecArg(a.spec);
+      if ("error" in p) return fail(p.error);
+      const report = analyzeMotion(p.spec, {
+        from: typeof a.from === "number" ? a.from : undefined,
+        to: typeof a.to === "number" ? a.to : undefined,
+        actors: Array.isArray(a.actors) ? a.actors.map(String) : undefined,
+        checks: Array.isArray(a.checks) ? (a.checks.map(String) as DiagnosticKind[]) : undefined,
+        tolerances: a.tolerances && typeof a.tolerances === "object" ? (a.tolerances as Record<string, number>) : undefined,
+      });
+      const errors = report.diagnostics.filter((d) => d.severity === "error").length;
+      const head = report.diagnostics.length ? `${report.diagnostics.length} findings (${errors} errors).` : "No problems found in the checked range.";
+      return ok(text(`${head}\n\n${json(report)}`));
+    },
+  },
+  {
+    name: "inspect_rig",
+    description:
+      "The rig an actor is posed with, at that actor's height: bone hierarchy with semantic roles (left_foot, pelvis …), rest offsets and segment lengths (thigh, shin, arm), contact patches (heel, ball, toe tip, palm, seat — bone-local points on the mannequin's surface), approximate joint ranges and the axis / unit conventions. Use it instead of guessing bone names or the 1.72 m rest lengths when writing bone keys or solving a limb by hand.",
+    inputSchema: { type: "object", properties: { spec: SPEC_PROP, actor: { type: "string" } }, required: ["spec", "actor"] },
+    async run(a) {
+      const p = parseSpecArg(a.spec);
+      if ("error" in p) return fail(p.error);
+      const report = inspectRig(p.spec, String(a.actor ?? ""));
+      if (!report) return fail(`No actor "${String(a.actor)}". Actors: ${p.spec.actors.map((x) => x.id).join(", ") || "(none)"}`);
+      return ok(text(json(report)));
     },
   },
   {

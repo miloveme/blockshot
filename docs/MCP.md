@@ -19,12 +19,14 @@ Vercel 프로젝트 환경변수 `mcp_token`(또는 `MCP_TOKEN`)을 설정하면
 | `validate_spec` | `spec` | 스키마·참조 검증 + 레이아웃 lint |
 | `apply_addon` | `spec`, `addon` | 액션/카메라/샷/뼈 키 트랙 병합 결과 |
 | `animate_prompt` | `spec`, `request`, `mode?` | 앱 안 AI가 쓰는 애니메이션 프롬프트(규칙+장면 묘사) |
-| `evaluate` | `spec`, `times[]`, `bones?` | 해당 시각의 정확한 위치·방향·포즈·뼈 각도(도)·카메라 |
+| `evaluate` | `spec`, `times[]`, `bones?`, `contacts?` | 해당 시각의 정확한 위치·방향·포즈·뼈 각도(도)·카메라. `contacts: true`면 발뒤꿈치·볼·발끝·손바닥·엉덩이 접촉점의 월드 위치와 발밑 바닥 높이 |
+| `analyze_motion` | `spec`, `from?`, `to?`, `actors?`, `checks?`, `tolerances?` | 동작 진단 — 발 미끄러짐·관통·뜸, 루트 급정지·급가속, 급회전, 관절 범위, 다인 동시 제스처(검토). 항목마다 인물·구간·측정값·기준·권장 수정, 검사하지 못한 항목(`notEvaluated`) |
+| `inspect_rig` | `spec`, `actor` | 그 인물 키에 맞춘 리그: 본 계층·역할(left_foot 등)·치수·접촉 패치·관절 범위·좌표/단위 규약 |
 | `preview` | `spec`, `t`, `view`: camera/top, `camera?`, `width?` | **PNG 이미지** — 카메라 시점(실제 리그 골격·소품 박스·바닥 격자) 또는 탑뷰(방향 화살표·카메라 시야) |
 | `load_link` | `url`(스튜디오 🔗 링크 복사로 만든 링크) | 링크 속 장면을 읽어 인물·소품·카메라·기존 동작 요약 + spec 반환 — **내가 배치한 장면에 애니메이션만 추가**할 때 시작점 |
 | `open_link` | `spec` | 스튜디오에서 이 장면을 여는 URL |
 
-권장 루프: `get_guide` → `run_script` → `preview`(여러 시각) / `evaluate`로 확인 → 고쳐서 `run_script`(base 넘겨 부분 수정) → `open_link`를 사용자에게 전달. 사용자는 링크에서 재생하고 키프레임·뼈를 직접 손본다.
+권장 루프: `get_guide` → `run_script` → `preview`(여러 시각) / `evaluate`로 확인 → `analyze_motion`으로 동작 진단 → 고쳐서 `run_script`(base 넘겨 부분 수정) → `open_link`를 사용자에게 전달. 사용자는 링크에서 재생하고 키프레임·뼈를 직접 손본다.
 
 ## 로컬에서 실행 (`blockshot-mcp`) — 서버 비용 0, MP4까지
 
@@ -56,7 +58,7 @@ claude mcp add blockshot-local -e BLOCKSHOT_URL=https://blockshot-eta.vercel.app
 - 요구사항: Node 22+, Chrome(Edge/Chromium) — 렌더 도구에만 필요, 환경변수 `BLOCKSHOT_URL`·`BLOCKSHOT_CHROME`
 - **로컬 stdio는 `MCP_TOKEN` 없이 동작**: 토큰은 원격 `/api/mcp`(POST)만 보호한다. 로컬 서버는 네트워크 엔드포인트가 없고 파일은 공개 정적 다운로드다(렌더 때만 Chrome이 스튜디오 페이지를 받아 온다)
 - 기존 원격 등록을 로컬로 **전환**하는 절차(원격 항목 찾기 → 제거(저장된 토큰도 함께 사라짐) → 로컬 등록, 같은 이름 재사용 가능)
-- **검증**: `printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n' | node ~/.blockshot/blockshot-mcp.mjs` → 도구 목록 한 줄. 새 세션에서 로컬 서버는 정확히 11개 도구(`get_guide, run_script, validate_spec, apply_addon, animate_prompt, evaluate, preview, load_link, open_link, render_video, render_still`; 개수와 목록은 `local_setup`이 코드에서 직접 계산)이고 `local_setup`이 없으며, 원격은 12개(`local_setup` + 렌더 안내용 스텁 포함). 이어서 `run_script` → `render_still` PNG까지 확인
+- **검증**: `printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n' | node ~/.blockshot/blockshot-mcp.mjs` → 도구 목록 한 줄. 새 세션에서 로컬 서버는 정확히 13개 도구(`get_guide, run_script, validate_spec, apply_addon, animate_prompt, evaluate, analyze_motion, inspect_rig, preview, load_link, open_link, render_video, render_still`; 개수와 목록은 `local_setup`이 코드에서 직접 계산)이고 `local_setup`이 없으며, 원격은 14개(`local_setup` + 렌더 안내용 스텁 포함). 이어서 `run_script` → `render_still` PNG까지 확인
 
 **프롬프트로 맡기기**: `/guide`의 "AI에게 MCP 연결 맡기기"에 복사용 프롬프트가 있다(로컬 설치·원격 연결·원격→로컬 전환·Codex·연결 점검·첫 작업). 같은 안내 전체는 공개 문서 `/docs/mcp-setup.md`(`pnpm --filter @blockshot/mcp build`가 `localSetupText`로 생성)에도 있어 웹을 읽는 AI는 주소만 알려 줘도 된다.
 

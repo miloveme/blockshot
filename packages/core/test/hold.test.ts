@@ -112,7 +112,8 @@ describe("hold: using a prop (phone call)", () => {
     const c = compile(spec);
     for (const t of [4, 5, 6]) {
       const s = evaluate(c, t);
-      expect(dist(s.props.phone!.position, partPosition(s.actors.w!, "ear_r"))).toBeLessThan(0.12);
+      // the posed skeleton's ear (the walk lowers and bobs the pelvis, so the standing-layout ear would be off)
+      expect(dist(s.props.phone!.position, resolveTarget(c, "w.ear_r", t))).toBeLessThan(0.12);
     }
   });
 
