@@ -57,14 +57,19 @@
 - [x] 인물·소품 `aim`(타겟 포인트): 피사체 고정·손 뻗기 등에서 부위 없는 참조가 바라보는 점. 인물 기본 = 얼굴(머리 추종), 소품 기본 = 상자 중앙
 - [x] 뷰포트 분홍 점 표시 + 기즈모로 옮기기, 속성 패널(얼굴·가슴·허리 프리셋, 값 입력), 카메라 선택 시 현재 조준점(하늘색) 표시
 
-## M2.5 모션 품질 — 발 고정·진단 (제안서 [MOTION_PROPOSAL.md](MOTION_PROPOSAL.md))
+## M2.5 모션 품질 — 발 고정·진단 (요구사항 v2.0 [MOTION_PROPOSAL.md](MOTION_PROPOSAL.md))
 
 - [x] P0-A 리그·접촉 조회: `inspectRig`(키에 맞춘 치수·본 역할·접촉 패치 heel/ball/toe/palm/seat·관절 범위·규약), `contactPoints`, MCP `inspect_rig`, `evaluate { contacts: true }`
 - [x] P0-B 진단 `analyzeMotion`: foot_slide(구르는 발·피벗 구분)·foot_penetration·floating·root_stutter·root_jerk·turn_snap·joint_range(기하 각도)·simultaneous_gestures(검토), 원인·구간·측정값·기준·권장 수정, `notEvaluated`. MCP `analyze_motion`
 - [x] 보행 재작성: 거리 기반 위상, 디딘 발 월드 고정(가감속·곡선·모서리), 3D 다리 IK, 힐→볼 롤, 골반 높이 연속, 스윙 발 무속도 이착지 — 샘플 거실 최대 미끄러짐 0.96 m → 0.04 m
 - [x] walkTo 처음·끝 가감속(도착 시간 유지), 모서리 둥글게, 정지 후 정착 두 걸음, 제자리 회전 스텝(turnTo)
-- [ ] P0-B 실제 렌더 검토 `render_review`(오버레이·슬로모션·가림 검사)
+- [ ] P0-A 나머지: `get_capabilities`(지원 범위·리그·접촉 모드·결정론 범위), `inspect_surfaces`(허벅지·좌석·팔걸이 표면 ID)
+- [ ] P0-B 실제 렌더 검토 `render_review`(오버레이·슬로모션·가림/가시성 검사)
 - [ ] P0-C 접촉 제약 Spec(`contact`/`support`/`preserve`) + `solve_motion`(손–허벅지 등 몸 표면 접촉 유지, `infeasible` 원인 반환)
+- [ ] P0-D 움직임 생성 계약 MG-01~08: `generate_motion`(경계 상태·부분 구간), 골반·상체·팔·머리 선후관계/비대칭, 연속 특성(속도·보폭·발 방향·지지 비대칭) 조합, 생성 출처·seed 기록, 보정 훼손 보고
+- [ ] P0-E 연출 계획 DP-01~08: `plan_performance`·`inspect_plan`·`revise_plan`(미적용 패치 기본)·`compare_candidates`, 가정/지시 구분, 배우별 의도·주의, 카메라 의도를 사건에 연결
+- [ ] P0-F Blender 기준선·측정: 평가 manifest, 사용량(토큰·시간·계산) 로그, 소파 장면 첫 비교
+- [ ] M1 전체 흐름 시제품: 소파 장면 계획→생성→접촉 보정→반응→카메라→MP4→'걷기만 수정'
 - [ ] P1-B 사건 기반 시간 그래프(`stand.end` → `walk.final_settle` …)·`retime`
 - [ ] P1-C 부분 재생성·잠금·리비전 패치
 - [ ] P1-D 배우별 지속 상태·주의 대상·인과 반응 계획
