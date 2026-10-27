@@ -46,7 +46,7 @@ function EditTools() {
         </button>
       ) : null}
       {sep}
-      <CommandButton id="cut.delete" icon={Trash2} size="sm" tipSide="top" label="삭제 — 선택한 클립, 없으면 In/Out 구간 (뒤가 당겨짐)" />
+      <CommandButton id="cut.delete" icon={Trash2} size="sm" tipSide="top" label="삭제" />
       <CommandButton id="cut.cut" icon={Scissors} size="sm" tipSide="top" />
       <CommandButton id="cut.copy" icon={Copy} size="sm" tipSide="top" />
       <CommandButton id="cut.paste" icon={ClipboardPaste} size="sm" tipSide="top" label={clipboard.length ? "재생 헤드에 붙여넣기" : "붙여넣기 (복사한 클립 없음)"} />

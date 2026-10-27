@@ -22,20 +22,23 @@ export function Kbd({ children, className }: { children: ReactNode; className?: 
 
 type TipSide = "top" | "right" | "left" | "bottom" | "bottom-end" | "top-end";
 
-const tipProps = (label: string, kbd?: string, side?: TipSide) => ({
+const tipProps = (label: string, kbd?: string, side?: TipSide, hint?: string) => ({
   "aria-label": label,
   "data-tip": label,
   "data-kbd-label": kbd ? `   ${kbd}` : "",
+  ...(hint ? { "data-tip-hint": hint } : {}),
   ...(side && side !== "bottom" ? { "data-tip-side": side } : {}),
 });
 
 export function IconButton({
-  icon: Icon, label, kbd, active, disabled, onClick, tipSide, size = "md", tone = "default", className, children,
+  icon: Icon, label, kbd, hint, active, disabled, onClick, tipSide, size = "md", tone = "default", className, children,
 }: {
   /** optional: a text glyph (children) can stand in for the icon, e.g. the { } of In / Out */
   icon?: LucideIcon;
   label: string;
   kbd?: string;
+  /** a second line in the tooltip explaining what it does */
+  hint?: string;
   active?: boolean;
   disabled?: boolean;
   onClick?: () => void;
@@ -55,10 +58,11 @@ export function IconButton({
   return (
     <button
       type="button"
-      onClick={onClick}
-      disabled={disabled}
-      {...tipProps(label, kbd, tipSide)}
-      className={cx("inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-1.5 text-xs transition-colors disabled:pointer-events-none disabled:opacity-35", dims, tones[tone], className)}
+      // aria-disabled instead of `disabled`: a disabled button gets no hover, so its tooltip (what it is) would never show
+      onClick={disabled ? undefined : onClick}
+      aria-disabled={disabled || undefined}
+      {...tipProps(label, kbd, tipSide, hint)}
+      className={cx("inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-1.5 text-xs transition-colors aria-disabled:cursor-default aria-disabled:opacity-35 aria-disabled:hover:bg-transparent", dims, tones[tone], className)}
     >
       {Icon ? <Icon size={icon} strokeWidth={1.75} /> : null}
       {children}
@@ -76,6 +80,7 @@ export function CommandButton({ id, icon, tipSide, size, tone, label, className,
       icon={icon}
       label={label ?? titleOf(c)}
       kbd={shortcutOf(c)}
+      hint={c.hint}
       active={live[1] === "1"}
       disabled={live[0] !== "1"}
       onClick={() => runCommand(id)}
