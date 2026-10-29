@@ -39,3 +39,21 @@ describe("hand-made keys and actions together", () => {
     expect(at(r.spec, 5.5).position[2]).toBeGreaterThan(2.5);
   });
 });
+
+describe("setting off", () => {
+  it("the first step from a standstill is a short one: no split legs, no sinking pelvis", async () => {
+    const { resolveTarget } = await import("../src");
+    const base = parse({ specVersion: "0.1", space: { type: "ground", size: 40 }, settings: { duration: 10 }, actors: [{ id: "a" }] });
+    const c = compile(addWalkPath(base, "a", [[0, 0, 4]], { start: 0 }));
+    let spread = 0;
+    let hip = Infinity;
+    for (let t = 0; t <= 1.5; t += 1 / 60) {
+      const l = resolveTarget(c, "a.foot_l", t);
+      const r = resolveTarget(c, "a.foot_r", t);
+      spread = Math.max(spread, Math.hypot(l[0] - r[0], l[2] - r[2]));
+      hip = Math.min(hip, resolveTarget(c, "a.pelvis", t)[1]);
+    }
+    expect(spread).toBeLessThan(0.8);
+    expect(hip).toBeGreaterThan(0.72);
+  });
+});

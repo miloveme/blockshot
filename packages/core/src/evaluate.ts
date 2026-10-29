@@ -1166,6 +1166,9 @@ const MAX_STEP_RATE = 2.5;
 const TURN_MIN_RATE = 25;
 /** seconds after a walk ends for the trailing foot to step in beside the other */
 const SETTLE_TIME = 0.7;
+/** setting off: the stride starts at this fraction of the cruising stride and reaches it over START_CYCLES cycles */
+const START_STRIDE = 0.4;
+const START_CYCLES = 1.2;
 interface GaitTable {
   phase: Float64Array;
   stride: Float64Array;
@@ -1302,10 +1305,15 @@ function gaitTable(scene: CompiledScene, id: string) {
     const run = g === "run";
     for (let k = i; k <= j; k++) runs[k] = run ? 1 : 0;
     const walkFrom = phase[i]!;
+    // setting off from a standstill: the first steps are short and quick. The foot already down when the walk begins
+    // landed under the body, not ahead of it, so at a full stride it would be left far behind (legs split, pelvis sinking)
+    const fromRest = travel.slice(0, 3).every((d) => d / dt < 0.3);
+    const cruise = strideFor(run, Math.max(0, ...travel) / dt);
     for (let k = i; k < j; k++) {
       const d = travel[k - i]!;
       // walking on the spot: steps at the old timed cadence that land where they lift
-      const L = total > 0.05 ? strideFor(run, d / dt) : 0;
+      let L = total > 0.05 ? strideFor(run, d / dt) : 0;
+      if (fromRest && L > 0) L = Math.min(L, cruise * (START_STRIDE + (1 - START_STRIDE) * smoothstep((phase[k]! - walkFrom) / START_CYCLES)));
       stride[k + 1] = L;
       odo[k + 1] = odo[k]! + (total > 0.05 ? d : dt * (run ? 1.4 : 0.9) * L);
       phase[k + 1] = phase[k]! + (total > 0.05 ? (L > 1e-3 ? Math.min(d / L, 0.05) : 0) : dt * (run ? 1.4 : 0.9));
