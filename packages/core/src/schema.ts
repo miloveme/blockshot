@@ -280,6 +280,32 @@ export const Shot = z.object({
 });
 export type Shot = z.infer<typeof Shot>;
 
+/**
+ * A live take: how an actor or camera was moved by hand (keyboard, like playing a game), recorded with its own clock
+ * from 0 — position, facing (degrees, YXZ), and for an actor whether it walked or ran, for a camera its lens. Only the
+ * movement is kept; the engine builds the body motion when a stretch of it is inserted into the scene (see take.ts).
+ */
+export const TakeSample = z.object({
+  t: z.number().min(0),
+  p: Vec3,
+  r: Vec3,
+  g: z.enum(["stand", "walk", "run"]).optional(),
+  f: z.number().positive().optional(),
+});
+export type TakeSample = z.infer<typeof TakeSample>;
+
+export const Take = z.object({
+  id: Id,
+  name: z.string().optional(),
+  target: Id,
+  kind: z.enum(["actor", "camera"]),
+  /** scene time the take was recorded against (where it goes back in by default) */
+  start: z.number().min(0).default(0),
+  duration: z.number().positive(),
+  samples: z.array(TakeSample).min(2),
+});
+export type Take = z.infer<typeof Take>;
+
 /** A saved cut in the project bin — same fields as a shot, not part of the edit until inserted. */
 export const BinClip = z.object({
   id: Id,
@@ -304,6 +330,8 @@ export const BlockshotSpec = z.object({
   tracks: z.array(Track).default([]),
   shots: z.array(Shot).default([]),
   bin: z.array(BinClip).default([]),
+  /** live takes (raw recorded movement) kept for inserting stretches of them again */
+  takes: z.array(Take).default([]),
   assets: z.array(Asset).default([]),
 });
 /** Fully-defaulted spec (output of parsing). */

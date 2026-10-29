@@ -34,8 +34,9 @@ const axis = (pos: string, neg: string) => (heldKeys.has(pos) ? 1 : 0) - (heldKe
 const forward = new THREE.Vector3();
 
 /**
- * Drives the recorded actor / camera from the keyboard while time plays, writes the live value into
- * sceneState (so every viewport component, the PiP and the shot camera show it) and samples it.
+ * Drives the recorded actor / camera from the keyboard while time plays (rough, instant feedback — the engine redoes the
+ * body motion when the take is replayed), writes the live value into sceneState (so every viewport component, the PiP
+ * and the shot camera show it) and samples the movement on the take's own clock.
  * Must be mounted right after <Playback /> so it runs after the time step and before readers.
  */
 export function Recorder() {
@@ -86,7 +87,7 @@ export function Recorder() {
       useStudio.setState({
         sceneState: { ...s.sceneState, actors: { ...s.sceneState.actors, [rec.id]: { ...a, position: l.position, rotation, pose: l.pose, poseTime: t - l.poseStart } } },
       });
-      pushSample(t, { position: l.position, rotation, pose: l.pose }, first);
+      pushSample(first ? 0 : dt, { p: l.position, r: rotation, g: l.pose === "run" ? "run" : l.pose === "walk" ? "walk" : "stand" }, first);
       return;
     }
 
@@ -129,7 +130,7 @@ export function Recorder() {
         cameras: { ...s.sceneState.cameras, [rec.id]: { ...c, position: l.position, rotation, focalLength: l.focalLength, vFov: verticalFov(l.focalLength, camSpec.sensor, c.aspect) } },
       },
     });
-    pushSample(t, { position: l.position, rotation, focalLength: l.focalLength }, first);
+    pushSample(first ? 0 : dt, { p: l.position, r: rotation, f: l.focalLength }, first);
   });
 
   return null;

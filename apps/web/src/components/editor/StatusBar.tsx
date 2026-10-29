@@ -24,7 +24,9 @@ export function StatusBar() {
   const what = actor ? `인물 · ${actor.name ?? actor.id}` : cam ? `카메라 · ${cam.name ?? cam.id}` : prop ? `소품 · ${prop.id}` : "선택 없음";
 
   let hints: Array<[string, string]>;
-  if (recording) hints = [["Space", "녹화 정지"], ["←→↑↓", "움직이기"]];
+  const review = useStudio((s) => s.takeReview);
+  if (recording) hints = recording.kind === "actor" ? [["WASD", "이동"], ["Shift", "달리기"], ["Space", "녹화 끝"]] : [["WASD", "이동"], ["R F", "높이"], ["←→↑↓", "방향"], ["Z X", "줌"], ["Space", "녹화 끝"]];
+  else if (review) hints = [["I / O", "구간 시작·끝"], ["Space", "재생·정지"], ["Enter", "완료"]];
   else if (tool?.kind === "path") hints = [["클릭", "지점 추가"], ["⌫", "되돌리기"], ["Enter", "완료"], ["Esc", "취소"]];
   else if (tool?.kind === "place") hints = [["클릭", "배치"], ["Shift+클릭", "연속 배치"], ["Esc", "취소"]];
   else if (view.kind === "shot") hints = [["Space", "재생"], ["B", "면도날"], ["I / O", "구간"], ["⌘B", "자르기"], ["V", "편집 시점"]];

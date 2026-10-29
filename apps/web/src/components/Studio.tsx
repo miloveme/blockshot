@@ -9,7 +9,8 @@ import { installApi } from "@/lib/api";
 import { LoadingScreen } from "./LoadingScreen";
 import { ToolHud } from "./ToolHud";
 import { PlanView } from "./PlanView";
-import { stopRecording } from "@/lib/recorder";
+import { confirmTake, markIn, markOut, stopRecording } from "@/lib/recorder";
+import { TakeHud } from "./TakeHud";
 import { loadSpecText, startAutosave } from "@/lib/persist";
 import { finishPath } from "@/lib/placement";
 import { importGlb } from "@/lib/models";
@@ -183,6 +184,7 @@ function Stage() {
           <Viewport />
           <ShotHud />
           {layout === "3d" ? <ToolHud /> : null}
+          <TakeHud />
         </div>
       </div>
       {layout !== "3d" ? (
@@ -259,6 +261,14 @@ export default function Studio() {
           e.preventDefault();
           stopRecording();
         } else if (code.startsWith("Arrow")) e.preventDefault();
+        return;
+      }
+      if (s.takeReview && (code === "KeyI" || code === "KeyO" || code === "Enter" || code === "Escape") && !e.metaKey && !e.ctrlKey) {
+        // reviewing a take: I / O pick the stretch at the replay head, Enter / Esc finish
+        e.preventDefault();
+        if (code === "KeyI") markIn();
+        else if (code === "KeyO") markOut();
+        else confirmTake();
         return;
       }
       if (code === "Escape" && ui.overlay) {

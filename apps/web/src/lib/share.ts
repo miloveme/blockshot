@@ -24,7 +24,8 @@ const bytesToB64url = (bytes: Uint8Array): string => {
 
 /** `https://host/studio#s=…` for a scene (deflate-raw + base64url, the same format the MCP's open_link / load_link use). */
 export async function makeShareLink(spec: BlockshotSpec, origin = location.origin): Promise<string> {
-  const stream = new Blob([JSON.stringify(spec)]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+  // raw live takes (hundreds of samples each) stay out of links: what they produced is already in actions / tracks
+  const stream = new Blob([JSON.stringify({ ...spec, takes: [] })]).stream().pipeThrough(new CompressionStream("deflate-raw"));
   const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
   return `${origin}/studio${SHARE_PREFIX}${bytesToB64url(bytes)}`;
 }

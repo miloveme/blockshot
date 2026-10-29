@@ -131,9 +131,13 @@ for (let f = first; f < last; f++) {
 
 ### 3.6 레코딩 (`lib/recorder.ts`, `viewport/Recorder.tsx`, `core/record.ts`)
 
-1. `startRecording` — 선택 대상과 시작 시간을 store에 기록하고 재생 시작
-2. `<Recorder>`(Playback 바로 뒤에 마운트) — 매 프레임 키 입력으로 라이브 값을 갱신해 **sceneState에 덮어씀** → 마네킹 걷기 사이클·PiP·샷 카메라가 모두 라이브 값을 따른다. 1/12초마다 샘플링
-3. `stopRecording` — `applyRecording(spec, id, take, t0, t1)`(순수): 구간 안 키를 교체, RDP(위치 1cm·회전 0.5°·초점 0.2mm)로 키 축약, 포즈는 변화 지점만 step 키. undo 한 단계
+게임처럼 플레이해서 움직임만 기록하고, 끝낸 뒤 엔진 동작으로 다시 재생하며 쓸 구간만 넣는다.
+
+1. `startRecording` — 선택 대상과 시작 시간(t0)을 store에 기록하고 재생 시작. 테이크는 **자기 시계**를 가져 장면 길이와 무관(Playback은 녹화 중 장면 끝에서 멈춰 있을 뿐 녹화를 끝내지 않음)
+2. `<Recorder>`(Playback 바로 뒤) — 매 프레임 키 입력으로 라이브 값을 갱신해 **sceneState에 덮어씀**(즉각 반응용 간이 걷기 사이클), 1/30초마다 **움직임만** 샘플링: 위치·방향·걷기/달리기(인물) 또는 렌즈(카메라)
+3. `stopRecording` — 샘플을 `Take`(`spec.takes`, Spec에 저장)로 만들고 `insertTake(base, takeId, { at: t0 })`(core/take.ts, 순수)로 넣는다. 한 번의 undo 단계. store `takeReview`(base = 테이크만 들어간 spec, from/to/at/mode/target, range)가 열리고 Playback이 그 구간을 반복 재생
+4. `insertTake` — `path`: 움직인 구간마다 walkTo/runTo(단순화한 경로, 재생 시간 그대로, `direct`), 멈춰서 돈 곳은 turnTo — 발 디딤·가감속은 보행 엔진이 만든다. `keys`: `applyRecording`으로 위치·방향·포즈(·렌즈) 키. 카메라는 항상 keys. 그 구간에서 시작하던 대상의 walkTo/runTo/turnTo는 교체, 장면 길이는 필요하면 늘린다
+5. 리뷰 중 구간·위치·방식 변경은 `updateReview` → `insertTake(base…)` → `replaceSpec`(undo 스택 추가 없음). `I`는 시작을 자르되 나머지를 장면의 같은 자리에 둔다(at += Δfrom). 완료=그대로, 보관만=base로, 삭제=테이크까지 제거. undo/redo는 리뷰를 닫는다
 
 ## 4. 스크립트 샌드박스
 

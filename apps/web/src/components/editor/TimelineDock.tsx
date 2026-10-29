@@ -1,12 +1,13 @@
 "use client";
 
-import { useRef, useSyncExternalStore } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import { describeAction, editDuration, keyTimes, subjectKeys, type Action } from "@blockshot/core";
-import { Camera, Circle, Clapperboard, Crosshair, Diamond, Pause, Play, SkipBack, SkipForward, StepBack, StepForward, User, Box, PanelBottomClose } from "lucide-react";
+import { Camera, Circle, Clapperboard, Crosshair, Diamond, Film, Pause, Play, SkipBack, SkipForward, StepBack, StepForward, User, Box, PanelBottomClose } from "lucide-react";
 import { useStudio } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import { removeKeysAtTime } from "@/lib/actions";
 import { runCommand } from "@/lib/commands";
+import { openTake } from "@/lib/recorder";
 import { CommandButton, cx, IconButton, Segmented, Tally, useOnAirCamera } from "../ui";
 import { NumField } from "../fields";
 import { EditTrack, SHOT_COLORS, timecode } from "../Timeline";
@@ -82,6 +83,7 @@ function Transport() {
       </div>
       <span className="h-5 w-px shrink-0 bg-line" />
       <CommandButton id="anim.record" icon={Circle} size="sm" tone="danger" />
+      <TakesMenu />
       <CommandButton id="anim.autokey" icon={Diamond} size="sm" tone="danger" />
       <div className="ml-1 flex shrink-0 items-baseline gap-2">
         <span className="whitespace-nowrap font-mono text-[15px] font-medium tabular-nums text-ink">{timecode(shown, fps)}</span>
@@ -332,5 +334,42 @@ function SubjectLane({ cameraId, pct }: { cameraId: string; pct: (t: number) => 
         );
       })}
     </>
+  );
+}
+
+/** Saved live takes: pick one to insert (another) stretch of it at the playhead. */
+function TakesMenu() {
+  const takes = useStudio((s) => s.spec.takes);
+  const spec = useStudio((s) => s.spec);
+  const recording = useStudio((s) => s.recording);
+  const [open, setOpen] = useState(false);
+  if (!takes.length) return null;
+  return (
+    <div className="relative shrink-0">
+      <IconButton icon={Film} size="sm" label={`테이크 ${takes.length}개`} hint="녹화해 둔 움직임 — 골라서 재생 헤드 위치에 다시 넣기" disabled={!!recording} active={open} onClick={() => setOpen((v) => !v)} />
+      {open ? (
+        <>
+          <div className="fixed inset-0 z-40" onPointerDown={() => setOpen(false)} />
+          <div className="absolute bottom-8 left-0 z-50 min-w-56 rounded-lg bg-raised p-1 shadow-[var(--shadow-pop)] ring-1 ring-line">
+            {takes.map((t) => {
+              const who = [...spec.actors, ...spec.cameras].find((x) => x.id === t.target);
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => (setOpen(false), openTake(t.id))}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-ink-2 hover:bg-white/[0.06] hover:text-ink"
+                >
+                  <Film size={13} className="text-ink-3" />
+                  <span className="font-medium text-ink">{t.id}</span>
+                  <span className="truncate">{who?.name ?? t.target}</span>
+                  <span className="ml-auto font-mono tabular-nums text-ink-3">{t.duration.toFixed(1)}s</span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      ) : null}
+    </div>
   );
 }

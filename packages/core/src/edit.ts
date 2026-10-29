@@ -260,6 +260,7 @@ export function keyTimes(spec: BlockshotSpec, id: string): Array<{ t: number; ma
     if (!keys || (keys.length < 2 && !(p === "hips" || p.startsWith("bone:")))) continue;
     const manual = spec.tracks.some((tr) => tr.target === id && tr.property === p);
     for (const k of keys) {
+      if ((k as { detail?: boolean }).detail && !manual) continue;
       const t = Math.round(k.t * 100) / 100;
       marks.set(t, (marks.get(t) ?? false) || manual);
     }

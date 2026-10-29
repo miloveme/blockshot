@@ -217,7 +217,7 @@ const COMMANDS: Command[] = [
       st().notify(st().autoKey ? "자동 키 켬 — 움직이면 현재 시간에 키가 찍힙니다" : "자동 키 끔");
     },
   },
-  { id: "anim.record", title: () => (st().recording ? "녹화 정지" : "라이브 녹화"), category: "animation", keys: ["Shift+KeyR"], hint: "재생하면서 키보드로 움직여 동선을 기록", run: () => (st().recording ? stopRecording() : startRecording()) },
+  { id: "anim.record", title: () => (st().recording ? "녹화 정지" : "라이브 녹화"), category: "animation", keys: ["Shift+KeyR"], hint: "게임하듯 키보드로 움직이면 시간 제한 없이 녹화 — 끝내면 엔진 동작으로 다시 재생하고, 쓸 구간만 골라 넣기", run: () => (st().recording ? stopRecording() : startRecording()) },
 
   // ---- camera / view
   { id: "view.free", title: "편집 시점 (자유 카메라)", category: "view", keys: ["KeyV"], checked: () => st().view.kind === "free", run: () => st().setView({ kind: "free" }) },

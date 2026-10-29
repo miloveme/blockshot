@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { compile, editDuration, editTimeOf, evaluate, locateEdit, validateSpec, type BlockshotSpec, type BoneName, type CompiledScene, type ClipData, type PropType, type SceneState, type Vec3 } from "@blockshot/core";
+import { compile, type TakeMode, editDuration, editTimeOf, evaluate, locateEdit, validateSpec, type BlockshotSpec, type BoneName, type CompiledScene, type ClipData, type PropType, type SceneState, type Vec3 } from "@blockshot/core";
 import example from "@blockshot/core/examples/living-room.json";
 
 export type ViewMode = { kind: "free" } | { kind: "shot" } | { kind: "camera"; id: string };
@@ -13,11 +13,27 @@ export type AssetRef = { kind: "actor" } | { kind: "camera" } | { kind: "prop"; 
 export type Tool = { kind: "place"; ref: AssetRef } | { kind: "path"; actorId: string; points: Vec3[]; run: boolean };
 /** Main area: 3D viewport, 3D + plan side by side, or the plan alone. */
 export type Layout = "3d" | "split" | "plan";
-/** Live take in progress: the recorder drives `id` from keyboard input while time plays. */
+/** Live take in progress: the recorder drives `id` from keyboard input while time plays (no time limit). */
 export interface Recording {
   id: string;
   kind: "actor" | "camera";
   t0: number;
+}
+
+/**
+ * A take being reviewed after recording: the stretch [from, to] of take `takeId` is inserted at scene time `at` into
+ * `base` (the spec with the take stored but not inserted) and replays in a loop until it is confirmed.
+ */
+export interface TakeReview {
+  takeId: string;
+  base: BlockshotSpec;
+  from: number;
+  to: number;
+  at: number;
+  mode: TakeMode;
+  target: string;
+  /** scene span the inserted stretch covers (loop range) */
+  range: [number, number];
 }
 
 const HISTORY_LIMIT = 100;
@@ -52,6 +68,7 @@ interface StudioState {
   /** right-hand panel tab */
   panel: Panel;
   recording: Recording | null;
+  takeReview: TakeReview | null;
   /** camera view: drag the viewed camera itself (orbit / zoom / pan) instead of just looking through it */
   pilot: boolean;
   /** true while an offline render owns the timeline */
@@ -81,6 +98,8 @@ interface StudioState {
   setSpec(spec: BlockshotSpec): void;
   /** Apply an edit as one undo step. `fn` returns the new spec (or null to cancel). */
   edit(fn: (spec: BlockshotSpec) => BlockshotSpec | null): void;
+  /** swap the spec without a new undo step (live previews that the last edit already covers) */
+  replaceSpec(spec: BlockshotSpec): void;
   undo(): void;
   redo(): void;
   setTime(t: number): void;
@@ -167,6 +186,7 @@ export const useStudio = create<StudioState>((set, get) => {
     notice: null,
     panel: "scene",
     recording: null,
+    takeReview: null,
     pilot: false,
     rendering: false,
     editTime: 0,
@@ -182,7 +202,10 @@ export const useStudio = create<StudioState>((set, get) => {
     tool: null,
     layout: "3d",
 
-    setSpec(spec) {
+    setSpec(input) {
+      // projects saved by an older version lack newer fields: re-parse to fill their defaults
+      const parsed = validateSpec(input);
+      const spec = parsed.ok ? parsed.spec : input;
       const c = compile(spec);
       const time = Math.min(get().time, spec.settings.duration);
       set({
@@ -198,17 +221,21 @@ export const useStudio = create<StudioState>((set, get) => {
       if (!next || next === prev) return;
       set({ ...derive(next), past: [...get().past, prev].slice(-HISTORY_LIMIT), future: [] });
     },
+    replaceSpec(next) {
+      if (next !== get().spec) set(derive(next));
+    },
     undo() {
       const { past, spec, future } = get();
       const prev = past.at(-1);
       if (!prev) return;
-      set({ ...derive(prev), past: past.slice(0, -1), future: [spec, ...future] });
+      // (undo also ends a take review: its base no longer matches)
+      set({ ...derive(prev), past: past.slice(0, -1), future: [spec, ...future], takeReview: null });
     },
     redo() {
       const { past, spec, future } = get();
       const next = future[0];
       if (!next) return;
-      set({ ...derive(next), past: [...past, spec], future: future.slice(1) });
+      set({ ...derive(next), past: [...past, spec], future: future.slice(1), takeReview: null });
     },
     setTime(t) {
       const { compiled: c, spec } = get();

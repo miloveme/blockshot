@@ -2018,6 +2018,113 @@
         ]
       }
     },
+    "takes": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "actor",
+              "camera"
+            ]
+          },
+          "start": {
+            "default": 0,
+            "type": "number",
+            "minimum": 0
+          },
+          "duration": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "samples": {
+            "minItems": 2,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "t": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "p": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "r": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "g": {
+                  "type": "string",
+                  "enum": [
+                    "stand",
+                    "walk",
+                    "run"
+                  ]
+                },
+                "f": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "t",
+                "p",
+                "r"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "target",
+          "kind",
+          "duration",
+          "samples"
+        ]
+      }
+    },
     "assets": {
       "default": [],
       "type": "array",

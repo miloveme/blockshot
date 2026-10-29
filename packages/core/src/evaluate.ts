@@ -42,6 +42,8 @@ interface CKey {
   t: number;
   value: KeyValue;
   ease: Key["ease"];
+  /** an in-between the engine adds for smoothness (speed ramps, rounded corners, a rise): not shown as a key */
+  detail?: boolean;
 }
 /** What a camera / actor aims at: a point, a reference, or something computed per time (a camera riding on a car aims ahead of it). */
 type AimTarget = Target | ((t: number) => Vec3);
@@ -391,7 +393,7 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       for (const k of wPose) insertKey(pose, { ...k, t: warp.inv(k.t) });
       for (const k of wPos) insertKey(pos, { ...k, t: warp.inv(k.t) });
       // dense keys through the speed ramps (a ramp inside one long straight leg would otherwise interpolate linearly)
-      for (const [r0, r1] of warp.ramps) for (let u = r0; u < r1; u += RAMP_KEY_STEP) insertKey(pos, { t: u, value: sampleKeys(wPos, warp.fwd(u)), ease: "linear" });
+      for (const [r0, r1] of warp.ramps) for (let u = r0; u < r1; u += RAMP_KEY_STEP) insertKey(pos, { t: u, value: sampleKeys(wPos, warp.fwd(u)), ease: "linear", detail: true });
       insertKey(pose, { t: endT, value: prevPose === "walk" || prevPose === "run" || prevPose === "crouch" || prevPose === "climb" ? "stand" : prevPose, ease: "step" });
       break;
     }
@@ -492,7 +494,7 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       const riseSteps = Math.max(4, Math.ceil((riseEnd - a.start) * 60));
       for (let k = 1; k <= riseSteps; k++) {
         const u = smoothstep(k / riseSteps);
-        insertKey(pos, { t: a.start + ((riseEnd - a.start) * k) / riseSteps, value: [from[0] + (riseTo[0] - from[0]) * u, from[1] + (riseTo[1] - from[1]) * u, from[2] + (riseTo[2] - from[2]) * u], ease: "linear" });
+        insertKey(pos, { t: a.start + ((riseEnd - a.start) * k) / riseSteps, value: [from[0] + (riseTo[0] - from[0]) * u, from[1] + (riseTo[1] - from[1]) * u, from[2] + (riseTo[2] - from[2]) * u], ease: "linear", detail: k < riseSteps });
       }
       insertKey(pose, { t: a.start, value: "stand", ease: "step" });
       const list = scene.acts.get(a.actor) ?? [];
@@ -1084,7 +1086,7 @@ function roundCorners(keys: CKey[]): CKey[] {
       const w0 = (1 - u) * (1 - u);
       const w1 = 2 * u * (1 - u);
       const w2 = u * u;
-      out.push({ t: c.t - tau + 2 * tau * u, value: [w0 * p0[0] + w1 * pc[0] + w2 * p2[0], w0 * p0[1] + w1 * pc[1] + w2 * p2[1], w0 * p0[2] + w1 * pc[2] + w2 * p2[2]], ease: "linear" });
+      out.push({ t: c.t - tau + 2 * tau * u, value: [w0 * p0[0] + w1 * pc[0] + w2 * p2[0], w0 * p0[1] + w1 * pc[1] + w2 * p2[1], w0 * p0[2] + w1 * pc[2] + w2 * p2[2]], ease: "linear", detail: k > 0 && k < steps });
     }
   }
   out.push(keys[keys.length - 1]!);

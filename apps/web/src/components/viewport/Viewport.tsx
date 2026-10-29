@@ -12,7 +12,6 @@ import { useUi } from "@/lib/ui";
 import { commitAim, commitBoneRotation, commitCamera, commitCameraRotation, commitScale, commitTransform, snapSteps } from "@/lib/actions";
 import { registerBridge } from "@/lib/render";
 import { framedPose } from "@/lib/frame";
-import { stopRecording } from "@/lib/recorder";
 import { Mannequin } from "./Mannequin";
 import { PropObject } from "./Props";
 import { SpaceObject } from "./Space";
@@ -337,11 +336,13 @@ function Playback() {
     }
     const next = s.time + dt;
     const end = s.spec.settings.duration;
-    if (next < end) s.setTime(next);
-    else if (s.recording) {
-      s.setTime(end);
-      stopRecording();
-    } else s.setTime(0);
+    // replaying a take under review: loop its stretch
+    const loop = !s.recording && s.takeReview ? s.takeReview.range : null;
+    if (loop && (next > loop[1] || next < loop[0] - 0.01)) s.setTime(loop[0]);
+    else if (next < end) s.setTime(next);
+    // a take has no time limit: the rest of the scene holds its last moment while recording goes on
+    else if (s.recording) s.setTime(end);
+    else s.setTime(0);
   });
   return null;
 }
