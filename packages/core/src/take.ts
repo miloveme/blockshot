@@ -3,6 +3,7 @@ import { actionLabels } from "./actions";
 import { compile, evaluate } from "./evaluate";
 import { applyRecording, simplifySamples, type Sample } from "./record";
 import { unwrapYaw } from "./math";
+import { clearMotionKeysAfter } from "./edit";
 
 /**
  * Live takes → scene. A take is only the movement someone played in by hand (position, facing, walk / run, lens), with
@@ -117,6 +118,8 @@ export function insertTake(spec: BlockshotSpec, takeId: string, opts: InsertTake
     return { spec: next, added: [], removed, range };
   }
 
+  // hand-made movement keys after the stretch begins would override the walk: the take takes over from there
+  next = clearMotionKeysAfter(next, target, at);
   const actions = pathActions(next, target, slice, at, take.id);
   next = { ...next, actions: [...next.actions, ...actions] };
   return { spec: next, added: actions.map((a) => a.id!), removed, range };

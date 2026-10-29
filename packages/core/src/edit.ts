@@ -306,8 +306,26 @@ export function movesOf(spec: BlockshotSpec, actorId: string): Array<{ index: nu
 }
 
 /** Appends a walk (or run) along the clicked waypoints, starting at `start` seconds. */
+/**
+ * Drops the hand-made position / rotation / pose keys of `id` after time `t`, so a walk added at `t` really moves the
+ * actor (hand-made keys win over actions between their first and last key). Keys up to `t` stay — the walk starts
+ * where they put the actor.
+ */
+export function clearMotionKeysAfter(spec: BlockshotSpec, id: string, t: number): BlockshotSpec {
+  let changed = false;
+  const tracks = spec.tracks.flatMap((tr) => {
+    if (tr.target !== id || (tr.property !== "position" && tr.property !== "rotation" && tr.property !== "pose")) return [tr];
+    const keys = tr.keys.filter((k) => k.t <= t + 1e-6);
+    if (keys.length === tr.keys.length) return [tr];
+    changed = true;
+    return keys.length ? [{ ...tr, keys }] : [];
+  });
+  return changed ? { ...spec, tracks } : spec;
+}
+
 export function addWalkPath(spec: BlockshotSpec, actorId: string, points: Vec3[], opts: { start: number; run?: boolean; speed?: number }): BlockshotSpec {
   if (points.length === 0 || !spec.actors.some((a) => a.id === actorId)) return spec;
+  spec = clearMotionKeysAfter(spec, actorId, roundT(Math.max(0, opts.start)));
   const to: Vec3 | Vec3[] = points.length === 1 ? points[0]! : points;
   const start = roundT(Math.max(0, opts.start));
   const action = { type: opts.run ? ("runTo" as const) : ("walkTo" as const), actor: actorId, to, start, ...(opts.speed ? { speed: opts.speed } : {}) };

@@ -83,7 +83,7 @@ blockshot/
 
 - `compile(spec)`는 `actions`를 시간순으로 풀어 `tracks: Map<"id/property", Key[]>`를 만든다.
   - 인물 액션을 먼저, 카메라 액션을 나중에 컴파일 (카메라가 인물 위치를 참조하므로)
-  - `spec.tracks`(수동 키)는 같은 대상·속성의 생성 트랙을 **덮어쓴다**
+  - `spec.tracks`(수동 키)를 **먼저** 트랙에 넣고 액션을 그 위에 컴파일한다(액션은 수동 키가 둔 자리에서 출발). 수동 트랙의 **첫 키~마지막 키 구간 안에서는 수동 키가 이기고**, 구간 밖은 액션이 움직인다. 경로 찍기(`addWalkPath`)·테이크 넣기는 그 인물의 이후 위치·회전·포즈 수동 키를 지워(`clearMotionKeysAfter`) 새 걷기가 실제로 움직이게 한다
   - 시선(`lookAt`)·카메라 피사체 고정(`cameraLookAt`)은 움직이는 대상을 따라가야 하므로 키가 아닌 **구간(segment)** 으로 저장하고 평가 시 해석
 - `evaluate(compiled, t)`는 순수 함수. 결과 `SceneState`는 인물(위치·회전·포즈·poseTime·시선점), 카메라(위치·주시점·FOV), 활성 샷/카메라를 담는다.
 
