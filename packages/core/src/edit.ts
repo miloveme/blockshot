@@ -1,8 +1,9 @@
-import type { Actor, BlockshotSpec, Camera, Gesture, HandShape, Key, Prop, PropType, Shot, Target, TrackProperty, Vec3 } from "./schema";
+import type { Actor, BlockshotSpec, Camera, Gesture, HandShape, Key, Prop, PropType, Shot, Species, Target, TrackProperty, Vec3 } from "./schema";
 import { compile, evaluate } from "./evaluate";
 import { parseRef } from "./mirror";
 import { SEATS } from "./catalog";
 import { mergeAction, patchProblem } from "./actions";
+import { creatureDef, moveSpeed, speciesHeight } from "./creature";
 
 /**
  * Pure editing operations for UI tools. Every function returns a NEW spec (inputs are never mutated),
@@ -51,14 +52,17 @@ export function kindOf(spec: BlockshotSpec, id: string): EntityKind | null {
 
 const ACTOR_COLORS = ["#e8735a", "#5aa0e8", "#7bc96f", "#e8c35a", "#b07be8", "#5ac9c0"];
 
-export function addActor(spec: BlockshotSpec): { spec: BlockshotSpec; id: string } {
-  const id = uniqueId(spec, "actor");
+export function addActor(spec: BlockshotSpec, species: Species = "human"): { spec: BlockshotSpec; id: string } {
+  const def = creatureDef(species);
+  const id = uniqueId(spec, def ? species : "actor");
   const n = spec.actors.length;
+  const same = spec.actors.filter((a) => (a.species ?? "human") === species).length;
   const actor: Actor = {
     id,
-    name: `인물 ${n + 1}`,
-    color: ACTOR_COLORS[n % ACTOR_COLORS.length]!,
-    height: 1.72,
+    name: `${def ? def.label : "인물"} ${(def ? same : n) + 1}`,
+    species,
+    color: def ? def.color : ACTOR_COLORS[n % ACTOR_COLORS.length]!,
+    height: speciesHeight(species),
     build: "average",
     position: [n * 0.9, 0, 0],
     rotation: [0, 0, 0],
@@ -332,7 +336,8 @@ export function addWalkPath(spec: BlockshotSpec, actorId: string, points: Vec3[]
   // grow the project so the walk can finish (the default speeds mirror evaluate.ts)
   const from = evaluate(compile(spec), start).actors[actorId]!.position;
   const length = [from, ...points].slice(1).reduce((sum, p, i) => sum + Math.hypot(p[0] - [from, ...points][i]![0], p[2] - [from, ...points][i]![2]), 0);
-  const speed = opts.speed ?? (opts.run ? 3.5 : 1.3);
+  const who = spec.actors.find((a) => a.id === actorId)!;
+  const speed = opts.speed ?? moveSpeed(who.species, who.height, !!opts.run);
   const end = Math.ceil((start + length / speed) * 10) / 10;
   const settings = end > spec.settings.duration ? { ...spec.settings, duration: end } : spec.settings;
   return { ...spec, settings, actions: [...spec.actions, action] };

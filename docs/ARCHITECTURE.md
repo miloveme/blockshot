@@ -96,6 +96,14 @@ blockshot/
 - **접촉(`contact` 액션)**: compile이 `ContactLayer`로 풀고, `computeRig`의 맨 마지막(본 키 다음)에 IK로 적용한다. 손은 팔 IK를 몇 번 보정해 손바닥 패치를 목표(몸 표면은 그 뼈 로컬 점이라 몸과 함께 움직임) 4 mm 위에 둔다. 발은 시작 시점의 발 위치(접촉 없이 평가한 자세)를 월드에 고정해 3D 다리 IK. standUp은 같은 발 고정 접촉을 내부적으로(`implicit`) 추가한다. `solveMotion`은 접촉을 추가해 평가한 뒤 `contactResiduals`로 잔차·원인(out_of_reach·leg_too_short·conflict)을 재고, `preserve` 대상 인물은 프레임마다 그대로인지 비교한다.
 - `inspectRig`(리그 치수·역할·접촉 패치·관절 범위·규약)와 `analyzeMotion`(발 미끄러짐·관통·뜸·루트 급정지/급가속·급회전·관절 범위·다인 동시 제스처, 원인·위치·권장 수정 + `notEvaluated`)은 렌더러와 같은 evaluate를 쓴다. MCP `analyze_motion`·`inspect_rig`·`evaluate {contacts}`로 노출.
 
+### 3.1.2 동물 (`core/creature.ts`, `viewport/Creature.tsx`)
+
+- `actor.species`가 사람이 아니면 휴머노이드 리그 대신 `ActorState.creature`(몸통 높이·피치·롤, 다리별 매단 점·옆기울기·관절 각, 목·머리 요·피치, 턱, 꼬리, 날개 접힘·날갯짓)를 계산한다. `rig`는 휴지 자세로 채워 두고 쓰지 않는다.
+- 종 정의는 체형(`quadruped`·`biped`·`bird`)과 몇 가지 비율만 갖고, 다리 길이·보폭·기본 높이는 거기서 유도한다. 다리는 2관절 IK(앞다리 관절은 앞, 뒷다리·새 다리는 뒤로 굽음)로 발 목표에 닿는다. 다리는 몸통 자식이 아니라 액터 프레임에 매달아 몸통의 흔들림(롤)과 무관하게 발이 제자리에 있다.
+- 보행: `creatureGait`가 60 Hz 표로 거리(+회전) 기반 위상·속도 진폭·달리기 가중을 만든다. 디딘 발은 착지 위상의 몸 위치(표에서 위상→시점 역탐색)를 기준으로 월드에 고정되고, 스윙은 다음 착지점까지 월드에서 보간한다(사람 보행과 같은 방식). 네발 걷기는 측대 순서(LH·LF·RH·RF), 달리기는 로터리 갤럽. 몸은 모든 다리가 발에 닿을 만큼만 내려간다.
+- 새는 `runTo`(pose run) 동안 `actorCore`에서 위치에 비행 높이를 더한다(이륙·착륙 `FLY_RISE` 0.9 s) — `resolveTarget`·카메라도 같은 높이를 본다.
+- 부위(`creaturePart`)·`partPosition`·`resolveTarget`은 같은 FK를 쓴다. `analyzeMotion`의 발 검사는 사람 뼈대 기준이라 동물은 제외한다.
+
 ### 3.2 렌더러 (apps/web/viewport)
 
 - React는 **구조**(어떤 객체가 있는지)만 렌더, 매 프레임 변환은 `useFrame`에서 `useStudio.getState().sceneState`를 읽어 직접 적용 → 60fps에서 React 리렌더 없음

@@ -1,6 +1,6 @@
 "use client";
 
-import { PROP_TYPES, bakeActor, duplicateEntity, keyTimes, unbakeActor, type PropType } from "@blockshot/core";
+import { CREATURES, PROP_TYPES, SPECIES, bakeActor, duplicateEntity, keyTimes, unbakeActor, type PropType } from "@blockshot/core";
 import { useStudio } from "./store";
 import { dockVisible, setDock, toggleDock, useUi } from "./ui";
 import {
@@ -134,7 +134,10 @@ const COMMANDS: Command[] = [
   { id: "edit.deselect", title: "선택 해제", category: "edit", keys: ["Escape"], when: sceneView, run: () => st().select(null) },
 
   // ---- add
-  { id: "add.actor", title: "인물 (마네킹)", category: "add", keys: ["Shift+KeyA"], aliases: "actor person mannequin", run: addActorCmd },
+  { id: "add.actor", title: "인물 (마네킹)", category: "add", keys: ["Shift+KeyA"], aliases: "actor person mannequin", run: () => addActorCmd() },
+  ...SPECIES.filter((s) => s !== "human").map(
+    (s): Command => ({ id: `add.animal.${s}`, title: `동물 · ${CREATURES[s].label}`, category: "add", aliases: `animal ${s} 동물`, run: () => addActorCmd(s) }),
+  ),
   { id: "add.camera", title: "카메라", category: "add", aliases: "camera", run: addCameraCmd },
   {
     id: "add.cameraFromView",

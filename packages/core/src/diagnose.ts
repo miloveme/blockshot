@@ -138,7 +138,8 @@ export function analyzeMotion(input: BlockshotSpec | CompiledScene, opts: Analyz
   const fps = Math.max(10, Math.min(120, opts.fps ?? Math.max(30, spec.settings.fps)));
   const dt = 1 / fps;
   const want = (k: DiagnosticKind) => !opts.checks || opts.checks.includes(k);
-  const actorIds = (opts.actors?.length ? opts.actors : spec.actors.map((a) => a.id)).filter((id) => spec.actors.some((a) => a.id === id));
+  // (the checks read the human skeleton: animals are left out)
+  const actorIds = (opts.actors?.length ? opts.actors : spec.actors.map((a) => a.id)).filter((id) => spec.actors.some((a) => a.id === id && (a.species ?? "human") === "human"));
 
   const frames: Record<string, Frame[]> = Object.fromEntries(actorIds.map((id) => [id, []]));
   const n = Math.max(1, Math.round((to - from) * fps));

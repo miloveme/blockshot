@@ -51,7 +51,7 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 | `scene.ground({ size? })` | 바닥만 있는 공간 |
 | `scene.room({ width, depth, height?, doors?, windows? })` | 방. `doors: [{ wall, offset?, width? }]` |
 | `scene.street({ length?, roadWidth?, sidewalkWidth? })` | 거리 |
-| `scene.actor(id, opts) → Actor` | `opts: { name?, color?, height?, build?, at?, facing?, pose?, aim? }` — `aim`: 타겟 포인트(얼굴 기준 오프셋, 기본 얼굴) |
+| `scene.actor(id, opts) → Actor` | `opts: { name?, species?, color?, height?, build?, at?, facing?, pose?, aim? }` — `species`: 동물(`"dog"`·`"cat"`·`"tiger"`·`"horse"`·`"bear"`·`"chicken"`·`"ostrich"`·`"penguin"`·`"dinosaur"`·`"pigeon"`·`"eagle"`, SCENE_SPEC §5), `aim`: 타겟 포인트(얼굴 기준 오프셋, 기본 얼굴) |
 | `scene.prop(type, opts) → Prop` | `opts: { id?, at?, facing?, rotation?, scale?, color?, aim? }` — `aim`: 타겟 포인트(기본 상자 중앙) |
 | `scene.use(id) → handle` | **이미 있는 오브젝트**(손으로 배치했거나 이전 스크립트가 만든 것)의 핸들. 인물이면 Actor, 카메라면 Camera 핸들(걷기·줌 등 모든 메서드 사용), 소품이면 `{ id }`. 없는 id면 가능한 id 목록과 함께 오류 |
 | `scene.patchAction(id, fields)` | 기존 액션 한 개의 필드만 수정 (id = 명시한 `id` 또는 `act1`, `act2` … 위치 라벨, `type`은 변경 불가) |

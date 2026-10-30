@@ -1,4 +1,4 @@
-import type { BlockshotSpec, Camera, Vec3 } from "./schema";
+import type { BlockshotSpec, Camera, Species, Vec3 } from "./schema";
 import { PROP_CATALOG, propSize } from "./catalog";
 import { yawTowards } from "./math";
 import { surfaceHeightAt } from "./surfaces";
@@ -83,8 +83,8 @@ export function addPropAt(spec: BlockshotSpec, type: Parameters<typeof addProp>[
 }
 
 /** Actor at the clicked point, turned toward the middle of the scene (or the nearest other actor). */
-export function addActorAt(spec: BlockshotSpec, point: [number, number], step = 0.1): { spec: BlockshotSpec; id: string } {
-  const base = addActor(spec);
+export function addActorAt(spec: BlockshotSpec, point: [number, number], step = 0.1, species: Species = "human"): { spec: BlockshotSpec; id: string } {
+  const base = addActor(spec, species);
   const room = roomOf(spec);
   let x = snap(point[0], step);
   let z = snap(point[1], step);

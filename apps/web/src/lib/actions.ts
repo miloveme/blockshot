@@ -3,7 +3,7 @@
 import {
   aimFromWorld,
   addActor, addCamera, setBoneRotation, addProp, aspectLabel, isAnimated, kindOf, patchEntity, removeEntity, removeKeysAt, resolutionForAspect, upsertKey,
-  type BlockshotSpec, type BoneName, type PropType, type TrackProperty, type Vec3,
+  type BlockshotSpec, type BoneName, type PropType, type Species, type TrackProperty, type Vec3,
 } from "@blockshot/core";
 import { useStudio } from "./store";
 
@@ -35,7 +35,7 @@ function add(make: (s: BlockshotSpec) => { spec: BlockshotSpec; id: string }) {
   state().select(id);
 }
 
-export const addActorCmd = () => add(addActor);
+export const addActorCmd = (species: Species = "human") => add((s) => addActor(s, species));
 export const addPropCmd = (type: PropType) => add((s) => addProp(s, type));
 export const addCameraCmd = () => add(addCamera);
 

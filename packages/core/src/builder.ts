@@ -13,6 +13,7 @@ import {
   type PropType,
   type Sensor,
   type Settings,
+  type Species,
   type Target,
   type TrackProperty,
   type Vec3,
@@ -21,6 +22,7 @@ import { createRand, DEG, vec, yawTowards } from "./math";
 import { clamp, interpolate, noise, spring } from "./motion";
 import { simplifySamples, type Sample } from "./record";
 import { partPosition } from "./evaluate";
+import { speciesHeight } from "./creature";
 import { actionLabels, mergeAction, patchProblem } from "./actions";
 import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
 
@@ -33,7 +35,7 @@ import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
  */
 
 type Timing = { start: number; duration?: number; ease?: Ease };
-type ActorOpts = { name?: string; color?: string; height?: number; build?: "slim" | "average" | "heavy"; at?: Vec3; facing?: number; pose?: Pose; aim?: Vec3 };
+type ActorOpts = { name?: string; species?: Species; color?: string; height?: number; build?: "slim" | "average" | "heavy"; at?: Vec3; facing?: number; pose?: Pose; aim?: Vec3 };
 type PropOpts = { id?: string; at?: Vec3; facing?: number; rotation?: Vec3; scale?: Vec3; color?: string; aim?: Vec3 };
 type CameraOpts = { name?: string; lens?: number; sensor?: Sensor; at?: Vec3; lookAt?: Target; rotation?: Vec3 };
 
@@ -140,7 +142,7 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
     const actor = spec.actors.find((a) => a.id === id);
     if (actor) {
       return partPosition(
-        { position: actor.position ?? [0, 0, 0], rotation: actor.rotation ?? [0, 0, 0], height: actor.height ?? 1.72, pose: actor.pose ?? "stand" },
+        { position: actor.position ?? [0, 0, 0], rotation: actor.rotation ?? [0, 0, 0], height: actor.height ?? speciesHeight(actor.species), pose: actor.pose ?? "stand", species: actor.species },
         (part as BodyPart) ?? "chest",
       );
     }
@@ -279,7 +281,7 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
     },
     actor(id: string, o: ActorOpts = {}): ActorHandle {
       ensureFreeId(id);
-      spec.actors.push({ id, name: o.name, color: o.color, height: o.height, build: o.build, position: o.at, rotation: o.facing !== undefined ? [0, o.facing, 0] : undefined, pose: o.pose, aim: o.aim });
+      spec.actors.push({ id, name: o.name, species: o.species, color: o.color, height: o.height, build: o.build, position: o.at, rotation: o.facing !== undefined ? [0, o.facing, 0] : undefined, pose: o.pose, aim: o.aim });
       return makeActor(id);
     },
     /** Handle for something that already exists in the scene (placed by hand or by an earlier script). */

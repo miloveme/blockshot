@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { BONES, type BoneName } from "./rig";
+import { speciesColor, speciesHeight } from "./creature";
 
 /**
  * Blockshot Spec v0.1 — the single source of truth for a project.
@@ -83,22 +84,32 @@ export const Space = z.discriminatedUnion("type", [
 ]);
 export type Space = z.infer<typeof Space>;
 
-export const Actor = z.object({
-  id: Id,
-  name: z.string().optional(),
-  color: Color.default("#c8ccd4"),
-  height: z.number().min(0.5).max(2.5).default(1.72),
-  build: z.enum(["slim", "average", "heavy"]).default("average"),
-  position: Vec3.default([0, 0, 0]),
-  rotation: Vec3.default([0, 0, 0]),
-  pose: Pose.default("stand"),
-  /**
-   * Target point — where a camera aims when this actor is its subject ("id" without a part).
-   * Offset in meters from the centre of the head, in the head's own frame (x left, y up, z forward), so it follows
-   * the head when the actor sits, walks or turns. Default (omitted) = the face.
-   */
-  aim: Vec3.optional(),
-});
+/** What an actor is: a person (the mannequin), a four-legged animal, a two-legged animal or a bird (see core/creature). */
+export const SPECIES = ["human", "dog", "cat", "tiger", "horse", "bear", "chicken", "ostrich", "penguin", "dinosaur", "pigeon", "eagle"] as const;
+export const Species = z.enum(SPECIES);
+export type Species = z.infer<typeof Species>;
+
+export const Actor = z
+  .object({
+    id: Id,
+    name: z.string().optional(),
+    species: Species.default("human"),
+    /** default: light grey for a person, the species' own colour for an animal */
+    color: Color.optional(),
+    /** top of the head standing, m. Default: 1.72 for a person, the species' own size for an animal */
+    height: z.number().min(0.1).max(6).optional(),
+    build: z.enum(["slim", "average", "heavy"]).default("average"),
+    position: Vec3.default([0, 0, 0]),
+    rotation: Vec3.default([0, 0, 0]),
+    pose: Pose.default("stand"),
+    /**
+     * Target point — where a camera aims when this actor is its subject ("id" without a part).
+     * Offset in meters from the centre of the head, in the head's own frame (x left, y up, z forward), so it follows
+     * the head when the actor sits, walks or turns. Default (omitted) = the face.
+     */
+    aim: Vec3.optional(),
+  })
+  .transform((a) => ({ ...a, color: a.color ?? speciesColor(a.species), height: a.height ?? speciesHeight(a.species) }));
 export type Actor = z.infer<typeof Actor>;
 
 export const PROP_TYPES = [

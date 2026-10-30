@@ -2,6 +2,9 @@ import { BlockshotSpec, BODY_SURFACES, type Target } from "./schema";
 import { parseRef } from "./mirror";
 import { PROP_CATALOG, SEATS } from "./catalog";
 
+/** gestures an animal can do (with its head) */
+const ANIMAL_GESTURES = new Set<string>(["nod", "shakeHead", "lookAround", "bow", "think"]);
+
 export interface Issue {
   path: string;
   message: string;
@@ -120,6 +123,11 @@ export function validateSpec(input: unknown): ValidationResult {
       if (!foot && a.on === "floor") errors.push({ path: `${p}.on`, message: `A hand contact goes on a body surface (${BODY_SURFACES.join(", ")}), a point [x,y,z], a prop id or "actor.part"` });
       if (!foot && !body && a.on !== "floor") checkTarget(a.on, `${p}.on`);
       if (a.end !== undefined && a.end <= a.start) errors.push({ path: `${p}.end`, message: `Contact end (${a.end}) must be after start (${a.start})` });
+    }
+    // hands-only actions do nothing on an animal (kept, but said so)
+    if ((a.type === "hold" || a.type === "reach" || a.type === "handShape" || a.type === "contact" || (a.type === "gesture" && !ANIMAL_GESTURES.has(a.gesture))) && "actor" in a) {
+      const who = spec.actors.find((x) => x.id === a.actor);
+      if (who && who.species !== "human") warnings.push({ path: p, message: `"${a.actor}" is a ${who.species}: ${a.type === "gesture" ? `the "${a.gesture}" gesture` : `"${a.type}"`} only works on people (animals take nod, shakeHead, lookAround, bow)` });
     }
     if ("camera" in a) checkCamera(a.camera, `${p}.camera`);
     if ("target" in a && a.target !== null) checkTarget(a.target, `${p}.target`);

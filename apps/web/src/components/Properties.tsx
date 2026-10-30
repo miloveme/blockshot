@@ -1,6 +1,6 @@
 "use client";
 
-import { GESTURES, HAND_SHAPES, LENS_PRESETS, POSES, SEATS, defaultPropAim, addGesture, addHandShape, addHold, addReach, addSitDown, addStandUp, describeAction, labeledActions, patchActionAt, keyTimes, kindOf, BODY_BONES, bakeActor, clearBoneKeys, hasBakedKeys, hasBoneKeys, keyBones, keyCurrentPose, mirrorBonePose, setBoneRotation, snapshotPose, unbakeActor, type BoneName, type BonePose, movesOf, patchMoveAt, removeActionAt, patchSubjectKey, removeSubjectKey, subjectKeys, type SubjectKey, type Gesture, type HandShape, type Pose } from "@blockshot/core";
+import { CREATURES, GESTURES, HAND_SHAPES, LENS_PRESETS, POSES, SEATS, SPECIES, SPECIES_LABEL, creatureDef, speciesHeight, defaultPropAim, addGesture, addHandShape, addHold, addReach, addSitDown, addStandUp, describeAction, labeledActions, patchActionAt, keyTimes, kindOf, BODY_BONES, bakeActor, clearBoneKeys, hasBakedKeys, hasBoneKeys, keyBones, keyCurrentPose, mirrorBonePose, setBoneRotation, snapshotPose, unbakeActor, type BoneName, type BonePose, movesOf, patchMoveAt, removeActionAt, patchSubjectKey, removeSubjectKey, subjectKeys, type SubjectKey, type Gesture, type HandShape, type Pose } from "@blockshot/core";
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { hasModel, importGlb } from "@/lib/models";
@@ -13,6 +13,9 @@ import { CommandButton, PanelSection, Tally, useOnAirCamera } from "./ui";
 import { Accessibility, Armchair, Box, Camera as CameraIcon, Car, Copy, Crosshair, Footprints, Move3d, PersonStanding, Plus, Sparkles, Trash2, User, X } from "lucide-react";
 
 const POSE_LABEL: Record<Pose, string> = { stand: "서기", idle: "대기", walk: "걷기", run: "달리기", sit: "앉기", point: "가리키기", talk: "말하기", crouch: "숙이기", climb: "계단 오르기" };
+/** what the poses look like on an animal (where it differs) */
+const animalPoseLabel = (def: NonNullable<ReturnType<typeof creatureDef>>, p: Pose): string | undefined =>
+  ({ run: def.flies ? "날기" : "달리기", crouch: def.plan === "quadruped" ? "엎드리기" : "웅크리기", sit: def.plan === "quadruped" ? "앉기" : "웅크려 앉기", talk: "짖기 · 울기", point: "경계" })[p as string];
 
 export function Outliner() {
   const spec = useStudio((s) => s.spec);
@@ -51,6 +54,7 @@ export function Properties() {
   const prop = spec.props.find((p) => p.id === id);
   const cam = spec.cameras.find((c) => c.id === id);
   const aState = ss.actors[id];
+  const animal = actor ? creatureDef(actor.species) : null;
   const cState = ss.cameras[id];
 
   // position / rotation shown at the current time; edits become keys when the property is animated
@@ -70,7 +74,7 @@ export function Properties() {
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold text-ink">{title}</div>
           <div className="truncate font-mono text-[10px] text-ink-3">
-            {kind === "actor" ? "인물" : kind === "camera" ? "카메라" : prop?.type === "model" ? "모델" : `소품 · ${prop?.type}`} · {id}
+            {kind === "actor" ? (actor && creatureDef(actor.species) ? `동물 · ${SPECIES_LABEL[actor.species]}` : "인물") : kind === "camera" ? "카메라" : prop?.type === "model" ? "모델" : `소품 · ${prop?.type}`} · {id}
           </div>
           {cam ? <OnAirStatus cameraId={id} /> : null}
         </div>
@@ -78,23 +82,33 @@ export function Properties() {
         <CommandButton id="edit.delete" icon={Trash2} size="sm" tone="danger" />
       </div>
 
-      <PanelSection id="obj" title={actor ? "인물" : cam ? "카메라" : "소품"} icon={actor ? PersonStanding : cam ? CameraIcon : Box}>
+      <PanelSection id="obj" title={actor ? (animal ? "동물" : "인물") : cam ? "카메라" : "소품"} icon={actor ? PersonStanding : cam ? CameraIcon : Box}>
         {actor ? (
           <>
           <Row label="이름">
             <TextField value={actor.name ?? ""} onCommit={(v) => patch(id, { name: v || undefined })} />
           </Row>
+          <Row label="종류">
+            <SelectField
+              value={actor.species}
+              options={SPECIES.map((s) => ({ value: s, label: SPECIES_LABEL[s] }))}
+              // a new species comes at its own size and colour
+              onCommit={(v) => patch(id, { species: v, height: speciesHeight(v), ...(v !== "human" ? { color: CREATURES[v].color } : {}) })}
+            />
+          </Row>
           <Row label="색상">
             <ColorField value={actor.color} onCommit={(v) => patch(id, { color: v })} />
           </Row>
-          <Row label="키(m)">
-            <NumField value={actor.height} min={0.5} max={2.5} step={0.01} onCommit={(v) => patch(id, { height: v })} />
+          <Row label={animal ? "높이(m)" : "키(m)"}>
+            <NumField value={actor.height} min={animal ? 0.1 : 0.5} max={animal ? 6 : 2.5} step={0.01} onCommit={(v) => patch(id, { height: v })} />
           </Row>
-          <Row label="체형">
-            <SelectField value={actor.build} options={[{ value: "slim", label: "마름" }, { value: "average", label: "보통" }, { value: "heavy", label: "큼" }]} onCommit={(v) => patch(id, { build: v })} />
-          </Row>
+          {animal ? null : (
+            <Row label="체형">
+              <SelectField value={actor.build} options={[{ value: "slim", label: "마름" }, { value: "average", label: "보통" }, { value: "heavy", label: "큼" }]} onCommit={(v) => patch(id, { build: v })} />
+            </Row>
+          )}
           <Row label="포즈">
-            <SelectField value={aState?.pose ?? actor.pose} options={POSES.map((p) => ({ value: p, label: POSE_LABEL[p] }))} onCommit={(v) => setPoseCmd(id, v)} />
+            <SelectField value={aState?.pose ?? actor.pose} options={POSES.map((p) => ({ value: p, label: animal ? (animalPoseLabel(animal, p) ?? POSE_LABEL[p]) : POSE_LABEL[p] }))} onCommit={(v) => setPoseCmd(id, v)} />
           </Row>
           </>
         ) : null}
@@ -181,9 +195,11 @@ export function Properties() {
           <PanelSection id="acting" title="연기" icon={Sparkles}>
             <ActingControls actorId={id} />
           </PanelSection>
-          <PanelSection id="pose" title="포즈 · 뼈 키프레임" icon={Accessibility} defaultOpen={false}>
-            <PoseEditor actorId={id} />
-          </PanelSection>
+          {animal ? null : (
+            <PanelSection id="pose" title="포즈 · 뼈 키프레임" icon={Accessibility} defaultOpen={false}>
+              <PoseEditor actorId={id} />
+            </PanelSection>
+          )}
         </>
       ) : null}
       {cam ? (

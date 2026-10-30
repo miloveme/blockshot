@@ -1,24 +1,23 @@
-import type { Action, BodyPart, BodySurface, ContactPart, Ease, Gesture, HandShape, HoldAt, Key, Pose, BlockshotSpec, Prop, Target, TrackProperty, Vec3 } from "./schema";
+import type { Action, BodyPart, BodySurface, ContactPart, Ease, Gesture, HandShape, HoldAt, Key, Pose, BlockshotSpec, Prop, Species, Target, TrackProperty, Vec3 } from "./schema";
 import { applyEase, DEG, unwrapYaw, vec, yawTowards } from "./math";
 import { verticalFov } from "./camera";
 import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
 import { seatPose, standOutPoint } from "./catalog";
 import { planAroundMovers, timeRouteOnGrid, type Mover } from "./nav-time";
 import { bakeNav, crouchSpans, surfaceSpans, navRadiusOf, routeLegs, staticActors, type Circle, type NavGrid } from "./nav";
-import { BONES, REST_HEIGHT, applyLayer, blendPoses, clonePose, smoothstep, solveRig, toLocal, toWorld, type BoneName, type Layer, type RigPose, type Skeleton } from "./rig";
+import { BONES, REST_HEIGHT, applyLayer, restPose, blendPoses, clonePose, smoothstep, solveRig, toLocal, toWorld, type BoneName, type Layer, type RigPose, type Skeleton } from "./rig";
 import { Q } from "./quat";
 import { driveKeys, KEY_STEP, motionAt, motionFromKeys, smoothPath, type Motion } from "./vehicle";
 import { PROP_CATALOG, propSize } from "./catalog";
 import { CONTACT_PATCHES, surfaceInActor } from "./inspect";
 import { actionLabels } from "./actions";
 import { BODY_SURFACES } from "./schema";
+import { creatureDef, creatureGait, creaturePart, creaturePose, gaitSample, moveSpeed, restCreaturePose, type CreatureDef, type CreatureGait, type CreaturePose } from "./creature";
 import { basePose, envelope, gaitPose, solveLegIK, turnStepPose, TURN_STEP_ANGLE, type GaitTrack, type TurnTrack, GESTURE_DEFS, handLayer, handShapeLayer, lookLayer, RELAXED_HANDS, sampleGesture, solveArm, strideFor } from "./poses";
 
 const BODY_SURFACE_SET = new Set<string>(BODY_SURFACES);
 /** how far in front of the pelvis the feet rest while seated (rest metres) — where the pelvis goes when rising */
 const SEATED_FOOT_FORWARD = 0.42;
-const WALK_SPEED = 1.3;
-const RUN_SPEED = 3.5;
 const TURN_TIME = 0.3;
 const ORBIT_SAMPLES_PER_SEC = 12;
 /** seconds to blend from the previous pose into a new one */
@@ -148,6 +147,9 @@ export interface ActorState {
   /** final bone rotations: base pose + blend + look-at + gestures + reach IK — the renderer just applies these */
   rig: RigPose;
   lookTarget: Vec3 | null;
+  species: Species;
+  /** an animal's pose (torso, legs, head, tail, wings) — set instead of a meaningful `rig` when species ≠ human */
+  creature?: CreaturePose;
 }
 
 export interface CameraState {
@@ -338,7 +340,7 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       scene.routes.set(a, points);
       const lengths = points.slice(1).map((p, i) => vec.distance(points[i]!, p));
       const total = lengths.reduce((s, l) => s + l, 0) || 1e-6;
-      const speed = a.speed ?? (a.type === "runTo" ? RUN_SPEED : WALK_SPEED);
+      const speed = a.speed ?? moveSpeed(actor.species, actor.height, a.type === "runTo");
       const duration = a.duration ?? total / speed;
 
       // time every point at a constant pace along the route
@@ -751,7 +753,13 @@ const PART_LAYOUT: Record<"stand" | "sit", Record<BodyPart, [y: number, side: nu
 };
 
 /** World position of an actor body part. Local +X is the actor's left (actor faces +Z at yaw 0). */
-export function partPosition(state: Pick<ActorState, "position" | "rotation" | "height" | "pose">, part: BodyPart): Vec3 {
+export function partPosition(state: Pick<ActorState, "position" | "rotation" | "height" | "pose"> & Partial<Pick<ActorState, "species" | "creature">>, part: BodyPart): Vec3 {
+  const def = creatureDef(state.species);
+  if (def) {
+    const s = state.height / def.height;
+    const at = creaturePart(def, state.creature ?? restCreature(def), part);
+    return toWorld([at[0] * s, at[1] * s, at[2] * s], state.position, state.rotation);
+  }
   const layout = PART_LAYOUT[state.pose === "sit" ? "sit" : "stand"][part];
   const h = state.height;
   const s = h / 1.72;
@@ -787,7 +795,63 @@ function actorCore(scene: CompiledScene, id: string, t: number) {
   }
   const poseTime = Math.max(0, t - poseStart);
   const blend = changed ? Math.min(1, poseTime / POSE_BLEND) : 1;
-  return { actor, position, rotation, pose, poseTime, prevPose, prevPoseTime: Math.max(0, t - prevStart), blend };
+  // a bird that runs flies: it rises after taking off and comes down once it lands
+  const def = creatureDef(actor.species);
+  let fly = 0;
+  let lifted = position;
+  if (def?.flies) {
+    if (pose === "run") fly = smoothstep(poseTime / FLY_RISE);
+    else if (changed && prevPose === "run") fly = 1 - smoothstep(poseTime / FLY_RISE);
+    if (fly > 0) lifted = [position[0], position[1] + (def.flyHeight ?? 2) * (actor.height / def.height) * fly, position[2]];
+  }
+  return { actor, position: lifted, rotation, pose, poseTime, prevPose, prevPoseTime: Math.max(0, t - prevStart), blend, fly };
+}
+
+const restCreatureCache = new Map<CreatureDef, CreaturePose>();
+const restCreature = (def: CreatureDef) => {
+  let p = restCreatureCache.get(def);
+  if (!p) restCreatureCache.set(def, (p = restCreaturePose(def)));
+  return p;
+};
+
+/** seconds a bird takes to climb to (or come down from) its flying height */
+const FLY_RISE = 0.9;
+
+const creatureGaitCache = new WeakMap<CompiledScene, Map<string, CreatureGait>>();
+
+function creatureGaitOf(scene: CompiledScene, id: string, def: CreatureDef, scale: number): CreatureGait {
+  let perScene = creatureGaitCache.get(scene);
+  if (!perScene) creatureGaitCache.set(scene, (perScene = new Map()));
+  let g = perScene.get(id);
+  if (!g) {
+    const pos = scene.tracks.get(trackKey(id, "position"))!;
+    const rot = scene.tracks.get(trackKey(id, "rotation"))!;
+    const poseKeys = scene.tracks.get(trackKey(id, "pose"))!;
+    const n = Math.ceil(scene.spec.settings.duration * 60) + 2;
+    g = creatureGait(def, scale, n, (k) => ({ p: sampleKeys(pos, k / 60) as Vec3, yaw: (sampleKeys(rot, k / 60) as Vec3)[1], pose: sampleKeys(poseKeys, k / 60) as Pose }));
+    perScene.set(id, g);
+  }
+  return g;
+}
+
+/** An animal's pose at time t (see core/creature). */
+function creatureAt(scene: CompiledScene, id: string, t: number, core: ReturnType<typeof actorCore>, lookTarget: Vec3 | null): CreaturePose {
+  const def = creatureDef(core.actor.species)!;
+  const scale = core.actor.height / def.height;
+  const local = lookTarget ? toLocal(lookTarget, core.position, core.rotation) : null;
+  const gl = (scene.acts.get(id) ?? []).find((l) => l.kind === "gesture" && t >= l.start && t < l.end);
+  const gesture = gl && gl.kind === "gesture" ? { name: gl.gesture, u: (t - gl.start) / Math.max(1e-3, gl.end - gl.start), w: gl.intensity } : null;
+  return creaturePose(def, {
+    pose: core.pose,
+    prevPose: core.prevPose,
+    blend: core.blend,
+    poseTime: core.poseTime,
+    t,
+    gait: gaitSample(creatureGaitOf(scene, id, def, scale), t),
+    fly: core.fly,
+    look: local ? [local[0] / scale, local[1] / scale, local[2] / scale] : null,
+    gesture,
+  });
 }
 
 /** Resolve a Vec3 or "id[.part]" reference to a world point at time t. Actor parts follow the posed skeleton. */
@@ -811,6 +875,15 @@ function resolveImpl(scene: CompiledScene, target: AimTarget, t: number, rigAwar
   }
   if (scene.spec.actors.some((a) => a.id === id)) {
     const core = actorCore(scene, id, t);
+    const def = creatureDef(core.actor.species);
+    if (def) {
+      // an animal: its posed head / feet / … (the layout pass uses the standing pose, so reaches can never recurse)
+      const s = core.actor.height / def.height;
+      const pose = rigAware ? creatureAt(scene, id, t, core, null) : restCreature(def);
+      const at = creaturePart(def, pose, (part as BodyPart | undefined) ?? "head");
+      const aim: Vec3 = !part ? (core.actor.aim ?? [0, 0, 0]) : [0, 0, 0];
+      return toWorld([(at[0] + aim[0]) * s, (at[1] + aim[1]) * s, (at[2] + aim[2]) * s], core.position, core.rotation);
+    }
     const scale = core.actor.height / REST_HEIGHT;
     // a bare actor id means its target point (default: the face)
     if (!part) {
@@ -1668,7 +1741,8 @@ export function evaluate(scene: CompiledScene, t: number): SceneState {
       prevPoseTime: core.prevPoseTime,
       blend: core.blend,
       lookTarget,
-      rig: computeRig(scene, a.id, t, core, lookTarget).pose,
+      species: a.species,
+      ...(creatureDef(a.species) ? { rig: restPose(), creature: creatureAt(scene, a.id, t, core, lookTarget) } : { rig: computeRig(scene, a.id, t, core, lookTarget).pose }),
     };
   }
 

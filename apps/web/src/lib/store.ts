@@ -1,14 +1,14 @@
 "use client";
 
 import { create } from "zustand";
-import { compile, type TakeMode, editDuration, editTimeOf, evaluate, locateEdit, validateSpec, type BlockshotSpec, type BoneName, type CompiledScene, type ClipData, type PropType, type SceneState, type Vec3 } from "@blockshot/core";
+import { compile, type TakeMode, editDuration, editTimeOf, evaluate, locateEdit, validateSpec, type BlockshotSpec, type BoneName, type CompiledScene, type ClipData, type PropType, type SceneState, type Species, type Vec3 } from "@blockshot/core";
 import example from "@blockshot/core/examples/living-room.json";
 
 export type ViewMode = { kind: "free" } | { kind: "shot" } | { kind: "camera"; id: string };
 export type GizmoMode = "translate" | "rotate" | "scale";
 export type Panel = "scene" | "assets" | "shots" | "ai" | "render";
 /** What a click on the floor creates. */
-export type AssetRef = { kind: "actor" } | { kind: "camera" } | { kind: "prop"; type: PropType; asset?: string };
+export type AssetRef = { kind: "actor"; species?: Species } | { kind: "camera" } | { kind: "prop"; type: PropType; asset?: string };
 /** Armed tool: placing an asset, or drawing a walk path for an actor point by point. */
 export type Tool = { kind: "place"; ref: AssetRef } | { kind: "path"; actorId: string; points: Vec3[]; run: boolean };
 /** Main area: 3D viewport, 3D + plan side by side, or the plan alone. */

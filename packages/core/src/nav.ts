@@ -2,6 +2,7 @@ import type { BlockshotSpec, Prop, Vec3 } from "./schema";
 import { PROP_CATALOG, propSize } from "./catalog";
 import { DEG } from "./math";
 import { surfaceTopAt, surfacesOf, isSurface, type Surface } from "./surfaces";
+import { creatureDef } from "./creature";
 
 /**
  * Navigation: a baked 2.5-D occupancy grid + A* + line-of-sight smoothing (docs/NAVIGATION.md).
@@ -143,6 +144,9 @@ export function staticActors(spec: BlockshotSpec): string[] {
 
 /** Body radius of an actor: 0.22 m average, scaled by build and height. */
 export const navRadiusOf = (actor: BlockshotSpec["actors"][number]) => {
+  // an animal: a little more than its torso's half-width (long bodies still turn through the same gaps)
+  const def = creatureDef(actor.species);
+  if (def) return Math.round(Math.min(0.45, Math.max(0.08, def.bodyR * 1.15 * (actor.height / def.height))) * 40) / 40;
   const width = { slim: 0.85, average: 1, heavy: 1.25 }[actor.build];
   return Math.round(Math.min(0.45, Math.max(0.15, 0.22 * width * (actor.height / 1.72))) * 40) / 40;
 };

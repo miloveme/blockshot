@@ -3,6 +3,7 @@ export * from "./math";
 export * from "./camera";
 export * from "./validate";
 export * from "./evaluate";
+export * from "./creature";
 export * from "./builder";
 export * from "./paste";
 export * from "./prompt-kit";

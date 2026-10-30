@@ -68,8 +68,9 @@ Blockshot Spec은 프로젝트의 **유일한 진실 원천** 이다. UI 편집,
 {
   "id": "minsu",
   "name": "민수",
-  "color": "#e4572e",
-  "height": 1.75,            // 키(m), 기본 1.72
+  "species": "human",        // (선택) human(기본) | dog | cat | tiger | horse | bear | chicken | ostrich | penguin | dinosaur | pigeon | eagle
+  "color": "#e4572e",        // 기본: 사람은 연회색, 동물은 종마다의 색
+  "height": 1.75,            // 키(m, 서 있을 때 머리 꼭대기). 기본: 사람 1.72, 동물은 종마다의 크기
   "build": "average",        // slim | average | heavy
   "position": [0, 0, 2],
   "rotation": [0, 180, 0],   // 보통 y(yaw)만 사용
@@ -77,6 +78,12 @@ Blockshot Spec은 프로젝트의 **유일한 진실 원천** 이다. UI 편집,
   "aim": [0, -0.4, 0]        // (선택) 타겟 포인트 — 얼굴에서의 오프셋(m, 머리 기준 방향: x 왼쪽 · y 위 · z 앞). 생략하면 얼굴
 }
 ```
+
+**동물** (`species` ≠ `human`): 네발(dog·cat·tiger·horse·bear), 두발(chicken·ostrich·penguin·dinosaur), 새(pigeon·eagle). 기본 높이는 강아지 0.81 m, 고양이 0.4 m, 호랑이 1.11 m, 말 2.23 m, 곰 1.09 m, 닭 0.51 m, 타조 2.28 m, 펭귄 0.72 m, 공룡 1.55 m, 비둘기 0.23 m, 독수리 0.59 m이며 `height`로 바꾸면 비율 그대로 커지고 걷기·달리기 속도는 √크기로 따라간다.
+- 쓰는 액션: `walkTo`·`runTo`(네발은 갤럽)·`turnTo`·`lookAt`·`pose`(`sit` 앉기, `crouch` 엎드리기·웅크리기, `talk` 짖기·울기, `idle`은 꼬리 흔들기·숨쉬기, `point` 경계)·`gesture`의 고개 동작(nod·shakeHead·lookAround·bow). 발은 사람처럼 디딘 자리에 고정된다(거리 기반 보행, 회전도 걸음).
+- **새가 달리면 난다**: `runTo`는 날아가기 — 날갯짓하며 비행 높이(비둘기 2 m, 독수리 3 m)로 오르고, 도착하면 내려앉는다.
+- 부위: `head`·`mouth`·`chest`·`pelvis`, `foot_l/r` = 뒷발(두발·새는 발), `hand_l/r` = 앞발(새는 날개 끝).
+- 손 동작(`hold`·`reach`·`handShape`·`contact`)과 그 밖의 제스처는 동물에게 적용되지 않는다(경고). `build`·뼈 키는 사람 전용.
 
 **타겟 포인트**: 카메라가 부위 없이 `"minsu"`를 피사체로 잡으면 이 점을 바라본다. 기본은 **얼굴(머리 중심)**이며 머리에 붙어 있어 앉기·걷기·고개 돌리기를 따라간다. 소품도 `aim`(소품 자체 공간의 점, 스케일 1 기준 m)을 가지며 기본은 **물체 상자의 중앙**. 특정 부위를 원하면 `"minsu.chest"`처럼 부위를 명시한다.
 

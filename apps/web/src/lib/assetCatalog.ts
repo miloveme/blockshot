@@ -1,9 +1,9 @@
-import { PROP_CATALOG, type PropType } from "@blockshot/core";
+import { CREATURES, PROP_CATALOG, SPECIES, type PropType } from "@blockshot/core";
 import type { AssetRef } from "./store";
 
 /** The built-in asset library shown in the asset panel. */
 
-export type AssetCategory = "people" | "furniture" | "architecture" | "props" | "vehicles" | "cameras";
+export type AssetCategory = "people" | "animals" | "furniture" | "architecture" | "props" | "vehicles" | "cameras";
 
 export interface AssetItem {
   key: string;
@@ -17,6 +17,7 @@ export interface AssetItem {
 
 export const CATEGORY_LABEL: Record<AssetCategory, string> = {
   people: "인물",
+  animals: "동물",
   furniture: "가구",
   architecture: "벽·문·창",
   props: "소품",
@@ -30,8 +31,16 @@ const prop = (type: PropType, label: string, icon: string, category: AssetCatego
   return { key: type, label, icon, category, ref: { kind: "prop", type }, dims };
 };
 
+/** emoji per animal species for the asset cards */
+export const SPECIES_ICON: Partial<Record<(typeof SPECIES)[number], string>> = {
+  dog: "🐕", cat: "🐈", tiger: "🐅", horse: "🐎", bear: "🐻", chicken: "🐓", ostrich: "🦤", penguin: "🐧", dinosaur: "🦖", pigeon: "🕊️", eagle: "🦅",
+};
+
 export const BUILTIN_ASSETS: AssetItem[] = [
   { key: "actor", label: "인물 (마네킹)", icon: "🧍", category: "people", ref: { kind: "actor" }, dims: "키 1.72 m" },
+  ...SPECIES.filter((s) => s !== "human").map(
+    (s): AssetItem => ({ key: `animal:${s}`, label: CREATURES[s].label, icon: SPECIES_ICON[s] ?? "🐾", category: "animals", ref: { kind: "actor", species: s }, dims: `높이 ${CREATURES[s].height} m` }),
+  ),
   prop("chair", "의자", "🪑", "furniture"),
   prop("table", "테이블", "🍽️", "furniture"),
   prop("sofa", "소파", "🛋️", "furniture"),
@@ -53,7 +62,7 @@ export const BUILTIN_ASSETS: AssetItem[] = [
   { key: "camera", label: "카메라", icon: "📷", category: "cameras", ref: { kind: "camera" }, dims: "눈높이 1.6 m" },
 ];
 
-export const refKey = (r: AssetRef) => (r.kind === "prop" ? `${r.type}:${r.asset ?? ""}` : r.kind);
+export const refKey = (r: AssetRef) => (r.kind === "prop" ? `${r.type}:${r.asset ?? ""}` : r.kind === "actor" && r.species && r.species !== "human" ? `actor:${r.species}` : r.kind);
 export const sameRef = (a: AssetRef, b: AssetRef) => refKey(a) === refKey(b);
 
 /** MIME type used when dragging an asset card onto the viewport / plan. */

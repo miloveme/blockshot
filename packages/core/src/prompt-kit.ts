@@ -1,4 +1,5 @@
-import { PROP_TYPES, POSES, BODY_PARTS, SPEC_VERSION, type BlockshotSpec, type Space } from "./schema";
+import { PROP_TYPES, POSES, BODY_PARTS, SPECIES, SPEC_VERSION, type BlockshotSpec, type Space } from "./schema";
+import { CREATURES } from "./creature";
 import { PROP_CATALOG, SEATS, propSize } from "./catalog";
 import { mirrorPlane } from "./mirror";
 import { actionLabels, describeAction } from "./actions";
@@ -17,6 +18,7 @@ const RULES = `Conventions:
 - Actors/props with rotation y=0 face +Z. Use rotation [0, yaw, 0] to turn them.
 - References are strings: "actorId" or "actorId.part" (parts: ${BODY_PARTS.join(", ")}); "actorId.part@mirrorId" is that point as seen inside a mirror prop.
   A bare "id" means the object's target point: an actor's face (follows the head when sitting/turning), a prop's box centre. Optional "aim" moves it (actor: offset from the face in the head's frame; prop: point in its own space).
+- Animals are actors with a "species": ${SPECIES.filter((s) => s !== "human").map((s) => `${s} (${CREATURES[s].height} m)`).join(", ")}. Four-legged: dog, cat, tiger, horse, bear; two-legged: chicken, ostrich, penguin, dinosaur; birds: pigeon, eagle. They take walkTo / runTo / turnTo / lookAt / pose (sit, crouch = lie down, talk = bark / call, idle) and the head gestures nod / shakeHead / lookAround / bow; a BIRD that runs FLIES (runTo = fly there and land). Parts: head, mouth, chest, pelvis, foot_l/r (hind feet), hand_l/r (front paws, or wing tips). Hands-only actions (hold, reach, handShape, contact) do not apply to animals.
 - Room spaces are centered at the origin: x in [-width/2, width/2], z in [-depth/2, depth/2]. Walls: north(-Z) south(+Z) east(+X) west(-X).
 - Eye-level camera height is 1.5–1.7 m. Wide 18–28mm, normal 35–50mm, tele/close-up 85mm+.
 - Keep the 180-degree rule between cuts: with two people in play, every camera of a cut stays on the same side of the
@@ -74,7 +76,7 @@ const SPEC_SUMMARY = `Blockshot Spec v${SPEC_VERSION} fields:
   "settings": { "fps": 24, "duration": seconds, "resolution": [w, h] },
   "space": { "type": "room", "width", "depth", "height"?, "openings"?: [{ "kind": "door"|"window", "wall", "offset"?, "width"?, "height"?, "sill"? }] }
          | { "type": "ground", "size"? } | { "type": "street", "length"?, "roadWidth"?, "sidewalkWidth"? },
-  "actors": [{ "id", "name"?, "color"? "#rrggbb", "height"? m, "build"? "slim"|"average"|"heavy", "position": [x,0,z], "rotation"?: [0,yaw,0], "pose"? }],
+  "actors": [{ "id", "name"?, "species"?: "human" (default) | ${SPECIES.filter((s) => s !== "human").map((s) => `"${s}"`).join(" | ")}, "color"? "#rrggbb", "height"? m (animals default to their own size), "build"? "slim"|"average"|"heavy", "position": [x,0,z], "rotation"?: [0,yaw,0], "pose"? }],
   "props": [{ "id", "type", "position", "rotation"?, "scale"?, "color"? }],
   "cameras": [{ "id", "name"?, "position", "lookAt"?: [x,y,z] | ref, "focalLength"? mm }],
   "actions": [
@@ -86,7 +88,7 @@ Poses: ${POSES.join(", ")}. Prop types: ${LLM_PROP_TYPES.join(", ")}. Ease: line
 const SCRIPT_SUMMARY = `Blockshot Script API (JavaScript; globals: scene, vec, rand, interpolate, spring, noise, clamp):
 scene.settings({ fps, duration, resolution }); scene.meta({ title });
 scene.room({ width, depth, height, doors: [{ wall, offset }], windows: [{ wall, offset }] }) | scene.ground() | scene.street();
-const a = scene.actor(id, { name, color, height, at: [x,0,z], facing: yawDeg, pose });
+const a = scene.actor(id, { name, species?, color, height, at: [x,0,z], facing: yawDeg, pose });   // species: an animal (see Animals)
 a.walkTo([x,0,z] | [[x,0,z],...], { start, duration }); a.turnTo(target, { start }); a.pose(name, { start }); a.sitDown(chair, { start, duration?, offset? }); a.standUp({ start, to? }); a.gesture(name, { start, duration?, side?, intensity? }); a.reach(target, { start, hand?, duration? }); a.hold(prop, { start, at?, hand?, duration?, then? }); a.handShape(shape, { start, hand?, duration? }); a.lookAt(b.head, { start }); a.bone("rightUpperArm", [[1,[0,0,-10]],[2,[0,0,-90]]], "easeInOut"); a.hips([[1,[0,0,0]],[2,[0,-0.1,0]]]);   // hand-keyed bones: [time, [x°,y°,z°]]
 scene.prop(type, { id, at, facing, scale, color });
 const c = scene.camera(id, { lens, at: [x,y,z], lookAt: a.head });

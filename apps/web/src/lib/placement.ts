@@ -1,6 +1,6 @@
 "use client";
 
-import { addActorAt, addCameraAt, addDrive, addPropAt, addWalkPath, placeProp, propSize, type Vec3 } from "@blockshot/core";
+import { addActorAt, creatureDef, addCameraAt, addDrive, addPropAt, addWalkPath, placeProp, propSize, type Vec3 } from "@blockshot/core";
 import { useStudio, type AssetRef } from "./store";
 
 /** Click-to-place: turns a floor point (x, z) into a new actor / camera / prop through the pure core ops. One undo step each. */
@@ -26,7 +26,11 @@ export interface Ghost {
 /** Where `ref` would land at the floor point, for the hover preview (3D ghost and plan outline). */
 export function ghostFor(ref: AssetRef, point: [number, number]): Ghost {
   const spec = state().spec;
-  if (ref.kind === "actor") return { position: [point[0], 0, point[1]], rotation: [0, 0, 0], size: [0.5, 1.72, 0.5], label: "인물" };
+  if (ref.kind === "actor") {
+    const def = creatureDef(ref.species);
+    if (def) return { position: [point[0], 0, point[1]], rotation: [0, 0, 0], size: [def.bodyR * 2.2, def.height, Math.max(def.bodyR * 2.2, def.bodyLen + def.headR * 2)], label: def.label };
+    return { position: [point[0], 0, point[1]], rotation: [0, 0, 0], size: [0.5, 1.72, 0.5], label: "인물" };
+  }
   if (ref.kind === "camera") return { position: [point[0], 1.6, point[1]], rotation: [0, 0, 0], size: [0.3, 0.2, 0.4], label: "카메라" };
   const placed = placeProp(spec, { type: ref.type, asset: ref.asset }, point, stepOf());
   return { ...placed, size: propSize({ type: ref.type, asset: ref.asset }, spec.assets), label: ref.type };
@@ -37,7 +41,7 @@ export function placeAsset(ref: AssetRef, point: [number, number]) {
   lastToolUse = performance.now();
   let id: string | null = null;
   state().edit((s) => {
-    const r = ref.kind === "actor" ? addActorAt(s, point, stepOf()) : ref.kind === "camera" ? addCameraAt(s, point, stepOf()) : addPropAt(s, ref.type, point, { step: stepOf(), asset: ref.asset });
+    const r = ref.kind === "actor" ? addActorAt(s, point, stepOf(), ref.species) : ref.kind === "camera" ? addCameraAt(s, point, stepOf()) : addPropAt(s, ref.type, point, { step: stepOf(), asset: ref.asset });
     id = r.id;
     return r.spec;
   });

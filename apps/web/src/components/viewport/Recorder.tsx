@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { DEG, unwrapYaw, verticalFov, type Pose, type Vec3 } from "@blockshot/core";
+import { DEG, moveSpeed, unwrapYaw, verticalFov, type Pose, type Vec3 } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
 import { heldKeys, pushSample } from "@/lib/recorder";
 
@@ -73,7 +73,9 @@ export function Recorder() {
       if (len > 0) {
         mx /= len;
         mz /= len;
-        const speed = fast ? RUN : WALK;
+        // an animal moves at its own pace (a cat trots, a horse gallops — kept steerable)
+        const who = s.spec.actors.find((x) => x.id === rec.id);
+        const speed = who && who.species !== "human" ? Math.min(8, moveSpeed(who.species, who.height, fast)) : fast ? RUN : WALK;
         l.position = [l.position[0] + mx * speed * dt, l.position[1], l.position[2] + mz * speed * dt];
         const target = unwrapYaw(l.yaw, Math.atan2(mx, mz) / DEG);
         l.yaw += (target - l.yaw) * Math.min(1, dt * 10);

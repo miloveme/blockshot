@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Clapperboard, Film, Link2, Menu, Search, Sparkles } from "lucide-react";
-import { PROP_TYPES } from "@blockshot/core";
+import { PROP_TYPES, SPECIES } from "@blockshot/core";
 import { useStudio } from "@/lib/store";
 import type { MenuItemSpec } from "@/lib/ui";
 import { findCommand, isAvailable, runCommand, shortcutOf } from "@/lib/commands";
@@ -22,7 +22,7 @@ const MENUS: Array<{ id: string; label: string; items: () => MenuItemSpec[] }> =
   {
     id: "add",
     label: "추가",
-    items: () => [c("add.actor"), c("add.camera"), c("add.cameraFromView"), sep, head("소품"), ...PROP_TYPES.filter((t) => t !== "model").map((t) => c(`add.prop.${t}`)), sep, c("add.assets")],
+    items: () => [c("add.actor"), c("add.camera"), c("add.cameraFromView"), sep, head("동물"), ...SPECIES.filter((s) => s !== "human").map((s) => c(`add.animal.${s}`)), sep, head("소품"), ...PROP_TYPES.filter((t) => t !== "model").map((t) => c(`add.prop.${t}`)), sep, c("add.assets")],
   },
   { id: "object", label: "오브젝트", items: () => [c("object.move"), c("object.rotate"), c("object.scale"), c("object.snap"), sep, c("object.path")] },
   {

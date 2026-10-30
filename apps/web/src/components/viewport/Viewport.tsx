@@ -13,6 +13,7 @@ import { commitAim, commitBoneRotation, commitCamera, commitCameraRotation, comm
 import { registerBridge } from "@/lib/render";
 import { framedPose } from "@/lib/frame";
 import { Mannequin } from "./Mannequin";
+import { Creature } from "./Creature";
 import { PropObject } from "./Props";
 import { SpaceObject } from "./Space";
 import { Recorder } from "./Recorder";
@@ -463,7 +464,11 @@ function Scene() {
         <PropObject key={p.id} prop={p} />
       ))}
       {spec.actors.map((a) => (
-        <Mannequin key={`${a.id}|${a.color}|${a.build}|${a.name ?? ""}`} id={a.id} />
+        a.species && a.species !== "human" ? (
+          <Creature key={`${a.id}|${a.species}|${a.color}|${a.name ?? ""}`} id={a.id} species={a.species} color={a.color} name={a.name} />
+        ) : (
+          <Mannequin key={`${a.id}|${a.color}|${a.build}|${a.name ?? ""}`} id={a.id} />
+        )
       ))}
       {spec.cameras.map((c) => (
         <CameraGizmo key={`${c.id}|${c.name ?? ""}`} id={c.id} />
