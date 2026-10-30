@@ -124,13 +124,14 @@ Blockshot Spec은 프로젝트의 **유일한 진실 원천** 이다. UI 편집,
   "position": [2.5, 1.6, 4],
   "lookAt": "minsu.head",       // Vec3 또는 참조 문자열. 없으면 rotation 사용
   "tracking": "smooth",         // 피사체를 따라가는 반응: locked(기본) | smooth | loose | { pan, tilt, deadzone }
+  "shake": "handheld",          // 숏 전체 흔들림(선택): handheld | walk | run | vehicle | impact | { amount, speed, bob }
   "rotation": [0, 0, 0],
   "focalLength": 35,            // mm
   "sensor": "super35"           // super35(24.89×18.66) | fullframe(36×24) | [w, h] mm
 }
 ```
 
-`tracking`은 **무엇을 잡느냐가 아니라 조작자가 어떻게 따라가느냐**다. 이 카메라의 모든 피사체(`lookAt`, `cameraLookAt` 키, `orbit`/`mount`의 조준)에 적용된다.
+`tracking`은 **무엇을 잡느냐가 아니라 조작자가 어떻게 따라가느냐**다. 이 카메라의 모든 피사체(`lookAt`, `cameraLookAt` 키, `orbit`/`mount`의 조준)에 적용되고, `cameraLookAt` 키에 `tracking`을 주면 **그 피사체 구간만** 따로 정할 수 있다(예: 걸어 들어올 때는 smooth, 멈춰 대사할 때는 locked).
 
 | 값 | 팬(s) | 틸트(s) | 데드존 [가로, 세로] | 쓰임 |
 |---|---|---|---|---|
@@ -139,6 +140,18 @@ Blockshot Spec은 프로젝트의 **유일한 진실 원천** 이다. UI 편집,
 | `loose` | 0.3 | 0.7 | [0.05, 0.2] | 달리기·액션 와이드, 스테디캠 느낌 |
 
 `{ pan, tilt, deadzone }`로 직접 줄 수도 있다: `pan`/`tilt`는 가로/세로 평활 시간(초, 0–3), `deadzone`은 반 화면 대비 비율(0–0.9)로, 피사체가 이 안에서 움직이는 동안은 카메라가 움직이지 않는다. 평활은 **중심 가우시안**(리허설로 동선을 아는 조작자)이라 직선 이동은 지연 없이 그대로 따라가고 걸음의 주기적인 흔들림만 사라진다. 데드존은 구간 시작부터 앞으로 걸어가며 계산해 어느 시점에서 평가해도 결과가 같다. 편집기에서 새로 만드는 카메라는 `smooth`로 시작한다.
+
+`shake`는 **일부러 넣는 흔들림**이다. 조준(피사체)은 그대로 두고, 그 위에서 화면을 피치·요·롤로 돌린다. 숏 전체가 핸드헬드면 카메라의 `shake`로, 특정 순간(타격·폭발)이나 구간이면 `cameraShake` 액션으로 넣는다(둘은 더해진다).
+
+| 값 | 크기(°) | 속도(Hz) | 걸음 리듬 | 쓰임 |
+|---|---|---|---|---|
+| `handheld` | 0.5 | 0.7 | 0 | 들고 찍는 카메라 — 숨 쉬듯 천천히 흐름 |
+| `walk` | 0.9 | 1.8 | 0.5 | 걸으며 찍기 — 걸음마다 끄덕, 보폭마다 좌우 |
+| `run` | 2 | 2.8 | 0.5 | 뛰며 찍기 |
+| `vehicle` | 0.6 | 7 | 0 | 차 안·엔진 진동 — 빠르고 잘게 |
+| `impact` | 3.5 | 11 | 0 | 타격·폭발 — `cameraShake`에서는 즉시 튀었다 `duration` 안에 잦아든다 |
+
+`{ amount, speed, bob }`으로 직접 줄 수도 있다(`amount` 0–15°, `speed` 0.05–30 Hz, `bob` 0–1 = 그중 규칙적인 걸음 리듬의 비율). 흔들림은 결정론적 노이즈라 같은 시간은 언제나 같은 흔들림이고, 카메라마다 시드가 달라 두 카메라가 똑같이 흔들리지 않는다. 평가 결과의 `CameraState.shake`([pitch, yaw, roll]°)로 나오며, 렌더러는 조준 뒤 카메라 자신의 축으로 Y→X→Z 순서로 돌린다.
 
 수직 화각: `vFov = 2 * atan( sensorH_eff / (2 * focalLength) )`. 센서는 **가로 폭 기준(horizontal fit)** 으로 렌더 화면비에 맞춘다: `sensorH_eff = sensorW / aspect`.
 
@@ -165,7 +178,8 @@ LLM과 사람이 가장 많이 쓰는 레이어. 로드 시 `compile()`이 `trac
 | `standUp` | `actor, start, duration?(0.8), to?` | `stand`로 일어나 좌석(의자·소파) 앞 가장자리 너머 0.25 m까지 걸어 나온다(좌석이 아니면 바라보는 방향으로 0.6 m, 또는 `to`). `pose`/포즈 키로 `sit` → 다른 포즈로 바뀔 때도, 그 자리에 머물러 있으면 같은 방식으로 좌석 밖으로 나온다 |
 | `lookAt` | `actor, target, start, end?` | 머리 방향 |
 | `cameraMove` | `camera, to: Vec3, start, duration, ease?` | 카메라 이동 |
-| `cameraLookAt` | `camera, target, start, transition?, duration?, ease?` | **피사체 키**. `target: null`이면 그때부터 **자유**(피사체 없음 — 카메라 회전값으로 찍음; 카메라에 `lookAt`이 없고 키가 있으면 처음은 자유). 카메라의 `lookAt`이 처음부터의 피사체이고, 이 키가 `start`부터 피사체를 바꾼다(키들이 시간을 나눠 가짐; 처음 피사체로 돌아가려면 키를 하나 더). `transition`: `cut`(즉시, 컷 지점용) · `pan`(제자리에서 `duration`초 동안 회전, 기본 0.8) · `whip`(빠른 휩 팬, 기본 0.3). `ease`: `easeInOut`(기본)·`easeIn`·`easeOut`·`linear`. `transition` 없이 `duration`만 있으면 pan, 둘 다 없으면 cut. 회전은 시선 방향을 구면 보간하며 두 피사체가 움직여도 따라간다 |
+| `cameraLookAt` | `camera, target, start, transition?, duration?, ease?, tracking?` | **피사체 키**. `target: null`이면 그때부터 **자유**(피사체 없음 — 카메라 회전값으로 찍음; 카메라에 `lookAt`이 없고 키가 있으면 처음은 자유). 카메라의 `lookAt`이 처음부터의 피사체이고, 이 키가 `start`부터 피사체를 바꾼다(키들이 시간을 나눠 가짐; 처음 피사체로 돌아가려면 키를 하나 더). `transition`: `cut`(즉시, 컷 지점용) · `pan`(제자리에서 `duration`초 동안 회전, 기본 0.8) · `whip`(빠른 휩 팬, 기본 0.3). `ease`: `easeInOut`(기본)·`easeIn`·`easeOut`·`linear`. `transition` 없이 `duration`만 있으면 pan, 둘 다 없으면 cut. 회전은 시선 방향을 구면 보간하며 두 피사체가 움직여도 따라간다. `tracking`은 이 피사체를 따라가는 방식(없으면 카메라의 `tracking`, §7) |
+| `cameraShake` | `camera, start, style?(impact), duration?(0.8), intensity?(1, 0–3)` | **흔들림 구간**. `style`은 §7의 `shake`와 같은 값. `impact`는 즉시 튀었다 잦아들고, 나머지는 부드럽게 들어왔다 나간다. `intensity`로 세기 조절 |
 | `zoom` | `camera, focalLength, start, duration, ease?` | 초점거리 애니메이션 |
 | `orbit` | `camera, around: Vec3 \| ref, degrees, start, duration, ease?` | 대상 중심 원호 이동 |
 

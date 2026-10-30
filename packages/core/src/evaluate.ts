@@ -1,5 +1,6 @@
 import type { Action, BodyPart, BodySurface, Camera, ContactPart, Ease, Gesture, HandShape, HoldAt, Key, Pose, BlockshotSpec, Prop, Species, Target, TrackProperty, Vec3 } from "./schema";
-import { TRACKING_PRESETS } from "./schema";
+import { TRACKING_PRESETS, type Tracking } from "./schema";
+import { cameraShakeAt } from "./shake";
 import { applyEase, DEG, unwrapYaw, vec, yawTowards } from "./math";
 import { verticalFov } from "./camera";
 import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
@@ -60,6 +61,8 @@ interface Segment {
   ease?: Ease;
   /** a whip pan: the same turn, crammed into the middle of the blend */
   whip?: boolean;
+  /** a camera subject key's own tracking (else the camera's) */
+  tracking?: TrackingParams;
 }
 
 export interface CompiledScene {
@@ -163,6 +166,8 @@ export interface CameraState {
   focalLength: number;
   vFov: number;
   aspect: number;
+  /** deliberate shake: [pitch, yaw, roll] degrees turned on top of where the camera points (absent = steady) */
+  shake?: Vec3;
 }
 
 export interface SceneState {
@@ -676,7 +681,7 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       const list = scene.aims.get(a.camera) ?? [];
       const transition = a.transition ?? (a.duration ? "pan" : "cut");
       const blend = transition === "cut" ? 0 : (a.duration ?? (transition === "whip" ? WHIP_TIME : PAN_TIME));
-      list.push({ start: a.start, end: Infinity, target: a.target, blend, ease: a.ease ?? "easeInOut", whip: transition === "whip" });
+      list.push({ start: a.start, end: Infinity, target: a.target, blend, ease: a.ease ?? "easeInOut", whip: transition === "whip", ...(a.tracking ? { tracking: trackingParams(a.tracking) } : {}) });
       scene.aims.set(a.camera, list);
       break;
     }
@@ -743,7 +748,7 @@ function panBetween(eye: Vec3, a: Vec3, b: Vec3, k: number): Vec3 {
 /** The grid (s) a camera's subject path is sampled on when the camera follows it smoothly. */
 const TRACK_STEP = 1 / 30;
 type TrackingParams = { pan: number; tilt: number; deadzone: readonly [number, number] };
-const trackingOf = (c: Camera): TrackingParams => (typeof c.tracking === "object" ? c.tracking : TRACKING_PRESETS[c.tracking ?? "locked"]);
+const trackingParams = (t: Tracking | undefined): TrackingParams => (typeof t === "object" ? t : TRACKING_PRESETS[t ?? "locked"]);
 /** per aim segment: the subject path on the TRACK_STEP grid (with a dead zone: where the camera holds its aim) */
 const trackCache = new WeakMap<Segment, Vec3[]>();
 
@@ -758,7 +763,7 @@ const trackCache = new WeakMap<Segment, Vec3[]>();
 function aimPoint(scene: CompiledScene, c: Camera, seg: Segment, t: number, aspect: number): Vec3 | null {
   const target = seg.target;
   if (target == null) return null;
-  const tr = trackingOf(c);
+  const tr = seg.tracking ?? trackingParams(c.tracking);
   const zoned = tr.deadzone[0] > 0 || tr.deadzone[1] > 0;
   if (tr.pan <= 0 && tr.tilt <= 0 && !zoned) return resolveTarget(scene, target, t);
   const t0 = seg.start;
@@ -1892,6 +1897,8 @@ export function evaluate(scene: CompiledScene, t: number): SceneState {
       vFov: verticalFov(focalLength, c.sensor, aspect),
       aspect,
     };
+    const shake = cameraShakeAt(spec, c.id, t);
+    if (shake) cameras[c.id]!.shake = shake;
   }
 
   let activeShotId: string | null = null;

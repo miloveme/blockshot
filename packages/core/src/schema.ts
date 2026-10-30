@@ -183,6 +183,27 @@ export const Tracking = z.union([
 ]);
 export type Tracking = z.infer<typeof Tracking>;
 
+/**
+ * Deliberate camera shake (핸드헬드 흔들림), added on top of wherever the camera points — the subject stays the
+ * subject, the frame wobbles around it. Presets: "handheld" (an operator breathing, slow drift), "walk" / "run" (an
+ * operator on foot, rhythmic), "vehicle" (fast fine buzz), "impact" (a hit or explosion — a sharp jolt that dies away).
+ * The custom form: `amount` degrees of wobble, `speed` cycles a second, `bob` 0–1 share that is a regular step rhythm.
+ */
+export const SHAKE_PRESETS = {
+  handheld: { amount: 0.5, speed: 0.7, bob: 0 },
+  walk: { amount: 0.9, speed: 1.8, bob: 0.5 },
+  run: { amount: 2, speed: 2.8, bob: 0.5 },
+  vehicle: { amount: 0.6, speed: 7, bob: 0 },
+  impact: { amount: 3.5, speed: 11, bob: 0 },
+} as const satisfies Record<string, { amount: number; speed: number; bob: number }>;
+export type ShakePreset = keyof typeof SHAKE_PRESETS;
+export const SHAKE_STYLES = Object.keys(SHAKE_PRESETS) as ShakePreset[];
+export const Shake = z.union([
+  z.enum(["handheld", "walk", "run", "vehicle", "impact"]),
+  z.object({ amount: z.number().min(0).max(15), speed: z.number().min(0.05).max(30).default(1), bob: z.number().min(0).max(1).default(0) }),
+]);
+export type Shake = z.infer<typeof Shake>;
+
 export const Camera = z.object({
   id: Id,
   name: z.string().optional(),
@@ -190,6 +211,8 @@ export const Camera = z.object({
   lookAt: Target.optional(),
   /** how the camera follows its subject; absent = "locked" */
   tracking: Tracking.optional(),
+  /** shake for the whole time (a handheld camera); timed shakes are `cameraShake` actions */
+  shake: Shake.optional(),
   rotation: Vec3.default([0, 0, 0]),
   focalLength: z.number().min(4).max(600).default(35),
   sensor: Sensor.default("super35"),
@@ -270,8 +293,15 @@ export const Action = z.discriminatedUnion("type", [
     transition: z.enum(["cut", "pan", "whip"]).optional(),
     duration: z.number().min(0).max(30).optional(),
     ease: Ease.optional(),
+    /** how the camera follows THIS subject; absent = the camera's own `tracking` */
+    tracking: Tracking.optional(),
     ...timed,
   }),
+  /**
+   * Shake the camera from `start` for `duration` s (a hit, an explosion, a stretch of handheld). `intensity` scales the
+   * style; it eases in and out (an "impact" jolts at once and dies away).
+   */
+  z.object({ type: z.literal("cameraShake"), camera: Id, style: Shake.default("impact"), duration: z.number().positive().max(600).default(0.8), intensity: z.number().min(0).max(3).default(1), ...timed }),
   z.object({ type: z.literal("zoom"), camera: Id, focalLength: z.number().min(4).max(600), duration: z.number().positive(), ease: Ease.default("easeInOut"), ...timed }),
   z.object({ type: z.literal("orbit"), camera: Id, around: Target, degrees: z.number(), duration: z.number().positive(), ease: Ease.default("easeInOut"), ...timed }),
 ]);

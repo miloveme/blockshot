@@ -34,3 +34,4 @@ export * from "./inspect";
 export * from "./diagnose";
 export * from "./solve";
 export * from "./take";
+export * from "./shake";

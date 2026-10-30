@@ -1,6 +1,8 @@
 "use client";
 
-import { addSubjectKey, patchSubjectKey, removeSubjectKey, subjectKeys, type SubjectKey, type SubjectTransition, type Target } from "@blockshot/core";
+import { addSubjectKey, patchSubjectKey, removeSubjectKey, subjectKeys, type SubjectKey, type SubjectTransition, type Target, type Tracking, type TrackingPreset } from "@blockshot/core";
+
+export const TRACKING_LABEL: Record<TrackingPreset, string> = { locked: "고정", smooth: "부드럽게", loose: "느슨하게" };
 import { useStudio } from "./store";
 import { useUi, type MenuItemSpec } from "./ui";
 
@@ -104,6 +106,13 @@ export function openKeyMenu(e: { clientX: number; clientY: number }, cameraId: s
       { label: "", separator: true },
       { label: "전환 방식", header: true },
       ...(["cut", "pan", "whip"] as const).map((tr) => ({ label: `${key.transition === tr ? "✓ " : ""}${TRANSITION_LABEL[tr]}`, run: () => set({ transition: tr, ease: key.ease as SubjectEase }) })),
+    );
+    const tracking = (tr: Tracking | null) => edit((s) => patchSubjectKey(s, cameraId, key, { tracking: tr }));
+    const own = typeof key.tracking === "string" ? key.tracking : key.tracking ? "custom" : null;
+    items.push(
+      { label: "추적 (이 피사체)", header: true },
+      { label: `${own === null ? "✓ " : ""}카메라 설정 따름`, run: () => tracking(null) },
+      ...(Object.keys(TRACKING_LABEL) as TrackingPreset[]).map((tr) => ({ label: `${own === tr ? "✓ " : ""}${TRACKING_LABEL[tr]}`, run: () => tracking(tr) })),
     );
     if (key.transition !== "cut") {
       items.push(

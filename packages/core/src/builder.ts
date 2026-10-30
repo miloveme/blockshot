@@ -13,6 +13,7 @@ import {
   type PropType,
   type Sensor,
   type Tracking,
+  type Shake,
   type Settings,
   type Species,
   type Target,
@@ -38,7 +39,7 @@ import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
 type Timing = { start: number; duration?: number; ease?: Ease };
 type ActorOpts = { name?: string; species?: Species; color?: string; height?: number; build?: "slim" | "average" | "heavy"; at?: Vec3; facing?: number; pose?: Pose; aim?: Vec3 };
 type PropOpts = { id?: string; at?: Vec3; facing?: number; rotation?: Vec3; scale?: Vec3; color?: string; aim?: Vec3 };
-type CameraOpts = { name?: string; lens?: number; sensor?: Sensor; at?: Vec3; lookAt?: Target; rotation?: Vec3; tracking?: Tracking };
+type CameraOpts = { name?: string; lens?: number; sensor?: Sensor; at?: Vec3; lookAt?: Target; rotation?: Vec3; tracking?: Tracking; shake?: Shake };
 
 export interface ActorHandle {
   readonly id: string;
@@ -95,7 +96,9 @@ export interface CameraHandle {
   orbit(around: Target, opts: Timing & { duration: number; degrees: number }): CameraHandle;
   zoom(focalLength: number, opts: Timing & { duration: number }): CameraHandle;
   /** Subject key: hold on `target` from `start`. transition "cut" (instant, at a cut) · "pan" (turns over `duration` s) · "whip" (fast whip pan); `ease` shapes the turn. A `duration` without transition means "pan". */
-  lookAt(target: Target | null, opts: { start: number; duration?: number; transition?: "cut" | "pan" | "whip"; ease?: "linear" | "easeIn" | "easeOut" | "easeInOut" }): CameraHandle;
+  lookAt(target: Target | null, opts: { start: number; duration?: number; transition?: "cut" | "pan" | "whip"; ease?: "linear" | "easeIn" | "easeOut" | "easeInOut"; tracking?: Tracking }): CameraHandle;
+  /** Shake the camera from `start` for `duration` s: style "impact" (default — a hit), "handheld", "walk", "run", "vehicle"; `intensity` scales it. */
+  shake(opts: { start: number; duration?: number; style?: Shake; intensity?: number }): CameraHandle;
   /** Ride along with an actor / prop (chase cam, hood cam): keep `offset` from it in its own frame and aim at `look`. */
   mount(to: { id: string } | string, opts: { start: number; offset?: Vec3; look?: Vec3; end?: number }): CameraHandle;
 }
@@ -235,8 +238,9 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
       },
       mount: (to, o) => (action({ type: "mount", camera: id, to: typeof to === "string" ? to : to.id, ...o }), handle),
       zoom: (focalLength, o) => (action({ type: "zoom", camera: id, focalLength, start: o.start, duration: o.duration, ease: o.ease }), handle),
+      shake: (o) => (action({ type: "cameraShake", camera: id, start: o.start, ...(o.duration ? { duration: o.duration } : {}), ...(o.style ? { style: o.style } : {}), ...(o.intensity !== undefined ? { intensity: o.intensity } : {}) }), handle),
       lookAt: (target, o) => {
-        action({ type: "cameraLookAt", camera: id, target, start: o.start, ...(o.transition ? { transition: o.transition } : {}), ...(o.duration ? { duration: o.duration } : {}), ...(o.ease ? { ease: o.ease } : {}) });
+        action({ type: "cameraLookAt", camera: id, target, start: o.start, ...(o.transition ? { transition: o.transition } : {}), ...(o.duration ? { duration: o.duration } : {}), ...(o.ease ? { ease: o.ease } : {}), ...(o.tracking ? { tracking: o.tracking } : {}) });
         cur().aim = target;
         return handle;
       },
@@ -329,7 +333,7 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
     camera(id: string, o: CameraOpts = {}): CameraHandle {
       ensureFreeId(id);
       const pos = o.at ?? [0, 1.6, 5];
-      spec.cameras.push({ id, name: o.name, position: pos, lookAt: o.lookAt, rotation: o.rotation, focalLength: o.lens, sensor: o.sensor, tracking: o.tracking });
+      spec.cameras.push({ id, name: o.name, position: pos, lookAt: o.lookAt, rotation: o.rotation, focalLength: o.lens, sensor: o.sensor, tracking: o.tracking, shake: o.shake });
       camCursor.set(id, { pos, aim: o.lookAt ?? null, rotation: o.rotation ?? [0, 0, 0] });
       return makeCamera(id);
     },

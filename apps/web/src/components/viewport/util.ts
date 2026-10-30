@@ -20,10 +20,15 @@ export function markEditor(obj: THREE.Object3D) {
  */
 export function aimCamera(obj: THREE.Object3D, c: CameraState) {
   obj.position.set(...c.position);
-  if (c.target) {
-    obj.lookAt(...c.target);
-    if (!(obj as THREE.Camera).isCamera) obj.rotateY(Math.PI);
-  } else obj.rotation.set(c.rotation[0] * DEG, c.rotation[1] * DEG, c.rotation[2] * DEG, "YXZ");
+  if (c.target) obj.lookAt(...c.target);
+  else obj.rotation.set(c.rotation[0] * DEG, c.rotation[1] * DEG, c.rotation[2] * DEG, "YXZ");
+  // deliberate shake turns the frame around where the camera points (in the camera's own axes)
+  if (c.shake) {
+    obj.rotateY(c.shake[1] * DEG);
+    obj.rotateX(c.shake[0] * DEG);
+    obj.rotateZ(c.shake[2] * DEG);
+  }
+  if (c.target && !(obj as THREE.Camera).isCamera) obj.rotateY(Math.PI);
 }
 
 /** Camera shown in the main view (shot / camera modes), or null in free view. */

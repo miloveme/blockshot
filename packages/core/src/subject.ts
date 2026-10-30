@@ -1,4 +1,4 @@
-import type { Action, BlockshotSpec, Ease, Target } from "./schema";
+import type { Action, BlockshotSpec, Ease, Target, Tracking } from "./schema";
 
 /**
  * A camera's subject ("피사체 고정") as keyframes. One subject holds for the whole time (it lives on the camera as
@@ -20,6 +20,8 @@ export interface SubjectKey {
   /** seconds the change takes (0 for a cut) */
   duration: number;
   ease: Ease;
+  /** this key's own tracking (how the camera follows this subject); absent = the camera's `tracking` */
+  tracking?: Tracking;
 }
 
 export interface TransitionStyle {
@@ -58,7 +60,7 @@ export function subjectKeys(spec: BlockshotSpec, cameraId: string): SubjectKey[]
   spec.actions.forEach((a, i) => {
     if (!isKey(a, cameraId)) return;
     const transition = transitionOf(a);
-    keys.push({ action: i, t: a.start, target: a.target, transition, duration: transition === "cut" ? 0 : (a.duration ?? DEFAULT_TRANSITION_TIME[transition]), ease: a.ease ?? "easeInOut" });
+    keys.push({ action: i, t: a.start, target: a.target, transition, duration: transition === "cut" ? 0 : (a.duration ?? DEFAULT_TRANSITION_TIME[transition]), ease: a.ease ?? "easeInOut", ...(a.tracking ? { tracking: a.tracking } : {}) });
   });
   return keys.sort((x, y) => x.t - y.t || (x.action === null ? -1 : 1));
 }
@@ -91,8 +93,11 @@ export function addSubjectKey(spec: BlockshotSpec, cameraId: string, t: number, 
   return { ...spec, actions: [...spec.actions, key] };
 }
 
-/** Changes one key: its time, subject or transition (the camera's own key keeps time 0 and has no transition). */
-export function patchSubjectKey(spec: BlockshotSpec, cameraId: string, key: Pick<SubjectKey, "action">, patch: { t?: number; target?: Target | null; how?: TransitionStyle }): BlockshotSpec {
+/**
+ * Changes one key: its time, subject, transition or tracking (`tracking: null` = follow the camera's own setting).
+ * The camera's own key keeps time 0, has no transition and follows the camera's `tracking`.
+ */
+export function patchSubjectKey(spec: BlockshotSpec, cameraId: string, key: Pick<SubjectKey, "action">, patch: { t?: number; target?: Target | null; how?: TransitionStyle; tracking?: Tracking | null }): BlockshotSpec {
   if (key.action === null) return patch.target === undefined ? spec : setOwn(spec, cameraId, patch.target);
   return {
     ...spec,
@@ -106,6 +111,8 @@ export function patchSubjectKey(spec: BlockshotSpec, cameraId: string, key: Pick
         delete next.ease;
         Object.assign(next, style(patch.how));
       }
+      if (patch.tracking === null) delete next.tracking;
+      else if (patch.tracking !== undefined) next.tracking = patch.tracking;
       return next;
     }),
   };

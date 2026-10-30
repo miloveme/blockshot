@@ -1,16 +1,16 @@
 "use client";
 
-import { CREATURES, GESTURES, HAND_SHAPES, LENS_PRESETS, POSES, SEATS, SPECIES, SPECIES_LABEL, creatureDef, speciesHeight, defaultPropAim, addGesture, addHandShape, addHold, addReach, addSitDown, addStandUp, describeAction, labeledActions, patchActionAt, keyTimes, kindOf, BODY_BONES, bakeActor, clearBoneKeys, hasBakedKeys, hasBoneKeys, keyBones, keyCurrentPose, mirrorBonePose, setBoneRotation, snapshotPose, unbakeActor, type BoneName, type BonePose, movesOf, patchMoveAt, removeActionAt, patchSubjectKey, removeSubjectKey, subjectKeys, type SubjectKey, type TrackingPreset, type Gesture, type HandShape, type Pose } from "@blockshot/core";
+import { CREATURES, GESTURES, HAND_SHAPES, LENS_PRESETS, POSES, SEATS, SPECIES, SPECIES_LABEL, creatureDef, speciesHeight, defaultPropAim, addGesture, addHandShape, addHold, addReach, addSitDown, addStandUp, describeAction, labeledActions, patchActionAt, keyTimes, kindOf, BODY_BONES, bakeActor, clearBoneKeys, hasBakedKeys, hasBoneKeys, keyBones, keyCurrentPose, mirrorBonePose, setBoneRotation, snapshotPose, unbakeActor, type BoneName, type BonePose, movesOf, patchMoveAt, removeActionAt, patchSubjectKey, removeSubjectKey, subjectKeys, type SubjectKey, type TrackingPreset, type ShakePreset, type Gesture, type HandShape, type Pose } from "@blockshot/core";
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { hasModel, importGlb } from "@/lib/models";
 import { startPath } from "@/lib/placement";
 import { commitTransform, insertKeyAtCurrentTime, setAim, matchCameraToFreeView, patch, removeKeysAtTime, setLens, setPoseCmd } from "@/lib/actions";
 import { getBridge } from "@/lib/render";
-import { addSubject, FREE, FREE_LABEL, openKeyMenu, subjectOptions, toTarget, TRANSITION_LABEL } from "@/lib/subject";
+import { addSubject, FREE, FREE_LABEL, openKeyMenu, subjectOptions, toTarget, TRACKING_LABEL, TRANSITION_LABEL } from "@/lib/subject";
 import { ColorField, NumField, Row, SelectField, TextField, Vec3Field } from "./fields";
 import { CommandButton, PanelSection, Tally, useOnAirCamera } from "./ui";
-import { Accessibility, Armchair, Box, Camera as CameraIcon, Car, Copy, Crosshair, Footprints, Move3d, PersonStanding, Plus, Sparkles, Trash2, User, X } from "lucide-react";
+import { Accessibility, Armchair, Box, Camera as CameraIcon, Car, Copy, Crosshair, Footprints, Move3d, Vibrate, PersonStanding, Plus, Sparkles, Trash2, User, X } from "lucide-react";
 
 const POSE_LABEL: Record<Pose, string> = { stand: "서기", idle: "대기", walk: "걷기", run: "달리기", sit: "앉기", point: "가리키기", talk: "말하기", crouch: "숙이기", climb: "계단 오르기" };
 /** what the poses look like on an animal (where it differs) */
@@ -206,6 +206,11 @@ export function Properties() {
         <PanelSection id="subject" title="피사체 고정" icon={Crosshair}>
           <SubjectKeys cameraId={id} />
           <TrackingRow cameraId={id} />
+        </PanelSection>
+      ) : null}
+      {cam ? (
+        <PanelSection id="shake" title="흔들림" icon={Vibrate} defaultOpen={false}>
+          <ShakeControls cameraId={id} />
         </PanelSection>
       ) : null}
       {drivable ? (
@@ -631,10 +636,11 @@ function SubjectKeys({ cameraId }: { cameraId: string }) {
               <button
                 type="button"
                 className="h-6 truncate rounded border border-line bg-black/25 px-1.5 text-left text-[11px] text-ink-2 hover:border-line-strong hover:text-ink"
-                title="전환 방식 · 시간 · 움직임 바꾸기"
+                title="전환 방식 · 시간 · 움직임 · 추적 바꾸기"
                 onClick={(e) => openKeyMenu(e, cameraId, k)}
               >
                 {k.transition === "cut" ? "컷" : `${TRANSITION_LABEL[k.transition]} ${k.duration}s`}
+                {k.tracking ? ` · ${typeof k.tracking === "string" ? TRACKING_LABEL[k.tracking] : "추적"}` : ""}
               </button>
             )}
             <button type="button" aria-label="삭제" title="이 키 삭제" className="flex h-6 w-5 items-center justify-center rounded text-ink-3 hover:bg-hover hover:text-key" onClick={() => edit((s) => removeSubjectKey(s, cameraId, k))}>
@@ -685,6 +691,65 @@ function TrackingRow({ cameraId }: { cameraId: string }) {
         />
       </Row>
       <p className="text-[10px] leading-relaxed text-ink-3">걷거나 달리는 인물을 잡을 때 ‘부드럽게’나 ‘느슨하게’를 고르면 걸음마다 오르내리는 몸의 흔들림이 카메라로 옮겨 가지 않습니다. 얼굴의 미세한 움직임까지 따라가야 하는 샷은 ‘고정’.</p>
+    </div>
+  );
+}
+
+const SHAKE_LABEL: Record<ShakePreset, string> = { handheld: "핸드헬드", walk: "걸으며", run: "뛰며", vehicle: "차량 진동", impact: "충격" };
+const SHAKE_OPTIONS = (Object.keys(SHAKE_LABEL) as ShakePreset[]).map((v) => ({ value: v, label: SHAKE_LABEL[v] }));
+
+/**
+ * Deliberate shake: the camera's own (the whole time — a handheld camera) and timed shakes from the playhead (a hit,
+ * an explosion, a stretch of handheld). Both wobble the frame around wherever the camera points.
+ */
+function ShakeControls({ cameraId }: { cameraId: string }) {
+  const spec = useStudio((s) => s.spec);
+  const time = useStudio((s) => s.time);
+  const edit = useStudio((s) => s.edit);
+  const own = spec.cameras.find((c) => c.id === cameraId)?.shake;
+  const timed = spec.actions.flatMap((a, i) => (a.type === "cameraShake" && a.camera === cameraId ? [{ a, i }] : []));
+  const add = (style: ShakePreset, duration: number) =>
+    edit((s) => ({ ...s, actions: [...s.actions, { type: "cameraShake", camera: cameraId, style, duration, intensity: 1, start: Math.round(time * 100) / 100 }] }));
+  return (
+    <div className="flex flex-col gap-2">
+      <Row label="계속">
+        <SelectField
+          value={typeof own === "object" ? "custom" : (own ?? "none")}
+          options={[{ value: "none", label: "없음 — 고정된 카메라" }, ...SHAKE_OPTIONS.filter((o) => o.value !== "impact"), ...(typeof own === "object" ? [{ value: "custom", label: `사용자 지정 (${own.amount}°)` }] : [])]}
+          onCommit={(v) => v !== "custom" && patch(cameraId, { shake: v === "none" ? undefined : (v as ShakePreset) })}
+        />
+      </Row>
+      {timed.length ? (
+        <div className="flex flex-col gap-1">
+          <div className="grid grid-cols-[52px_1fr_44px_44px_20px] gap-1 text-[10px] text-ink-3">
+            <span>시작</span>
+            <span>종류</span>
+            <span>길이</span>
+            <span>세기</span>
+            <span />
+          </div>
+          {timed.map(({ a, i }) => (
+            <div key={i} className="grid grid-cols-[52px_1fr_44px_44px_20px] items-center gap-1">
+              <NumField value={a.start} min={0} step={0.1} digits={2} onCommit={(v) => edit((s) => patchActionAt(s, i, { start: v }))} />
+              <SelectField value={typeof a.style === "object" ? "impact" : a.style} options={SHAKE_OPTIONS} onCommit={(v) => edit((s) => patchActionAt(s, i, { style: v }))} />
+              <NumField value={a.duration} min={0.1} max={600} step={0.1} digits={1} onCommit={(v) => edit((s) => patchActionAt(s, i, { duration: v }))} />
+              <NumField value={a.intensity} min={0} max={3} step={0.1} digits={1} onCommit={(v) => edit((s) => patchActionAt(s, i, { intensity: v }))} />
+              <button type="button" aria-label="삭제" title="이 흔들림 삭제" className="flex h-6 w-5 items-center justify-center rounded text-ink-3 hover:bg-hover hover:text-key" onClick={() => edit((s) => removeActionAt(s, i))}>
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <div className="grid grid-cols-2 gap-1">
+        <button type="button" onClick={() => add("impact", 0.8)} className="flex h-7 items-center justify-center gap-1 rounded-md bg-raised px-2 text-xs text-ink hover:bg-hover" title="현재 시간에 충격 흔들림 (타격·폭발)">
+          <Plus size={13} /> {time.toFixed(2)}s 충격
+        </button>
+        <button type="button" onClick={() => add("handheld", 3)} className="flex h-7 items-center justify-center gap-1 rounded-md bg-raised px-2 text-xs text-ink hover:bg-hover" title="현재 시간부터 3초간 핸드헬드 (길이·종류는 목록에서)">
+          <Plus size={13} /> {time.toFixed(2)}s 구간
+        </button>
+      </div>
+      <p className="text-[10px] leading-relaxed text-ink-3">피사체는 그대로 두고 화면만 흔듭니다. ‘계속’은 숏 전체가 핸드헬드인 카메라, 아래 목록은 특정 순간(충격·폭발)이나 구간입니다.</p>
     </div>
   );
 }

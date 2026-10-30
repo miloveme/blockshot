@@ -36,7 +36,10 @@ const RULES = `Conventions:
   the camera points by its own rotation from then on); a camera without "lookAt" but with keys starts free.
 - A camera following someone who walks or runs gets "tracking": "smooth" (or "loose" for a running wide / Steadicam
   feel) so the stride bob does not shake the tilt; keep "locked" (the default) for a close-up that must catch every
-  small move of the face.`;
+  small move of the face. A cameraLookAt key can carry its own "tracking" for that subject only.
+- Deliberate shake is NOT tracking: a handheld / on-foot / in-car camera gets "shake" ("handheld", "walk", "run",
+  "vehicle") for the whole shot; a hit or explosion gets a "cameraShake" action ("impact", 0.5–1 s). Steady cameras
+  (tripod, dolly, crane) get none.`;
 
 /** Remotion-style helpers — the same text the hosted MCP's script guide describes, so pasted prompts and MCP agree. */
 const CODE_API_NOTES = `Code API (like Remotion — motion as a function of time, deterministic): globals interpolate(x, [x0,x1,..], [v0,v1,..], { ease? }) (numbers or [x,y,z]), spring(t, { stiffness?, damping? }) (0→1 with overshoot), noise(x, seed) (smooth −1..1), clamp(x, lo, hi). scene.sequence(start, () => { ... }) shifts every action start / key authored inside by "start" s (nestable; shots stay absolute). scene.animate(targetId, property, { from?, to, fps? }, t => value) samples fn(t) (t = seconds since from) into simplified keys for position / rotation / focalLength / hips / "bone:<name>"; a.boneFn(bone, { from?, to }, t => [x°,y°,z°]) does it for one bone — use loops and these helpers for repeated, rhythmic or procedural acting (nodding, pacing, breathing, shaking a camera) instead of writing every key by hand.`;
@@ -51,7 +54,7 @@ const ACTION_DIRECTING = `Directing action scenes (chases, drifts, fights):
 - Drift: add "drift": 0.7–1 to a drive for the sharp corners (it slides the tail out and the car rolls harder); use 0 on straights. A pursuer should have its OWN drive (same corners, slightly later "start" and a little wider radius) so it can drift too; use "follow" only when it should simply trail the leader.
 - Speed and energy come from contrast: "ease": "easeIn" to launch, "easeOut" to brake, a slow beat before the burst, speeds 18–35 m/s in the chase.
 - Coverage: cut every 1.5–3 s between 3–5 cameras — a low front/side camera at the corner, a "mount" chase cam behind (offset [0,2,-8]), a hood/driver cam ([0,1.3,1.2] looking [0,1.2,12]), a wide static establishing camera, a top/crane shot. Aim fixed cameras at the moving car with cameraLookAt "<carId>" (or lookAt <car>) and let one camera pan with it.
-- Camera shake and punch-ins: keys on a camera's rotation/position from a noise function (script: scene.animate(cam, "rotation", ..., t => [0.4*noise(t*18,1), 0.4*noise(t*18,2), 0]) ) or short "zoom" moves on impacts; keep the 180-degree rule between cuts.
+- Camera shake and punch-ins: a "cameraShake" action ("style": "impact", 0.5–1 s) on every hit / crash / explosion, "shake": "vehicle" on in-car cameras, "handheld" / "run" on a camera chasing on foot; short "zoom" moves on impacts; keep the 180-degree rule between cuts.
 - If the user asks for a style ("cinematic", "gritty", "slow-mo"), express it with real parameters: lens (24–35mm action, 85mm+ for compression), camera height (low = powerful), speed curves and shot length.`;
 
 const ACTION_LINES = `    { "type": "walkTo"|"runTo", "actor", "to": [x,0,z] | [[x,0,z], ...], "start", "duration"?, "speed"?, "direct"? },
@@ -69,7 +72,8 @@ const ACTION_LINES = `    { "type": "walkTo"|"runTo", "actor", "to": [x,0,z] | [
     { "type": "contact", "actor", "part": "hand_l"|"hand_r"|"foot_l"|"foot_r", "on": "thigh_l"|"thigh_r"|"knee_l"|"knee_r" | "floor" | ref | [x,y,z], "start", "end"?, "blend"? },
     { "type": "lookAt", "actor", "target", "start", "end"? },
     { "type": "cameraMove", "camera", "to": [x,y,z], "start", "duration", "ease"? },
-    { "type": "cameraLookAt", "camera", "target", "start", "transition"?: "cut"|"pan"|"whip", "duration"?: seconds of the turn, "ease"?: "easeInOut"|"easeIn"|"easeOut"|"linear" },
+    { "type": "cameraLookAt", "camera", "target", "start", "transition"?: "cut"|"pan"|"whip", "duration"?: seconds of the turn, "ease"?: "easeInOut"|"easeIn"|"easeOut"|"linear", "tracking"?: "locked"|"smooth"|"loose" (this subject only) },
+    { "type": "cameraShake", "camera", "start", "style"?: "impact"|"handheld"|"walk"|"run"|"vehicle" (default impact), "duration"?: s (0.8), "intensity"?: 0–3 (1) },
     { "type": "zoom", "camera", "focalLength", "start", "duration", "ease"? },
     { "type": "orbit", "camera", "around", "degrees", "start", "duration", "ease"? }`;
 
@@ -81,7 +85,7 @@ const SPEC_SUMMARY = `Blockshot Spec v${SPEC_VERSION} fields:
          | { "type": "ground", "size"? } | { "type": "street", "length"?, "roadWidth"?, "sidewalkWidth"? },
   "actors": [{ "id", "name"?, "species"?: "human" (default) | ${SPECIES.filter((s) => s !== "human").map((s) => `"${s}"`).join(" | ")}, "color"? "#rrggbb", "height"? m (animals default to their own size), "build"? "slim"|"average"|"heavy", "position": [x,0,z], "rotation"?: [0,yaw,0], "pose"? }],
   "props": [{ "id", "type", "position", "rotation"?, "scale"?, "color"? }],
-  "cameras": [{ "id", "name"?, "position", "lookAt"?: [x,y,z] | ref, "focalLength"? mm, "tracking"?: "locked"|"smooth"|"loose" }],
+  "cameras": [{ "id", "name"?, "position", "lookAt"?: [x,y,z] | ref, "focalLength"? mm, "tracking"?: "locked"|"smooth"|"loose", "shake"?: "handheld"|"walk"|"run"|"vehicle" }],
   "actions": [
 ${ACTION_LINES} ],
   "tracks"?: [{ "target": id, "property": "position"|"rotation"|"focalLength"|"hips"|"bone:<boneName>", "keys": [{ "t", "value", "ease"? }] }],   // optional hand keys; a track REPLACES what actions generate for that property. rotation / bone values are degrees ([x,y,z]); use for camera shake, a car's heading tricks, specific postures

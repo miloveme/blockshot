@@ -576,6 +576,45 @@
               }
             ]
           },
+          "shake": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "handheld",
+                  "walk",
+                  "run",
+                  "vehicle",
+                  "impact"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 15
+                  },
+                  "speed": {
+                    "default": 1,
+                    "type": "number",
+                    "minimum": 0.05,
+                    "maximum": 30
+                  },
+                  "bob": {
+                    "default": 0,
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "amount"
+                ]
+              }
+            ]
+          },
           "rotation": {
             "default": [
               0,
@@ -1713,6 +1752,57 @@
                   "step"
                 ]
               },
+              "tracking": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "locked",
+                      "smooth",
+                      "loose"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "pan": {
+                        "default": 0,
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 3
+                      },
+                      "tilt": {
+                        "default": 0,
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 3
+                      },
+                      "deadzone": {
+                        "default": [
+                          0,
+                          0
+                        ],
+                        "type": "array",
+                        "prefixItems": [
+                          {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 0.9
+                          },
+                          {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 0.9
+                          }
+                        ],
+                        "items": false,
+                        "minItems": 2,
+                        "maxItems": 2
+                      }
+                    }
+                  }
+                ]
+              },
               "start": {
                 "type": "number",
                 "minimum": 0
@@ -1726,6 +1816,84 @@
               "type",
               "camera",
               "target",
+              "start"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "cameraShake"
+              },
+              "camera": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              },
+              "style": {
+                "default": "impact",
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "handheld",
+                      "walk",
+                      "run",
+                      "vehicle",
+                      "impact"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "amount": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 15
+                      },
+                      "speed": {
+                        "default": 1,
+                        "type": "number",
+                        "minimum": 0.05,
+                        "maximum": 30
+                      },
+                      "bob": {
+                        "default": 0,
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      }
+                    },
+                    "required": [
+                      "amount"
+                    ]
+                  }
+                ]
+              },
+              "duration": {
+                "default": 0.8,
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 600
+              },
+              "intensity": {
+                "default": 1,
+                "type": "number",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "start": {
+                "type": "number",
+                "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              }
+            },
+            "required": [
+              "type",
+              "camera",
               "start"
             ]
           },

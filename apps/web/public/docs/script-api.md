@@ -62,7 +62,7 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 | `scene.shot(id, { ..., after? })` | 샷 추가. `after: "S1"`이면 S1 바로 뒤에 삽입, 없으면 끝에 추가 |
 | `scene.clearShots()` | 샷 목록 전체 비우기 (컷을 처음부터 새로 만들 때만) |
 | `scene.reflect(ref, mirror) → ref` | `scene.reflect(man.chest, mirror)` → `"man.chest@mirror"`: 거울 속 반사 위치. 카메라 `lookAt`/`orbit`의 대상으로 쓴다 |
-| `scene.camera(id, opts) → Camera` | `opts: { name?, lens?, sensor?, at?, lookAt?, rotation?, tracking? }` — `tracking`: `"locked"`(기본) \| `"smooth"` \| `"loose"` \| `{ pan, tilt, deadzone }` (SCENE_SPEC §7) |
+| `scene.camera(id, opts) → Camera` | `opts: { name?, lens?, sensor?, at?, lookAt?, rotation?, tracking?, shake? }` — `tracking`: `"locked"`(기본) \| `"smooth"` \| `"loose"` \| `{ pan, tilt, deadzone }`, `shake`: 숏 전체 흔들림 `"handheld"` \| `"walk"` \| `"run"` \| `"vehicle"` (SCENE_SPEC §7) |
 | `scene.shot(id, { camera, start, end, description?, prompt?, crossAxis? })` | 샷 추가. `crossAxis: true` = 이 샷으로 들어오는 컷이 180° 축선을 일부러 넘음(축선 경고 끄기) |
 | `scene.key(targetId, property, t, value, ease?)` | 저수준 키프레임 (`property`에 `bone:rightUpperArm`·`hips` 가능) |
 | `actor.bone(bone, [[t,[x°,y°,z°]],…], ease?)` | 뼈 키프레임 (오일러 도). `actor.hips([[t,[x,y,z]],…])`는 골반 |
@@ -99,7 +99,8 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 | `.truck(distance, opts)` / `.pedestal(distance, opts)` | 좌우 / 상하 평행 이동 |
 | `.orbit(around, { degrees, start, duration, ease? })` | 원호 이동 |
 | `.zoom(focalLength, { start, duration, ease? })` | 초점거리 변경 |
-| `.lookAt(target, { start, transition?, duration?, ease? })` | 피사체 키 — `start`부터 이 피사체(`null`이면 자유 — 회전값으로). `transition`: `"cut"`(즉시) · `"pan"`(`duration`초 회전) · `"whip"`(휩 팬), `ease`로 움직임 형태 |
+| `.lookAt(target, { start, transition?, duration?, ease?, tracking? })` | 피사체 키 — `start`부터 이 피사체(`null`이면 자유 — 회전값으로). `transition`: `"cut"`(즉시) · `"pan"`(`duration`초 회전) · `"whip"`(휩 팬), `ease`로 움직임 형태, `tracking`으로 이 피사체만 따라가는 방식 |
+| `.shake({ start, duration?, style?, intensity? })` | 흔들림 구간 — `style`: `"impact"`(기본, 타격·폭발) · `"handheld"` · `"walk"` · `"run"` · `"vehicle"`, `intensity` 세기(기본 1) |
 | `.id` | |
 
 ### 유틸
