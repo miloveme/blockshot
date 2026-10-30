@@ -12,6 +12,7 @@ import {
   type BlockshotSpecInput,
   type PropType,
   type Sensor,
+  type Tracking,
   type Settings,
   type Species,
   type Target,
@@ -37,7 +38,7 @@ import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
 type Timing = { start: number; duration?: number; ease?: Ease };
 type ActorOpts = { name?: string; species?: Species; color?: string; height?: number; build?: "slim" | "average" | "heavy"; at?: Vec3; facing?: number; pose?: Pose; aim?: Vec3 };
 type PropOpts = { id?: string; at?: Vec3; facing?: number; rotation?: Vec3; scale?: Vec3; color?: string; aim?: Vec3 };
-type CameraOpts = { name?: string; lens?: number; sensor?: Sensor; at?: Vec3; lookAt?: Target; rotation?: Vec3 };
+type CameraOpts = { name?: string; lens?: number; sensor?: Sensor; at?: Vec3; lookAt?: Target; rotation?: Vec3; tracking?: Tracking };
 
 export interface ActorHandle {
   readonly id: string;
@@ -328,7 +329,7 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
     camera(id: string, o: CameraOpts = {}): CameraHandle {
       ensureFreeId(id);
       const pos = o.at ?? [0, 1.6, 5];
-      spec.cameras.push({ id, name: o.name, position: pos, lookAt: o.lookAt, rotation: o.rotation, focalLength: o.lens, sensor: o.sensor });
+      spec.cameras.push({ id, name: o.name, position: pos, lookAt: o.lookAt, rotation: o.rotation, focalLength: o.lens, sensor: o.sensor, tracking: o.tracking });
       camCursor.set(id, { pos, aim: o.lookAt ?? null, rotation: o.rotation ?? [0, 0, 0] });
       return makeCamera(id);
     },

@@ -1,6 +1,6 @@
 "use client";
 
-import { CREATURES, GESTURES, HAND_SHAPES, LENS_PRESETS, POSES, SEATS, SPECIES, SPECIES_LABEL, creatureDef, speciesHeight, defaultPropAim, addGesture, addHandShape, addHold, addReach, addSitDown, addStandUp, describeAction, labeledActions, patchActionAt, keyTimes, kindOf, BODY_BONES, bakeActor, clearBoneKeys, hasBakedKeys, hasBoneKeys, keyBones, keyCurrentPose, mirrorBonePose, setBoneRotation, snapshotPose, unbakeActor, type BoneName, type BonePose, movesOf, patchMoveAt, removeActionAt, patchSubjectKey, removeSubjectKey, subjectKeys, type SubjectKey, type Gesture, type HandShape, type Pose } from "@blockshot/core";
+import { CREATURES, GESTURES, HAND_SHAPES, LENS_PRESETS, POSES, SEATS, SPECIES, SPECIES_LABEL, creatureDef, speciesHeight, defaultPropAim, addGesture, addHandShape, addHold, addReach, addSitDown, addStandUp, describeAction, labeledActions, patchActionAt, keyTimes, kindOf, BODY_BONES, bakeActor, clearBoneKeys, hasBakedKeys, hasBoneKeys, keyBones, keyCurrentPose, mirrorBonePose, setBoneRotation, snapshotPose, unbakeActor, type BoneName, type BonePose, movesOf, patchMoveAt, removeActionAt, patchSubjectKey, removeSubjectKey, subjectKeys, type SubjectKey, type TrackingPreset, type Gesture, type HandShape, type Pose } from "@blockshot/core";
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { hasModel, importGlb } from "@/lib/models";
@@ -205,6 +205,7 @@ export function Properties() {
       {cam ? (
         <PanelSection id="subject" title="피사체 고정" icon={Crosshair}>
           <SubjectKeys cameraId={id} />
+          <TrackingRow cameraId={id} />
         </PanelSection>
       ) : null}
       {drivable ? (
@@ -657,6 +658,34 @@ function SubjectKeys({ cameraId }: { cameraId: string }) {
       </div>
       <p className="text-[10px] leading-relaxed text-ink-3">‘처음’ 줄은 시작부터의 피사체(없음 = 카메라 회전값대로)입니다. 보통은 숏 하나에 피사체 하나, 바뀌면 컷을 나눕니다. 타임라인이나 카메라를 우클릭해도 키를 넣을 수 있습니다.</p>
     </>
+  );
+}
+
+const TRACKING_OPTIONS = [
+  { value: "locked", label: "고정 — 매 프레임 정확히" },
+  { value: "smooth", label: "부드럽게 — 걸음 흔들림 무시" },
+  { value: "loose", label: "느슨하게 — 스테디캠 느낌" },
+];
+
+/**
+ * How the camera follows its subject: locked (a face close-up that must catch every move) or an operator's smooth /
+ * loose follow that lets the walk / run bob ride inside the frame instead of shaking the tilt.
+ */
+function TrackingRow({ cameraId }: { cameraId: string }) {
+  const tracking = useStudio((s) => s.spec.cameras.find((c) => c.id === cameraId)?.tracking);
+  const custom = typeof tracking === "object";
+  const value = custom ? "custom" : (tracking ?? "locked");
+  return (
+    <div className="flex flex-col gap-1 border-t border-line pt-2">
+      <Row label="추적">
+        <SelectField
+          value={value}
+          options={custom ? [...TRACKING_OPTIONS, { value: "custom", label: `사용자 지정 (팬 ${tracking.pan}s · 틸트 ${tracking.tilt}s)` }] : TRACKING_OPTIONS}
+          onCommit={(v) => v !== "custom" && patch(cameraId, { tracking: v === "locked" ? undefined : (v as TrackingPreset) })}
+        />
+      </Row>
+      <p className="text-[10px] leading-relaxed text-ink-3">걷거나 달리는 인물을 잡을 때 ‘부드럽게’나 ‘느슨하게’를 고르면 걸음마다 오르내리는 몸의 흔들림이 카메라로 옮겨 가지 않습니다. 얼굴의 미세한 움직임까지 따라가야 하는 샷은 ‘고정’.</p>
+    </div>
   );
 }
 

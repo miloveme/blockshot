@@ -525,6 +525,57 @@
               }
             ]
           },
+          "tracking": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "locked",
+                  "smooth",
+                  "loose"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "pan": {
+                    "default": 0,
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 3
+                  },
+                  "tilt": {
+                    "default": 0,
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 3
+                  },
+                  "deadzone": {
+                    "default": [
+                      0,
+                      0
+                    ],
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 0.9
+                      },
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 0.9
+                      }
+                    ],
+                    "items": false,
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                }
+              }
+            ]
+          },
           "rotation": {
             "default": [
               0,

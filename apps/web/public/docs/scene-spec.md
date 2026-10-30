@@ -123,11 +123,22 @@ Blockshot Spec은 프로젝트의 **유일한 진실 원천** 이다. UI 편집,
   "name": "A",
   "position": [2.5, 1.6, 4],
   "lookAt": "minsu.head",       // Vec3 또는 참조 문자열. 없으면 rotation 사용
+  "tracking": "smooth",         // 피사체를 따라가는 반응: locked(기본) | smooth | loose | { pan, tilt, deadzone }
   "rotation": [0, 0, 0],
   "focalLength": 35,            // mm
   "sensor": "super35"           // super35(24.89×18.66) | fullframe(36×24) | [w, h] mm
 }
 ```
+
+`tracking`은 **무엇을 잡느냐가 아니라 조작자가 어떻게 따라가느냐**다. 이 카메라의 모든 피사체(`lookAt`, `cameraLookAt` 키, `orbit`/`mount`의 조준)에 적용된다.
+
+| 값 | 팬(s) | 틸트(s) | 데드존 [가로, 세로] | 쓰임 |
+|---|---|---|---|---|
+| `locked` (생략 시) | 0 | 0 | 없음 | 조준점을 매 프레임 그대로 — 얼굴의 미세한 움직임까지 따라가는 클로즈업 |
+| `smooth` | 0.12 | 0.35 | 없음 | 걷기·달리기 팔로우. 걸음마다 오르내리는 몸의 흔들림이 틸트로 옮겨 가지 않는다 |
+| `loose` | 0.3 | 0.7 | [0.05, 0.2] | 달리기·액션 와이드, 스테디캠 느낌 |
+
+`{ pan, tilt, deadzone }`로 직접 줄 수도 있다: `pan`/`tilt`는 가로/세로 평활 시간(초, 0–3), `deadzone`은 반 화면 대비 비율(0–0.9)로, 피사체가 이 안에서 움직이는 동안은 카메라가 움직이지 않는다. 평활은 **중심 가우시안**(리허설로 동선을 아는 조작자)이라 직선 이동은 지연 없이 그대로 따라가고 걸음의 주기적인 흔들림만 사라진다. 데드존은 구간 시작부터 앞으로 걸어가며 계산해 어느 시점에서 평가해도 결과가 같다. 편집기에서 새로 만드는 카메라는 `smooth`로 시작한다.
 
 수직 화각: `vFov = 2 * atan( sensorH_eff / (2 * focalLength) )`. 센서는 **가로 폭 기준(horizontal fit)** 으로 렌더 화면비에 맞춘다: `sensorH_eff = sensorW / aspect`.
 

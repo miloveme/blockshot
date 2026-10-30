@@ -1,4 +1,5 @@
-import type { Action, BodyPart, BodySurface, ContactPart, Ease, Gesture, HandShape, HoldAt, Key, Pose, BlockshotSpec, Prop, Species, Target, TrackProperty, Vec3 } from "./schema";
+import type { Action, BodyPart, BodySurface, Camera, ContactPart, Ease, Gesture, HandShape, HoldAt, Key, Pose, BlockshotSpec, Prop, Species, Target, TrackProperty, Vec3 } from "./schema";
+import { TRACKING_PRESETS } from "./schema";
 import { applyEase, DEG, unwrapYaw, vec, yawTowards } from "./math";
 import { verticalFov } from "./camera";
 import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
@@ -737,6 +738,93 @@ function panBetween(eye: Vec3, a: Vec3, b: Vec3, k: number): Vec3 {
   }
   const d = da + (db - da) * k;
   return [eye[0] + dir[0] * d, eye[1] + dir[1] * d, eye[2] + dir[2] * d];
+}
+
+/** The grid (s) a camera's subject path is sampled on when the camera follows it smoothly. */
+const TRACK_STEP = 1 / 30;
+type TrackingParams = { pan: number; tilt: number; deadzone: readonly [number, number] };
+const trackingOf = (c: Camera): TrackingParams => (typeof c.tracking === "object" ? c.tracking : TRACKING_PRESETS[c.tracking ?? "locked"]);
+/** per aim segment: the subject path on the TRACK_STEP grid (with a dead zone: where the camera holds its aim) */
+const trackCache = new WeakMap<Segment, Vec3[]>();
+
+/**
+ * Where camera `c` aims at `t` while `seg` is its subject, the way an operator follows it: "locked" is the target point
+ * itself; otherwise the subject's path is first held inside the dead zone (the aim only moves once the subject drifts
+ * out of it — walked forward from the start of the segment, so any time gives the same answer), then blurred over
+ * time with a centred Gaussian, `pan` seconds horizontally and `tilt` seconds vertically. A centred window is the
+ * rehearsed operator who knows the blocking: the step-by-step bob of a walk or run is gone, the travel itself is
+ * followed without lag (a straight move passes through unchanged).
+ */
+function aimPoint(scene: CompiledScene, c: Camera, seg: Segment, t: number, aspect: number): Vec3 | null {
+  const target = seg.target;
+  if (target == null) return null;
+  const tr = trackingOf(c);
+  const zoned = tr.deadzone[0] > 0 || tr.deadzone[1] > 0;
+  if (tr.pan <= 0 && tr.tilt <= 0 && !zoned) return resolveTarget(scene, target, t);
+  const t0 = seg.start;
+  const t1 = Math.max(t0, Math.min(seg.end, scene.spec.settings.duration));
+  const last = Math.ceil((t1 - t0) / TRACK_STEP);
+  const timeAt = (k: number) => Math.min(t0 + k * TRACK_STEP, t1);
+  let path = trackCache.get(seg);
+  if (!path) trackCache.set(seg, (path = []));
+  const grid = path;
+  const sample = (k: number): Vec3 => {
+    const i = Math.max(0, Math.min(last, k));
+    if (grid[i]) return grid[i]!;
+    if (!zoned) return (grid[i] = resolveTarget(scene, target, timeAt(i)));
+    for (let j = grid.length; j <= i; j++) {
+      const raw = resolveTarget(scene, target, timeAt(j));
+      grid[j] = j === 0 ? raw : holdInZone(scene, c, timeAt(j), grid[j - 1]!, raw, tr.deadzone, aspect);
+    }
+    return grid[i]!;
+  };
+  const u = (Math.max(t0, Math.min(t, t1)) - t0) / TRACK_STEP;
+  const blurred = (sigma: number): Vec3 => {
+    const k0 = Math.floor(u);
+    if (sigma < TRACK_STEP) return vec.lerp(sample(k0), sample(k0 + 1), u - k0);
+    const r = Math.ceil((3 * sigma) / TRACK_STEP);
+    const acc: Vec3 = [0, 0, 0];
+    let w = 0;
+    for (let k = k0 - r; k <= k0 + r + 1; k++) {
+      const d = (k - u) * TRACK_STEP;
+      const wk = Math.exp((-d * d) / (2 * sigma * sigma));
+      const p = sample(k);
+      acc[0] += p[0] * wk;
+      acc[1] += p[1] * wk;
+      acc[2] += p[2] * wk;
+      w += wk;
+    }
+    return [acc[0] / w, acc[1] / w, acc[2] / w];
+  };
+  const across = blurred(tr.pan);
+  const up = tr.tilt === tr.pan ? across : blurred(tr.tilt);
+  return [across[0], up[1], across[2]];
+}
+
+/**
+ * The dead zone: the camera keeps aiming at `aim` unless `raw` (the subject) has drifted further off-centre than
+ * `zone` × the half-frame (horizontal, vertical); then the aim turns just enough to keep it on the zone's edge.
+ */
+function holdInZone(scene: CompiledScene, c: Camera, t: number, aim: Vec3, raw: Vec3, zone: readonly [number, number], aspect: number): Vec3 {
+  const eye = sampleKeys(scene.tracks.get(trackKey(c.id, "position"))!, t) as Vec3;
+  const halfV = (verticalFov(sampleKeys(scene.tracks.get(trackKey(c.id, "focalLength"))!, t) as number, c.sensor, aspect) * DEG) / 2;
+  const halfH = Math.atan(Math.tan(halfV) * aspect);
+  const yawOf = (p: Vec3) => Math.atan2(p[0] - eye[0], p[2] - eye[2]);
+  const pitchOf = (p: Vec3) => Math.atan2(p[1] - eye[1], Math.hypot(p[0] - eye[0], p[2] - eye[2]));
+  let yaw = yawOf(aim);
+  let pitch = pitchOf(aim);
+  const ry = yawOf(raw);
+  const rp = pitchOf(raw);
+  let dy = ry - yaw;
+  dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+  const zh = zone[0] * halfH;
+  if (dy > zh) yaw = ry - zh;
+  else if (dy < -zh) yaw = ry + zh;
+  const zv = zone[1] * halfV;
+  if (rp - pitch > zv) pitch = rp - zv;
+  else if (rp - pitch < -zv) pitch = rp + zv;
+  const d = vec.distance(eye, raw);
+  return [eye[0] + Math.sin(yaw) * Math.cos(pitch) * d, eye[1] + Math.sin(pitch) * d, eye[2] + Math.cos(yaw) * Math.cos(pitch) * d];
 }
 
 function activeSegment(list: Segment[] | undefined, t: number): Segment | undefined {
@@ -1780,12 +1868,12 @@ export function evaluate(scene: CompiledScene, t: number): SceneState {
     const aim = activeSegment(aims, t);
     const position = sampleKeys(scene.tracks.get(trackKey(c.id, "position"))!, t) as Vec3;
     const rotation = sampleKeys(scene.tracks.get(trackKey(c.id, "rotation"))!, t) as Vec3;
-    let target: Vec3 | null = lookTrack ? (sampleKeys(lookTrack, t) as Vec3) : aim?.target != null ? resolveTarget(scene, aim.target, t) : null;
+    let target: Vec3 | null = lookTrack ? (sampleKeys(lookTrack, t) as Vec3) : aim ? aimPoint(scene, c, aim, t, aspect) : null;
     if (!lookTrack && aim && aim.blend && t < aim.start + aim.blend) {
       // a pan / tilt from what it held on before (or from where it pointed) to the new subject — both may be moving;
       // letting go (free) turns from the old subject to where the camera's rotation points
       const prev = activeSegment(aims, aim.start - 1e-6);
-      const before = prev?.target != null ? resolveTarget(scene, prev.target, t) : null;
+      const before = prev ? aimPoint(scene, c, prev, t, aspect) : null;
       const reach = before ?? target;
       if (reach) {
         const from = before ?? pointAlong(position, rotation, vec.distance(position, reach));

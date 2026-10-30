@@ -159,11 +159,37 @@ export const SENSORS = {
 export const Sensor = z.union([z.enum(["super35", "fullframe"]), z.tuple([z.number().positive(), z.number().positive()])]);
 export type Sensor = z.infer<typeof Sensor>;
 
+/**
+ * How a camera follows its subject (피사체 고정) — the operator's response, not what is framed.
+ * "locked" aims at the target point every frame (a face close-up that must catch every move);
+ * "smooth" / "loose" let the body's step-by-step bob ride inside the frame and follow the overall travel, like an
+ * operator on a fluid head / Steadicam. The custom form: `pan` / `tilt` are smoothing times in seconds (horizontal /
+ * vertical), `deadzone` is the [horizontal, vertical] share of the half-frame the subject may drift in before the
+ * camera moves at all.
+ */
+export const TRACKING_PRESETS = {
+  locked: { pan: 0, tilt: 0, deadzone: [0, 0] },
+  smooth: { pan: 0.12, tilt: 0.35, deadzone: [0, 0] },
+  loose: { pan: 0.3, tilt: 0.7, deadzone: [0.05, 0.2] },
+} as const satisfies Record<string, { pan: number; tilt: number; deadzone: readonly [number, number] }>;
+export type TrackingPreset = keyof typeof TRACKING_PRESETS;
+export const Tracking = z.union([
+  z.enum(["locked", "smooth", "loose"]),
+  z.object({
+    pan: z.number().min(0).max(3).default(0),
+    tilt: z.number().min(0).max(3).default(0),
+    deadzone: z.tuple([z.number().min(0).max(0.9), z.number().min(0).max(0.9)]).default([0, 0]),
+  }),
+]);
+export type Tracking = z.infer<typeof Tracking>;
+
 export const Camera = z.object({
   id: Id,
   name: z.string().optional(),
   position: Vec3.default([0, 1.6, 5]),
   lookAt: Target.optional(),
+  /** how the camera follows its subject; absent = "locked" */
+  tracking: Tracking.optional(),
   rotation: Vec3.default([0, 0, 0]),
   focalLength: z.number().min(4).max(600).default(35),
   sensor: Sensor.default("super35"),

@@ -112,6 +112,7 @@ export function addCamera(spec: BlockshotSpec): { spec: BlockshotSpec; id: strin
     rotation: [0, 0, 0],
     focalLength: 35,
     sensor: "super35",
+    tracking: "smooth",
   };
   return { spec: { ...spec, cameras: [...spec.cameras, camera] }, id };
 }

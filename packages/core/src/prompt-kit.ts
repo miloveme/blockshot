@@ -33,7 +33,10 @@ const RULES = `Conventions:
   cameraLookAt "transition": "pan" with a "duration" (0.6–2 s), or "whip" (≈0.3 s) for a whip pan; "cut" (or no
   transition and no duration) switches at once — only at a cut. A camera's "lookAt" is its subject for the whole time
   until a cameraLookAt key changes it; to return to the first subject, add another key. "target": null lets go (free:
-  the camera points by its own rotation from then on); a camera without "lookAt" but with keys starts free.`;
+  the camera points by its own rotation from then on); a camera without "lookAt" but with keys starts free.
+- A camera following someone who walks or runs gets "tracking": "smooth" (or "loose" for a running wide / Steadicam
+  feel) so the stride bob does not shake the tilt; keep "locked" (the default) for a close-up that must catch every
+  small move of the face.`;
 
 /** Remotion-style helpers — the same text the hosted MCP's script guide describes, so pasted prompts and MCP agree. */
 const CODE_API_NOTES = `Code API (like Remotion — motion as a function of time, deterministic): globals interpolate(x, [x0,x1,..], [v0,v1,..], { ease? }) (numbers or [x,y,z]), spring(t, { stiffness?, damping? }) (0→1 with overshoot), noise(x, seed) (smooth −1..1), clamp(x, lo, hi). scene.sequence(start, () => { ... }) shifts every action start / key authored inside by "start" s (nestable; shots stay absolute). scene.animate(targetId, property, { from?, to, fps? }, t => value) samples fn(t) (t = seconds since from) into simplified keys for position / rotation / focalLength / hips / "bone:<name>"; a.boneFn(bone, { from?, to }, t => [x°,y°,z°]) does it for one bone — use loops and these helpers for repeated, rhythmic or procedural acting (nodding, pacing, breathing, shaking a camera) instead of writing every key by hand.`;
@@ -78,7 +81,7 @@ const SPEC_SUMMARY = `Blockshot Spec v${SPEC_VERSION} fields:
          | { "type": "ground", "size"? } | { "type": "street", "length"?, "roadWidth"?, "sidewalkWidth"? },
   "actors": [{ "id", "name"?, "species"?: "human" (default) | ${SPECIES.filter((s) => s !== "human").map((s) => `"${s}"`).join(" | ")}, "color"? "#rrggbb", "height"? m (animals default to their own size), "build"? "slim"|"average"|"heavy", "position": [x,0,z], "rotation"?: [0,yaw,0], "pose"? }],
   "props": [{ "id", "type", "position", "rotation"?, "scale"?, "color"? }],
-  "cameras": [{ "id", "name"?, "position", "lookAt"?: [x,y,z] | ref, "focalLength"? mm }],
+  "cameras": [{ "id", "name"?, "position", "lookAt"?: [x,y,z] | ref, "focalLength"? mm, "tracking"?: "locked"|"smooth"|"loose" }],
   "actions": [
 ${ACTION_LINES} ],
   "tracks"?: [{ "target": id, "property": "position"|"rotation"|"focalLength"|"hips"|"bone:<boneName>", "keys": [{ "t", "value", "ease"? }] }],   // optional hand keys; a track REPLACES what actions generate for that property. rotation / bone values are degrees ([x,y,z]); use for camera shake, a car's heading tricks, specific postures
