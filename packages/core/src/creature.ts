@@ -179,7 +179,9 @@ export const speciesColor = (species: Species | undefined): string => creatureDe
 export function moveSpeed(species: Species | undefined, height: number, run: boolean): number {
   const def = creatureDef(species);
   if (!def) return run ? 3.5 : 1.3;
-  return (run ? def.runSpeed : def.walkSpeed) * Math.sqrt(height / def.height);
+  // a bird that can fly flies wherever it goes: "walk" is an easy cruise, "run" full speed
+  const speed = def.flies ? def.runSpeed * (run ? 1 : 0.55) : run ? def.runSpeed : def.walkSpeed;
+  return speed * Math.sqrt(height / def.height);
 }
 
 // ---- gait ------------------------------------------------------------------------------------------------------

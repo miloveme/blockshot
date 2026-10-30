@@ -81,7 +81,7 @@ Blockshot Spec은 프로젝트의 **유일한 진실 원천** 이다. UI 편집,
 
 **동물** (`species` ≠ `human`): 네발(dog·cat·tiger·horse·bear), 두발(chicken·ostrich·penguin·dinosaur), 새(pigeon·eagle). 기본 높이는 강아지 0.81 m, 고양이 0.4 m, 호랑이 1.11 m, 말 2.23 m, 곰 1.09 m, 닭 0.51 m, 타조 2.28 m, 펭귄 0.72 m, 공룡 1.55 m, 비둘기 0.23 m, 독수리 0.59 m이며 `height`로 바꾸면 비율 그대로 커지고 걷기·달리기 속도는 √크기로 따라간다.
 - 쓰는 액션: `walkTo`·`runTo`(네발은 갤럽)·`turnTo`·`lookAt`·`pose`(`sit` 앉기, `crouch` 엎드리기·웅크리기, `talk` 짖기·울기, `idle`은 꼬리 흔들기·숨쉬기, `point` 경계)·`gesture`의 고개 동작(nod·shakeHead·lookAround·bow). 발은 사람처럼 디딘 자리에 고정된다(거리 기반 보행, 회전도 걸음).
-- **새가 달리면 난다**: `runTo`는 날아가기 — 날갯짓하며 비행 높이(비둘기 2 m, 독수리 3 m)로 오르고, 도착하면 내려앉는다.
+- **새는 움직이면 난다**(비둘기·독수리): `walkTo`·`runTo` 모두 비행이다 — 이륙해 날갯짓하며 비행 높이(비둘기 2 m, 독수리 3 m)로 오르고(0.9초), 도착 1.2초 전부터 **앞으로 날면서 활공해 내려와** 목적지에 내려앉는다(짧은 거리는 낮게 폴짝). `walkTo`는 느긋한 순항(비행 속도의 0.55배), `runTo`는 전속. 닭·타조·펭귄은 날지 않는다.
 - 부위: `head`·`mouth`·`chest`·`pelvis`, `foot_l/r` = 뒷발(두발·새는 발), `hand_l/r` = 앞발(새는 날개 끝).
 - 손 동작(`hold`·`reach`·`handShape`·`contact`)과 그 밖의 제스처는 동물에게 적용되지 않는다(경고). `build`·뼈 키는 사람 전용.
 

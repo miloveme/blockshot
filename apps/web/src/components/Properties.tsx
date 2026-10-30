@@ -15,7 +15,7 @@ import { Accessibility, Armchair, Box, Camera as CameraIcon, Car, Copy, Crosshai
 const POSE_LABEL: Record<Pose, string> = { stand: "서기", idle: "대기", walk: "걷기", run: "달리기", sit: "앉기", point: "가리키기", talk: "말하기", crouch: "숙이기", climb: "계단 오르기" };
 /** what the poses look like on an animal (where it differs) */
 const animalPoseLabel = (def: NonNullable<ReturnType<typeof creatureDef>>, p: Pose): string | undefined =>
-  ({ run: def.flies ? "날기" : "달리기", crouch: def.plan === "quadruped" ? "엎드리기" : "웅크리기", sit: def.plan === "quadruped" ? "앉기" : "웅크려 앉기", talk: "짖기 · 울기", point: "경계" })[p as string];
+  ({ walk: def.flies ? "날기" : "걷기", run: def.flies ? "빠르게 날기" : "달리기", crouch: def.plan === "quadruped" ? "엎드리기" : "웅크리기", sit: def.plan === "quadruped" ? "앉기" : "웅크려 앉기", talk: "짖기 · 울기", point: "경계" })[p as string];
 
 export function Outliner() {
   const spec = useStudio((s) => s.spec);

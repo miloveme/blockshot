@@ -888,13 +888,27 @@ function actorCore(scene: CompiledScene, id: string, t: number) {
   }
   const poseTime = Math.max(0, t - poseStart);
   const blend = changed ? Math.min(1, poseTime / POSE_BLEND) : 1;
-  // a bird that runs flies: it rises after taking off and comes down once it lands
+  // a bird that can fly flies wherever it goes: it climbs after taking off and glides down before the end of the
+  // flight, still moving, so it lands where it was going (a short hop stays low)
   const def = creatureDef(actor.species);
   let fly = 0;
   let lifted = position;
-  if (def?.flies) {
-    if (pose === "run") fly = smoothstep(poseTime / FLY_RISE);
-    else if (changed && prevPose === "run") fly = 1 - smoothstep(poseTime / FLY_RISE);
+  if (def?.flies && (pose === "walk" || pose === "run")) {
+    // the flight: from the key it took off at to the next key where it stops moving
+    let from = 0;
+    let to = Infinity;
+    let up = false;
+    for (const k of poseKeys) {
+      const flying = k.value === "walk" || k.value === "run";
+      if (k.t <= t) {
+        if (flying && !up) from = k.t;
+        up = flying;
+      } else if (!flying) {
+        to = k.t;
+        break;
+      }
+    }
+    fly = Math.min(smoothstep((t - from) / FLY_RISE), smoothstep((to - t) / FLY_LAND));
     if (fly > 0) lifted = [position[0], position[1] + (def.flyHeight ?? 2) * (actor.height / def.height) * fly, position[2]];
   }
   return { actor, position: lifted, rotation, pose, poseTime, prevPose, prevPoseTime: Math.max(0, t - prevStart), blend, fly };
@@ -907,8 +921,9 @@ const restCreature = (def: CreatureDef) => {
   return p;
 };
 
-/** seconds a bird takes to climb to (or come down from) its flying height */
+/** seconds a bird takes to climb to its flying height after taking off, and to glide down before it lands */
 const FLY_RISE = 0.9;
+const FLY_LAND = 1.2;
 
 const creatureGaitCache = new WeakMap<CompiledScene, Map<string, CreatureGait>>();
 

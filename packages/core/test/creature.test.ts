@@ -58,18 +58,38 @@ describe("animals", () => {
     }
   });
 
-  it("a bird that runs flies: up to its cruising height, wings beating, legs tucked — and lands at the end", () => {
-    const spec = addWalkPath(scene("pigeon"), "a", [[0, 0, 12]], { start: 0, run: true });
-    const c = compile(spec);
-    const mid = evaluate(c, 1).actors.a!;
-    expect(mid.position[1]).toBeGreaterThan(1.5);
-    expect(mid.creature!.wingFold).toBeLessThan(0.2);
-    const flaps = [0.9, 0.95, 1, 1.05].map((t) => evaluate(c, t).actors.a!.creature!.wingFlap);
-    expect(Math.max(...flaps) - Math.min(...flaps)).toBeGreaterThan(0.5);
-    const end = evaluate(c, 11).actors.a!;
-    expect(end.position[1]).toBeCloseTo(0, 3);
-    expect(end.position[2]).toBeCloseTo(12, 1);
-    expect(end.creature!.wingFold).toBeCloseTo(1, 3);
+  it("a bird flies wherever it goes: up to its cruising height, wings beating, legs tucked — and glides down to land where it was going", () => {
+    for (const run of [false, true]) {
+      const spec = addWalkPath(scene("pigeon", { settings: { duration: 30 }, space: { type: "ground", size: 120 } }), "a", [[0, 0, 40]], { start: 0, run });
+      const c = compile(spec);
+      // when it arrives
+      let end = 0;
+      while (end < 30 && evaluate(c, end).actors.a!.position[2] < 40 - 1e-3) end += 0.01;
+      const mid = evaluate(c, end / 2).actors.a!;
+      expect(mid.position[1], run ? "run" : "walk").toBeGreaterThan(1.5);
+      expect(mid.creature!.wingFold).toBeLessThan(0.2);
+      const flaps = [0, 0.05, 0.1, 0.15].map((dt) => evaluate(c, end / 2 + dt).actors.a!.creature!.wingFlap);
+      expect(Math.max(...flaps) - Math.min(...flaps)).toBeGreaterThan(0.5);
+      // coming in to land it is lower and still flying forward — not dropping straight down at the spot
+      const final = evaluate(c, end - 0.5).actors.a!;
+      const later = evaluate(c, end - 0.4).actors.a!;
+      expect(final.position[1]).toBeLessThan(mid.position[1] * 0.6);
+      expect(later.position[2] - final.position[2]).toBeGreaterThan(0.05);
+      const landed = evaluate(c, end + 2).actors.a!;
+      expect(landed.position[1]).toBeCloseTo(0, 3);
+      expect(landed.position[2]).toBeCloseTo(40, 1);
+      expect(landed.creature!.wingFold).toBeCloseTo(1, 3);
+    }
+  });
+
+  it("a short hop stays low; birds that cannot fly walk", () => {
+    const hop = compile(addWalkPath(scene("pigeon"), "a", [[0, 0, 1.5]], { start: 0 }));
+    let top = 0;
+    for (let t = 0; t < 3; t += 0.02) top = Math.max(top, evaluate(hop, t).actors.a!.position[1]);
+    expect(top).toBeGreaterThan(0.05);
+    expect(top).toBeLessThan(1.2);
+    const chick = compile(addWalkPath(scene("chicken"), "a", [[0, 0, 4]], { start: 0 }));
+    expect(evaluate(chick, 2).actors.a!.position[1]).toBeCloseTo(0, 3);
   });
 
   it("sits and lies down: four legs fold, the haunches reach the floor", () => {
