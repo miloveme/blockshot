@@ -129,6 +129,8 @@
 - [ ] R2: 리깅된 GLB 캐릭터(본 이름 매핑·리타깃), GLB 애니메이션 클립 재생(`play`)
 - [x] `sitDown`/`standUp` 액션(좌석으로 이동·회전·내려앉기, 소파 offset으로 다인 착석) + 에셋/속성 패널 버튼, 포즈 전환 0.35초 블렌드
 - [x] 앉은 채 말하기·가리키기(앉은 사람의 `talk`·`point`는 상체만, `standUp`/이동까지 착석 유지), `point` 제스처(바라보는 대상이나 `target`을 팔 IK로 겨눔), `point` 포즈도 바라보는 대상을 겨눔, wave 아래팔 방향 수정
+- [x] 연기 API 1단계([ACTING_API.md](ACTING_API.md)): 몸 채널 액션 `arm`(aim·place·rest, elbow·palm)·`torso`(lean·bend·turn)·`head`(nod·tilt·turn), 몸 기준 위치 BodyPoint, 반복 움직임 Beat(jab·sway·bob·shake), 빌더 `arm()`·`hand()`·`torso()`·`headMove()`, 프롬프트 키트 "조합하기" 지침
+- [ ] 연기 API 2단계: 내장 제스처·상체 포즈를 조합 데이터(라이브러리)로, Spec `gestures` 커스텀 정의 / 3단계: 편집기 채널 타임라인 / 4단계: 프롬프트 조합 예제
 - [x] 뼈 키프레임: `bone:<이름>`/`hips` 트랙(오일러 도, 키 구간 오버라이드), 포즈 키·복사·좌우 반전, 자동 모션 → 키 굳히기(bake, RDP)·해제, 뷰포트 뼈 선택 + 회전 입력, AI addon `tracks`·`actor.bone()`
 - [x] 코드 API(Remotion 스타일): `interpolate`/`spring`/`noise`, `scene.sequence`(시간 오프셋), `scene.animate`/`actor.boneFn`(시간 함수 → 키 샘플링)
 - [x] `drive.drift`(0–1): 코너 슬립각 드리프트(체이싱), 붙여넣기 프롬프트에 차량·코드 API·액션 연출 팁 포함(MCP 지침과 동일 수준)

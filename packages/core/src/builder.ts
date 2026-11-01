@@ -2,7 +2,9 @@ import type { BoneName } from "./rig";
 import {
   SPEC_VERSION,
   type Action,
+  type Beat,
   type BodyPart,
+  type BodyPoint,
   type BodySurface,
   type ContactPart,
   type Ease,
@@ -37,6 +39,26 @@ import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
  */
 
 type Timing = { start: number; duration?: number; ease?: Ease };
+/** A target for an acting channel: a point, "actor.part", a prop id, a handle, or a point on the actor's own body. */
+type ActTarget = Target | BodyPoint | { id: string };
+/** Channel timing: without `duration` a move lasts until the next move on the same channel; `blend` = fade seconds. */
+type ChannelTiming = { start: number; duration?: number; blend?: number; beat?: Beat };
+type ArmOpts = ChannelTiming & { reach?: number; elbow?: "down" | "out" | "back"; palm?: "down" | "up" | "in" | "out" | "forward" };
+
+/** One arm of an actor (acting channel, docs/ACTING_API.md). */
+export interface ArmHandle {
+  /** Stretch the arm from the shoulder toward `target` (default: what the actor looks at): pointing, gesturing at someone. `reach` 1 = straight. */
+  aim(target: ActTarget | undefined, opts: ArmOpts): ArmHandle;
+  /** Put the wrist on `target`: a point, a body part, or { self: "hip_l" | "face" | … } on its own body. */
+  place(target: ActTarget, opts: ArmOpts): ArmHandle;
+  /** Give the arm back to the pose. */
+  rest(opts: ChannelTiming): ArmHandle;
+}
+
+export interface HandHandle {
+  /** Shape the fingers (fist, point, pinch, grip, open, relaxed) for `duration` (default 2 s). */
+  shape(shape: HandShape, opts: { start: number; duration?: number }): HandHandle;
+}
 type ActorOpts = { name?: string; species?: Species; color?: string; height?: number; build?: "slim" | "average" | "heavy"; at?: Vec3; facing?: number; pose?: Pose; aim?: Vec3 };
 type PropOpts = { id?: string; at?: Vec3; facing?: number; rotation?: Vec3; scale?: Vec3; color?: string; aim?: Vec3 };
 type CameraOpts = { name?: string; lens?: number; sensor?: Sensor; at?: Vec3; lookAt?: Target; rotation?: Vec3; tracking?: Tracking; shake?: Shake };
@@ -76,6 +98,14 @@ export interface ActorHandle {
   /** Pelvis offset keys (rest metres), e.g. [[0,[0,0,0]],[1,[0,-0.1,0]]] */
   hips(keys: Array<[number, Vec3]>, ease?: Ease): ActorHandle;
   lookAt(target: Target, opts: { start: number; end?: number }): ActorHandle;
+  /** One arm as an acting channel: `.aim(target, …)`, `.place(target, …)`, `.rest(…)`. */
+  arm(side: "left" | "right"): ArmHandle;
+  /** One hand: `.shape("point", { start, duration })`. */
+  hand(side: "left" | "right" | "both"): HandHandle;
+  /** Lean (+ forward), bend (+ to its left) or turn (deg, + to its left, or toward a target) the upper body; the legs stay put. */
+  torso(opts: ChannelTiming & { lean?: number; bend?: number; turn?: number | ActTarget }): ActorHandle;
+  /** Nod (+ down), tilt (+ toward its left shoulder) or turn (+ to its left) the head on top of where it looks; beat bob = nodding, shake = shaking it. */
+  headMove(opts: ChannelTiming & { nod?: number; tilt?: number; turn?: number }): ActorHandle;
 }
 
 /** A prop (usually a vehicle) that can be driven. */
@@ -170,6 +200,9 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
     else spec.tracks.push({ target, property, keys: [key] });
   }
 
+  /** A handle stands for its id (an actor's face, a prop's centre). */
+  const actTarget = (t: ActTarget): Target | BodyPoint => (typeof t === "object" && !Array.isArray(t) && "id" in t ? t.id : t);
+
   function makeActor(id: string): ActorHandle {
     const handle: ActorHandle = {
       id,
@@ -196,6 +229,20 @@ export function createSceneBuilder(base?: BlockshotSpecInput) {
       bone: (bone, keys, ease) => (keys.forEach(([t, v]) => addKey(id, `bone:${bone}`, t, v, ease)), handle),
       boneFn: (bone, range, fn) => (scene.animate(id, `bone:${bone}`, range, fn), handle),
       hips: (keys, ease) => (keys.forEach(([t, v]) => addKey(id, "hips", t, v, ease)), handle),
+      arm: (side) => {
+        const arm: ArmHandle = {
+          aim: (target, o) => (action({ type: "arm", actor: id, side, mode: "aim", ...(target !== undefined ? { target: actTarget(target) } : {}), ...o }), arm),
+          place: (target, o) => (action({ type: "arm", actor: id, side, mode: "place", target: actTarget(target), ...o }), arm),
+          rest: (o) => (action({ type: "arm", actor: id, side, mode: "rest", ...o }), arm),
+        };
+        return arm;
+      },
+      hand: (side) => {
+        const hand: HandHandle = { shape: (shape, o) => (action({ type: "handShape", actor: id, shape, hand: side, ...o }), hand) };
+        return hand;
+      },
+      torso: ({ turn, ...o }) => (action({ type: "torso", actor: id, ...(turn !== undefined ? { turn: typeof turn === "number" ? turn : (actTarget(turn) as Target) } : {}), ...o }), handle),
+      headMove: (o) => (action({ type: "head", actor: id, ...o }), handle),
     };
     return handle;
   }

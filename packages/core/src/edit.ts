@@ -1,4 +1,5 @@
 import type { Actor, BlockshotSpec, Camera, Gesture, HandShape, Key, Prop, PropType, Shot, Species, Target, TrackProperty, Vec3 } from "./schema";
+import { isBodyPoint } from "./schema";
 import { compile, evaluate } from "./evaluate";
 import { parseRef } from "./mirror";
 import { SEATS } from "./catalog";
@@ -143,7 +144,8 @@ export function removeEntity(spec: BlockshotSpec, id: string): BlockshotSpec {
       if ("actor" in a && a.actor === id) return false;
       if ("camera" in a && a.camera === id) return false;
       if (a.type === "sitDown" && a.on === id) return false;
-      if ("target" in a && a.target !== undefined && refersTo(a.target, id)) return false;
+      if ("target" in a && a.target !== undefined && !isBodyPoint(a.target) && refersTo(a.target, id)) return false;
+      if (a.type === "torso" && a.turn !== undefined && refersTo(a.turn, id)) return false;
       if (a.type === "orbit" && refersTo(a.around, id)) return false;
       return true;
     }),

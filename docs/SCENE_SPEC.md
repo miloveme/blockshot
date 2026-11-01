@@ -171,6 +171,9 @@ LLM과 사람이 가장 많이 쓰는 레이어. 로드 시 `compile()`이 `trac
 | `sitDown` | `actor, on: 의자/소파 소품 id, start, duration?(1), offset?(0)` | 좌석 앞(열린 쪽, 0.6 m)으로 돌아 걸어간 뒤 좌석까지 들어가(이동 키; 등받이 뒤/옆에서 출발해도 통과하지 않음) 좌석이 향한 방향으로 돌고 마지막 0.35초에 `sit`으로 내려앉는다. 소파는 `offset`(m, 소파 폭 방향)으로 여러 명이 나눠 앉는다. `on`은 `chair`/`sofa`여야 한다(검증 오류) |
 | `gesture` | `actor, gesture, start, duration?, side?, intensity?(1), target?` | 몸짓 레이어를 현재 포즈 위에 얹는다(0.25초 페이드). `gesture`: wave, point, nod, shakeHead, shrug, clap, crossArms, handsOnHips, think, bow, lookAround, cheer. 한 손 제스처는 `side`로 손을 고른다. `point`는 팔을 쭉 뻗어 검지로 `target`(Ref/Vec3)을 가리킨다 — 없으면 그 순간 `lookAt`으로 바라보는 대상, 그것도 없으면 정면 |
 | `handShape` | `actor, shape, hand?(both), start, duration?(2)` | 손가락 모양을 잡는다: `open`·`relaxed`·`fist`·`point`·`pinch`·`grip`. 기본 손은 `relaxed` |
+| `arm` | `actor, side?(right), mode: aim\|place\|rest, target?, reach?(0.95), elbow?, palm?, beat?, start, duration?, blend?(0.25)` | **연기 채널 — 팔 하나.** `aim`: 어깨에서 `target` 쪽으로 팔을 `reach`만큼 뻗는다(1 = 쭉 폄; target 없으면 바라보는 대상 → 정면). `place`: 손목을 `target`에 둔다(target 필수). `rest`: 포즈의 팔로 되돌린다. `target`은 Vec3·Ref·소품 id 또는 **BodyPoint** `{ self, offset? }`. `elbow`: down·out·back(팔꿈치 방향), `palm`: down·up·in·out·forward. 같은 팔의 이동은 나중에 시작한 것이 이기고(`blend`초 교차 페이드), `duration`이 없으면 다음 같은 팔 이동까지 유지 |
+| `torso` | `actor, lean?(0), bend?(0), turn?, beat?, start, duration?, blend?` | **연기 채널 — 상체.** `lean` 앞으로 숙이기(도, +앞), `bend` 옆으로 기울이기(+왼쪽), `turn` 비틀기(도 +왼쪽, 또는 대상 쪽으로, ±70° 제한). 골반·다리는 그대로(앉아서도 가능). spine 40%·chest 60%로 나눠 더한다 |
+| `head` | `actor, nod?(0), tilt?(0), turn?(0), beat?, start, duration?, blend?` | **연기 채널 — 머리.** `lookAt` 위에 더하는 오프셋: `nod`(+아래), `tilt`(+왼쪽 어깨 쪽), `turn`(+왼쪽). beat `bob` = 끄덕임, `shake` = 젓기 |
 | `drive` | `prop, to?: Vec3 \| Vec3[], follow?, gap?(10), offset?, start, speed?(12 m/s), duration?, ease?(linear), radius?(6), drift?(0)` | **소품(차량)이 이동**한다 — 소품은 이 액션이 없으면 놓인 자리에 그대로 서 있다. `to` 경로의 모서리는 회전 반경 `radius`의 호로 둥글려지고(차는 진행 방향을 보며 코너에서 바깥으로 기울고 브레이크에 앞이 숙여지며 바퀴가 구르고 앞바퀴가 조향된다), `ease`로 출발(`easeIn`)/제동(`easeOut`)한다. `follow: id`면 그 소품/인물의 **경로를 따라 `gap` m 뒤**에서 쫓아간다(추격 — 앞차가 서면 그 뒤에 멈춘다), `offset`은 상대 프레임 오프셋. 한 소품에 여러 `drive`를 이어 붙일 수 있다. `drift`(0–1)는 **드리프트** — 코너에서 꼬리가 빠져 차체가 진행 방향보다 최대 약 38° 더 안쪽으로 돌고(부드럽게 들어갔다 복귀) 롤이 커진다. 직선은 0, 급코너는 0.7–1 권장. `to` 경로 주행에만 적용된다(`follow`는 앞차 경로를 그대로 따름 — 추격차도 드리프트하려면 자기 `to` 경로를 준다) |
 | `mount` | `camera, to, offset?([0,1.6,-6]), look?([0,1,0]), start, end?` | 카메라가 인물/소품에 **실려 움직인다**(추격 카메라·후드 캠): 대상의 좌표계에서 `offset`만큼 떨어진 곳에 있고 `look`(대상 프레임) 지점을 본다. `end`를 생략하면 프로젝트 끝까지 |
 | `hold` | `actor, prop, hand?(right), at?(carry), start, duration?(4), then?(keep)` | 소품(전화기·컵 등)을 집어 **손에 들고 사용**한다. `at`: `ear`(통화) · `mouth`(마시기) · `chest`(문자/읽기) · `carry`(들고만). 가까이(≈1 m 이내) 있으면 손을 뻗어 집고 들어 올려 유지한 뒤 내리고, 멀리 있으면 처음부터 손에 든 것으로 본다. `then: keep`이면 손에 계속 들고(팔은 내림), `put`이면 원래 자리에 되돌려 놓는다. 소품은 손을 따라 움직이고(전화기는 화면이 얼굴을 향해 세로로), 걸으며 계단을 올라도 유지된다 |
@@ -183,6 +186,10 @@ LLM과 사람이 가장 많이 쓰는 레이어. 로드 시 `compile()`이 `trac
 | `zoom` | `camera, focalLength, start, duration, ease?` | 초점거리 애니메이션 |
 | `orbit` | `camera, around: Vec3 \| ref, degrees, start, duration, ease?` | 대상 중심 원호 이동 |
 
+
+**BodyPoint** — `{ "self": 이름 | [x,y,z], "offset"?: [x,y,z] }`: 배우 자신의 몸 기준 위치. 숙이거나 앉아도 따라간다. 이름: head, face, mouth, chest, belly, hip_l, hip_r, shoulder_l, shoulder_r, knee_l, knee_r, overhead(머리 위), front(가슴 앞 0.5 m), side_l, side_r(어깨 옆 0.6 m). `[x,y,z]`와 `offset`은 배우 좌표(+X = 배우의 왼쪽, +Y 위, +Z 앞, 발밑 원점)의 휴식 미터이며 키에 비례해 스케일된다.
+
+**Beat** — `{ "shape": "jab"|"sway"|"bob"|"shake", "every"?: 초(0.5), "amount": 크기, "count"?: 횟수 }`: 채널 이동 위에 반복 움직임을 더한다. `amount`는 팔이면 미터, 상체·머리면 도. 팔 `aim` + jab = 박자마다 손을 당겼다 찌르기, `place` + sway = 좌우로 흔들기(손 인사), 머리 + shake = 고개 젓기. `count`가 지나면 멈춘다. 결정론적 파형(사인, jab = max(0, sin)²).
 ## 9. tracks (저수준 키프레임)
 
 ```jsonc

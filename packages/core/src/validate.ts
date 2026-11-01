@@ -1,4 +1,4 @@
-import { BlockshotSpec, BODY_SURFACES, type Target } from "./schema";
+import { BlockshotSpec, BODY_SURFACES, isBodyPoint, type Target } from "./schema";
 import { parseRef } from "./mirror";
 import { PROP_CATALOG, SEATS } from "./catalog";
 
@@ -125,12 +125,14 @@ export function validateSpec(input: unknown): ValidationResult {
       if (a.end !== undefined && a.end <= a.start) errors.push({ path: `${p}.end`, message: `Contact end (${a.end}) must be after start (${a.start})` });
     }
     // hands-only actions do nothing on an animal (kept, but said so)
-    if ((a.type === "hold" || a.type === "reach" || a.type === "handShape" || a.type === "contact" || (a.type === "gesture" && !ANIMAL_GESTURES.has(a.gesture))) && "actor" in a) {
+    if ((a.type === "hold" || a.type === "reach" || a.type === "handShape" || a.type === "contact" || a.type === "arm" || a.type === "torso" || (a.type === "gesture" && !ANIMAL_GESTURES.has(a.gesture))) && "actor" in a) {
       const who = spec.actors.find((x) => x.id === a.actor);
       if (who && who.species !== "human") warnings.push({ path: p, message: `"${a.actor}" is a ${who.species}: ${a.type === "gesture" ? `the "${a.gesture}" gesture` : `"${a.type}"`} only works on people (animals take nod, shakeHead, lookAround, bow)` });
     }
     if ("camera" in a) checkCamera(a.camera, `${p}.camera`);
-    if ("target" in a && a.target != null) checkTarget(a.target, `${p}.target`);
+    if ("target" in a && a.target != null && !isBodyPoint(a.target)) checkTarget(a.target, `${p}.target`);
+    if (a.type === "torso" && a.turn !== undefined) checkTarget(a.turn, `${p}.turn`);
+    if (a.type === "arm" && a.mode === "place" && a.target === undefined) errors.push({ path: `${p}.target`, message: `An arm "place" needs a target: a point [x,y,z], "actor.part", a prop id or { self: "hip_l" | "face" | … } on its own body` });
     if (a.type === "orbit") checkTarget(a.around, `${p}.around`);
   });
   spec.tracks.forEach((t, i) => {

@@ -52,6 +52,9 @@ export function describeAction(a: Action): string {
     : a.type === "contact" ? `${a.part} → ${Array.isArray(a.on) ? "point" : a.on}`
     : a.type === "hold" ? `${a.prop} → ${a.at}`
     : a.type === "pose" ? a.pose
+    : a.type === "arm" ? `${a.side} ${a.mode}${a.target === undefined ? "" : ` → ${typeof a.target === "string" ? a.target : Array.isArray(a.target) ? "point" : `self.${Array.isArray(a.target.self) ? "point" : a.target.self}`}`}${a.beat ? ` (${a.beat.shape})` : ""}`
+    : a.type === "torso" ? [a.lean ? `lean ${a.lean}°` : "", a.bend ? `bend ${a.bend}°` : "", a.turn !== undefined ? `turn ${typeof a.turn === "number" ? `${a.turn}°` : typeof a.turn === "string" ? `→ ${a.turn}` : "→ point"}` : "", a.beat ? `(${a.beat.shape})` : ""].filter(Boolean).join(" ")
+    : a.type === "head" ? [a.nod ? `nod ${a.nod}°` : "", a.tilt ? `tilt ${a.tilt}°` : "", a.turn ? `turn ${a.turn}°` : "", a.beat ? `(${a.beat.shape})` : ""].filter(Boolean).join(" ")
     : a.type === "lookAt" || a.type === "cameraLookAt" || a.type === "turnTo" ? `→ ${typeof a.target === "string" ? a.target : Array.isArray(a.target) ? "point" : `${a.target}°`}`
     : "";
   return `${a.type}${detail ? ` ${detail}` : ""} @${a.start}s`;

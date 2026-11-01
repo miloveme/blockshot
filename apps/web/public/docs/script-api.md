@@ -81,6 +81,12 @@ scene.shot("S2", { camera: camB, start: 4, end: 8, prompt: "over-the-shoulder cl
 | `.standUp({ start, duration?, to? })` | 일어나 좌석 앞으로 걸어 나옴(좌석 깊이에 맞춰, 또는 `to`) |
 | `.gesture(name, { start, duration?, side?, intensity?, target? })` | 몸짓(wave·point·nod·shrug·clap·cheer …). 포즈 위에 얹힌다. `point`는 `target`(없으면 바라보는 대상)을 가리킨다 |
 | `.handShape(shape, { start, hand?, duration? })` | 손가락 모양: open·relaxed·fist·point·pinch·grip (`hand`: left/right/both) |
+| `.arm(side).aim(target?, { start, duration?, reach?, elbow?, palm?, beat?, blend? })` | 연기 채널: 팔을 대상 쪽으로 뻗기(가리키기·손짓). target 없으면(`undefined`) 바라보는 대상. 핸들도 대상이 된다 |
+| `.arm(side).place(target, { … })` | 손목을 대상에 두기. 자기 몸은 `{ self: "hip_l" }`(허리에 손), `{ self: "face" }`, `{ self: "side_r", offset: [0.1, 0.35, 0] }` 등 |
+| `.arm(side).rest({ start, blend? })` | 그 팔을 포즈로 되돌리기 |
+| `.hand(side).shape(shape, { start, duration? })` | `handShape`의 채널식 표기 (`side`: left/right/both) |
+| `.torso({ lean?, bend?, turn?, beat?, start, duration?, blend? })` | 상체 숙이기·기울이기·비틀기(`turn`에 핸들/참조 주면 그쪽으로) |
+| `.headMove({ nod?, tilt?, turn?, beat?, start, duration?, blend? })` | 시선 위에 더하는 끄덕·갸웃·돌리기. `beat: { shape: "shake", every: 0.4, amount: 20, count: 3 }` = 세 번 젓기 |
 | `scene.use(propId).drive(path, { start, speed?, duration?, ease?, radius?, drift? })` | 차량/소품이 경로를 따라 이동(모서리는 곡선, 차체 기울기·바퀴 회전 포함). `drift`(0–1)는 코너에서 꼬리를 빼는 드리프트. 소품은 `drive` 없이는 움직이지 않는다 |
 | `scene.use(propId).follow(leader, { start, gap?, offset?, duration? })` | `leader`의 경로를 `gap` m 뒤에서 쫓아간다 (자동차 추격) |
 | `camera.mount(target, { start, offset?, look?, end? })` | 카메라가 인물/차에 실려 따라간다 (추격 카메라) |

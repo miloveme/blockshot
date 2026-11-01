@@ -228,6 +228,31 @@ export type BodySurface = (typeof BODY_SURFACES)[number];
 
 /** every action has a start time and an optional label (`id`) so edits can address it ("patchActions" / "removeActions") */
 const timed = { start: z.number().min(0), id: Id.optional() };
+// ---- acting channels (docs/ACTING_API.md) ------------------------------------------------------------
+
+/** Named points on the actor's own body, in its own frame — they follow it when it leans, sits or crouches. */
+export const BODY_POINTS = ["head", "face", "mouth", "chest", "belly", "hip_l", "hip_r", "shoulder_l", "shoulder_r", "knee_l", "knee_r", "overhead", "front", "side_l", "side_r"] as const;
+export type BodyPointName = (typeof BODY_POINTS)[number];
+/**
+ * A point on / around the actor itself: a named body point, or [x, y, z] in its own frame (rest metres scaled by height:
+ * +X = its left, +Y up from the floor, +Z forward). `offset` (same frame and units) moves a named point.
+ */
+export const BodyPoint = z.object({ self: z.union([z.enum(BODY_POINTS), Vec3]), offset: Vec3.optional() });
+export type BodyPoint = z.infer<typeof BodyPoint>;
+export const isBodyPoint = (v: unknown): v is BodyPoint => typeof v === "object" && v !== null && !Array.isArray(v) && "self" in v;
+
+export const BEAT_SHAPES = ["jab", "sway", "bob", "shake"] as const;
+/**
+ * A repeating motion added on top of a channel move: `every` seconds per beat, `amount` its size (metres for an arm,
+ * degrees for the torso / head), `count` beats then still. jab = quick pulses toward the target / forward, sway = side
+ * to side, bob = up and down (a nod for the head), shake = turning left and right.
+ */
+export const Beat = z.object({ shape: z.enum(BEAT_SHAPES), every: z.number().min(0.1).max(10).default(0.5), amount: z.number().min(0).max(90), count: z.number().int().positive().optional() });
+export type Beat = z.infer<typeof Beat>;
+
+/** Channel moves blend in and out over `blend` s; without `duration` they last until the next move on the same channel. */
+const channelTime = { duration: z.number().positive().optional(), blend: z.number().min(0).max(2).default(0.25) };
+
 
 export const Action = z.discriminatedUnion("type", [
   z.object({ type: z.literal("walkTo"), actor: Id, to: z.union([Vec3, z.array(Vec3).min(1)]), duration: z.number().positive().optional(), speed: z.number().positive().optional(), direct: z.boolean().optional(), ...timed }),
@@ -239,6 +264,47 @@ export const Action = z.discriminatedUnion("type", [
    * `point` aims the arm at `target` — by default at whatever the actor is looking at (straight ahead when nothing)
    */
   z.object({ type: z.literal("gesture"), actor: Id, gesture: GestureName, side: z.enum(["left", "right"]).optional(), duration: z.number().positive().optional(), intensity: z.number().min(0).max(1).default(1), target: Target.optional(), ...timed }),
+  /**
+   * One arm (acting channel): "aim" stretches it from the shoulder toward `target` (`reach` 1 = straight, 0.5 = elbow half
+   * bent) — pointing, gesturing at someone, a hand up to stop them; "place" puts the wrist on `target` (a point, a body
+   * part, a BodyPoint on its own body: hand on hip, hand to the face); "rest" gives the arm back to the pose. `elbow` and
+   * `palm` steer the shape; `beat` repeats a motion on top (a jabbing finger, a wave).
+   */
+  z.object({
+    type: z.literal("arm"),
+    actor: Id,
+    side: z.enum(["left", "right"]).default("right"),
+    mode: z.enum(["aim", "place", "rest"]),
+    target: z.union([Target, BodyPoint]).optional(),
+    reach: z.number().min(0.3).max(1).default(0.95),
+    elbow: z.enum(["down", "out", "back"]).optional(),
+    palm: z.enum(["down", "up", "in", "out", "forward"]).optional(),
+    beat: Beat.optional(),
+    ...channelTime,
+    ...timed,
+  }),
+  /** The upper body (acting channel): `lean` forward (deg, + = forward), `bend` sideways (deg, + = to its left), `turn` (deg, + = to its left, or a target to turn toward); hips and legs stay as they are. */
+  z.object({
+    type: z.literal("torso"),
+    actor: Id,
+    lean: z.number().min(-30).max(80).default(0),
+    bend: z.number().min(-40).max(40).default(0),
+    turn: z.union([z.number().min(-70).max(70), Target]).optional(),
+    beat: Beat.optional(),
+    ...channelTime,
+    ...timed,
+  }),
+  /** The head on top of where it looks (acting channel): `nod` down (deg, + = down), `tilt` (deg, + = toward its left shoulder), `turn` (deg, + = to its left); beat bob = nodding, shake = shaking it. */
+  z.object({
+    type: z.literal("head"),
+    actor: Id,
+    nod: z.number().min(-45).max(60).default(0),
+    tilt: z.number().min(-40).max(40).default(0),
+    turn: z.number().min(-70).max(70).default(0),
+    beat: Beat.optional(),
+    ...channelTime,
+    ...timed,
+  }),
   /** hold a hand shape (fist, point, pinch, grip, open) with one or both hands for `duration` */
   z.object({ type: z.literal("handShape"), actor: Id, shape: HandShapeName, hand: z.enum(["left", "right", "both"]).default("both"), duration: z.number().positive().default(2), ...timed }),
   /** a vehicle (or any prop) drives along a path — corners rounded by a turning radius, body leaning in turns — or trails another prop / actor `gap` metres behind it along its route */

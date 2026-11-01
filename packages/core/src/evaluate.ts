@@ -1,4 +1,5 @@
-import type { Action, BodyPart, BodySurface, Camera, ContactPart, Ease, Gesture, HandShape, HoldAt, Key, Pose, BlockshotSpec, Prop, Species, Target, TrackProperty, Vec3 } from "./schema";
+import type { Action, Beat, BodyPart, BodyPoint, BodySurface, Camera, ContactPart, Ease, Gesture, HandShape, HoldAt, Key, Pose, BlockshotSpec, Prop, Species, Target, TrackProperty, Vec3 } from "./schema";
+import { isBodyPoint } from "./schema";
 import { TRACKING_PRESETS, type Tracking } from "./schema";
 import { cameraShakeAt } from "./shake";
 import { applyEase, DEG, unwrapYaw, vec, yawTowards } from "./math";
@@ -96,12 +97,23 @@ export type ActLayer =
   | { kind: "gesture"; gesture: Gesture; start: number; end: number; side: "left" | "right"; intensity: number; target?: Target }
   /** talking / pointing from a seat: the arms and head take that pose, the body stays seated */
   | { kind: "upper"; pose: "talk" | "point"; start: number; end: number }
+  | ChannelLayer
   | { kind: "reach"; target: Target; hand: "left" | "right"; start: number; end: number }
   | { kind: "hand"; shape: HandShape; hand: "left" | "right" | "both"; start: number; end: number }
   | ContactLayer
   /** getting up out of a seat: the sit → stand blend spans the whole rise instead of the usual POSE_BLEND */
   | { kind: "rise"; start: number; end: number }
   | HoldLayer;
+
+/**
+ * A move on one acting channel (docs/ACTING_API.md): an arm, the torso or the head. `open` ones (no duration) last until
+ * the next move on the same channel — see endChannelLayers.
+ */
+export type ChannelLayer = { start: number; end: number; blend: number; open: boolean; beat?: Beat } & (
+  | { kind: "arm"; side: "left" | "right"; mode: "aim" | "place" | "rest"; target?: Target | BodyPoint; reach: number; elbow?: "down" | "out" | "back"; palm?: "down" | "up" | "in" | "out" | "forward" }
+  | { kind: "torso"; lean: number; bend: number; turn?: number | Target }
+  | { kind: "head"; nod: number; tilt: number; turn: number }
+);
 
 /** A hand or foot kept touching something (see the `contact` action). */
 export interface ContactLayer {
@@ -281,6 +293,7 @@ function compileUncached(spec: BlockshotSpec): CompiledScene {
   }
 
   for (const a of spec.actors) endUpperLayers(scene.acts.get(a.id), tracks.get(trackKey(a.id, "pose"))!);
+  for (const a of spec.actors) endChannelLayers(scene.acts.get(a.id));
   for (const a of spec.actors) stepOutOfSeats(spec, tracks.get(trackKey(a.id, "pose"))!, tracks.get(trackKey(a.id, "position"))!);
 
   // wheels need to know how fast and how far each driven prop went, and how its front wheels were steered
@@ -305,6 +318,19 @@ function endUpperLayers(acts: ActLayer[] | undefined, pose: CKey[]) {
     const next = upper[i + 1] ? upper[i + 1]!.start + FADE : Infinity;
     l.end = Math.min(change, next);
   });
+}
+
+const channelOf = (l: ChannelLayer) => (l.kind === "arm" ? `arm:${l.side}` : l.kind);
+const isChannel = (l: ActLayer): l is ChannelLayer => l.kind === "arm" || l.kind === "torso" || l.kind === "head";
+
+/** An open channel move ends where the next move on its channel has blended in (the two cross-fade). */
+function endChannelLayers(acts: ActLayer[] | undefined) {
+  const moves = (acts ?? []).filter(isChannel);
+  for (const l of moves) {
+    if (!l.open) continue;
+    const next = moves.filter((m) => m !== l && channelOf(m) === channelOf(l) && m.start > l.start).reduce((x, m) => Math.min(x, m.start + m.blend), Infinity);
+    l.end = next;
+  }
 }
 
 /**
@@ -549,6 +575,17 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       for (const part of ["foot_l", "foot_r"] as const) list.push({ kind: "contact", part, on: "floor", start: a.start, end: riseEnd, blend: 0.12, id: `${label}:${part}`, implicit: true });
       scene.acts.set(a.actor, list);
       if (stepping) compileAction(scene, { type: "walkTo", actor: a.actor, to, start: riseEnd, direct: !a.to, ...(a.to ? {} : { duration: a.start + a.duration - riseEnd }) }, track);
+      break;
+    }
+    case "arm":
+    case "torso":
+    case "head": {
+      const list = scene.acts.get(a.actor) ?? [];
+      const time = { start: a.start, end: a.duration !== undefined ? a.start + a.duration : Infinity, blend: a.blend, open: a.duration === undefined, ...(a.beat ? { beat: a.beat } : {}) };
+      if (a.type === "arm") list.push({ kind: "arm", side: a.side, mode: a.mode, reach: a.reach, ...(a.target !== undefined ? { target: a.target } : {}), ...(a.elbow ? { elbow: a.elbow } : {}), ...(a.palm ? { palm: a.palm } : {}), ...time });
+      else if (a.type === "torso") list.push({ kind: "torso", lean: a.lean, bend: a.bend, ...(a.turn !== undefined ? { turn: a.turn } : {}), ...time });
+      else list.push({ kind: "head", nod: a.nod, tilt: a.tilt, turn: a.turn, ...time });
+      scene.acts.set(a.actor, list);
       break;
     }
     case "gesture": {
@@ -1112,6 +1149,122 @@ function rigPart(sk: Skeleton, part: BodyPart, scale: number, position: Vec3, ro
   return toWorld(local, position, rotation);
 }
 
+// ---- acting channels -----------------------------------------------------------------------------------
+
+/** Strength of a channel move at t: fades in over `blend` from its start and out over `blend` before its end. */
+function channelWeight(t: number, l: ChannelLayer): number {
+  const fade = (x: number) => (l.blend <= 0 ? 1 : smoothstep(x / l.blend));
+  return Math.min(fade(t - l.start), Number.isFinite(l.end) ? fade(l.end - t) : 1);
+}
+
+/** The beat's offset at t: -1…1 (sway / bob / shake) or 0…1 (jab), 0 once its count is done. */
+function beatAt(beat: Beat | undefined, u: number): number {
+  if (!beat) return 0;
+  const phase = u / beat.every;
+  if (beat.count !== undefined && phase >= beat.count) return 0;
+  const s = Math.sin(phase * Math.PI * 2);
+  return beat.shape === "jab" ? Math.max(0, s) ** 2 : s;
+}
+
+/** A BodyPoint in actor space on the skeleton as posed so far. */
+function bodyPointLocal(sk: Skeleton, p: BodyPoint, scale: number): Vec3 {
+  const off = p.offset ?? [0, 0, 0];
+  const add = (v: Vec3): Vec3 => [v[0] + off[0] * scale, v[1] + off[1] * scale, v[2] + off[2] * scale];
+  if (Array.isArray(p.self)) return add([p.self[0] * scale, p.self[1] * scale, p.self[2] * scale]);
+  const at: Record<Exclude<BodyPoint["self"], Vec3>, () => Vec3> = {
+    head: () => offsetIn(sk.head, [0, HEAD_CENTER, 0], scale),
+    face: () => offsetIn(sk.head, [0, HEAD_CENTER, 0.12], scale),
+    mouth: () => offsetIn(sk.head, [0, 0.05, 0.11], scale),
+    chest: () => offsetIn(sk.chest, [0, 0.08, 0.14], scale),
+    belly: () => offsetIn(sk.spine, [0, 0.06, 0.14], scale),
+    hip_l: () => offsetIn(sk.hips, [0.17, 0.02, 0], scale),
+    hip_r: () => offsetIn(sk.hips, [-0.17, 0.02, 0], scale),
+    shoulder_l: () => offsetIn(sk.leftUpperArm, [0, 0.06, 0], scale),
+    shoulder_r: () => offsetIn(sk.rightUpperArm, [0, 0.06, 0], scale),
+    knee_l: () => offsetIn(sk.leftLowerLeg, [0, 0, 0.06], scale),
+    knee_r: () => offsetIn(sk.rightLowerLeg, [0, 0, 0.06], scale),
+    overhead: () => offsetIn(sk.head, [0, 0.4, 0.05], scale),
+    front: () => offsetIn(sk.chest, [0, 0.08, 0.5], scale),
+    side_l: () => offsetIn(sk.chest, [0.6, 0.12, 0.05], scale),
+    side_r: () => offsetIn(sk.chest, [-0.6, 0.12, 0.05], scale),
+  };
+  return add(at[p.self]());
+}
+
+/** A Target / BodyPoint as a point in actor space (read without the rig, as reach does, so nothing recurses). */
+function localTarget(scene: CompiledScene, t: number, core: ReturnType<typeof actorCore>, sk: Skeleton, target: AimTarget | BodyPoint, scale: number): Vec3 {
+  return isBodyPoint(target) ? bodyPointLocal(sk, target, scale) : toLocal(resolveImpl(scene, target, t, false), core.position, core.rotation);
+}
+
+const add3 = (a: Vec3 | undefined, b: Vec3): Vec3 => [(a?.[0] ?? 0) + b[0], (a?.[1] ?? 0) + b[1], (a?.[2] ?? 0) + b[2]];
+
+/** Lean / bend / turn the upper body (spine 40 %, chest 60 %), added to the pose so far. */
+function torsoLayer(scene: CompiledScene, t: number, core: ReturnType<typeof actorCore>, pose: RigPose, l: Extract<ChannelLayer, { kind: "torso" }>, scale: number): Layer {
+  const b = beatAt(l.beat, t - l.start) * (l.beat?.amount ?? 0);
+  let turn = typeof l.turn === "number" ? l.turn : 0;
+  if (l.turn !== undefined && typeof l.turn !== "number") {
+    const sk = solveRig(pose, scale);
+    const at = localTarget(scene, t, core, sk, l.turn, scale);
+    turn = Math.max(-70, Math.min(70, Math.atan2(at[0] - sk.chest.pos[0], at[2] - sk.chest.pos[2]) / DEG));
+  }
+  const lean = l.lean + (l.beat?.shape === "jab" || l.beat?.shape === "bob" ? b : 0);
+  const bend = l.bend + (l.beat?.shape === "sway" ? b : 0);
+  turn += l.beat?.shape === "shake" ? b : 0;
+  // + x leans an upright bone forward, + y turns it to its left, + z tips it to its right
+  const d = (share: number): Vec3 => [lean * DEG * share, turn * DEG * share, -bend * DEG * share];
+  return { spine: add3(pose.rot.spine, d(0.4)), chest: add3(pose.rot.chest, d(0.6)) };
+}
+
+/** Nod / tilt / turn on top of where the head already looks (neck 30 %, head 70 %). */
+function headLayer(t: number, pose: RigPose, l: Extract<ChannelLayer, { kind: "head" }>): Layer {
+  const b = beatAt(l.beat, t - l.start) * (l.beat?.amount ?? 0);
+  const nod = l.nod + (l.beat?.shape === "bob" || l.beat?.shape === "jab" ? b : 0);
+  const tilt = l.tilt + (l.beat?.shape === "sway" ? b : 0);
+  const turn = l.turn + (l.beat?.shape === "shake" ? b : 0);
+  // + x tips the face down, + y turns it to its left, - z tilts it toward its left shoulder
+  const d = (share: number): Vec3 => [nod * DEG * share, turn * DEG * share, -tilt * DEG * share];
+  return { neck: add3(pose.rot.neck, d(0.3)), head: add3(pose.rot.head, d(0.7)) };
+}
+
+const ELBOW_POLE = { down: [0.2, -1, -0.2], out: [1, -0.25, -0.2], back: [0.3, -0.4, -1] } as const;
+
+/** One arm: stretched toward a target (aim), its wrist on a target (place), or back to the pose (rest). */
+function armLayer(scene: CompiledScene, id: string, t: number, core: ReturnType<typeof actorCore>, pose: RigPose, base: RigPose, l: Extract<ChannelLayer, { kind: "arm" }>, scale: number): Layer {
+  const bones = (["Shoulder", "UpperArm", "LowerArm", "Hand"] as const).map((b) => `${l.side}${b}` as BoneName);
+  if (l.mode === "rest") return Object.fromEntries(bones.map((b) => [b, base.rot[b] ?? [0, 0, 0]]));
+  const sk = solveRig(pose, scale);
+  const sideSign = l.side === "left" ? 1 : -1;
+  const shoulder = sk[l.side === "left" ? "leftUpperArm" : "rightUpperArm"].pos;
+  const armLen = (ARM.upper + ARM.lower) * scale;
+  const b = beatAt(l.beat, t - l.start);
+  const amount = (l.beat?.amount ?? 0) * scale;
+  let goal: Vec3;
+  let dir: Vec3 = [0, 0, 1];
+  if (l.mode === "aim") {
+    const ref = l.target ?? activeSegment(scene.looks.get(id), t)?.target ?? undefined;
+    const at: Vec3 = ref != null ? localTarget(scene, t, core, sk, ref, scale) : [shoulder[0], shoulder[1] - 0.1, shoulder[2] + 1];
+    const v: Vec3 = [at[0] - shoulder[0], at[1] - shoulder[1], at[2] - shoulder[2]];
+    const len = Math.hypot(...v) || 1;
+    dir = [v[0] / len, v[1] / len, v[2] / len];
+    // a jab draws the hand back between beats and thrusts it out to `reach` on each one
+    const r = Math.max(0.3 * armLen, Math.min(armLen * 0.99, l.reach * armLen - (l.beat?.shape === "jab" ? amount * (1 - b) : 0)));
+    goal = [shoulder[0] + dir[0] * r, shoulder[1] + dir[1] * r, shoulder[2] + dir[2] * r];
+  } else {
+    goal = localTarget(scene, t, core, sk, l.target!, scale);
+    if (l.beat?.shape === "jab") goal = [goal[0], goal[1], goal[2] + amount * b];
+  }
+  // sway / shake: side to side across the line the arm points along; bob: up and down
+  if (l.beat?.shape === "sway" || l.beat?.shape === "shake") {
+    const side = Math.hypot(dir[0], dir[2]) > 0.2 ? [dir[2], 0, -dir[0]] : [1, 0, 0];
+    const n = Math.hypot(side[0]!, side[2]!) || 1;
+    goal = [goal[0] + (side[0]! / n) * amount * b, goal[1], goal[2] + (side[2]! / n) * amount * b];
+  } else if (l.beat?.shape === "bob") goal = [goal[0], goal[1] + amount * b, goal[2]];
+  const pole = l.elbow ? ([ELBOW_POLE[l.elbow][0] * sideSign, ELBOW_POLE[l.elbow][1], ELBOW_POLE[l.elbow][2]] as Vec3) : undefined;
+  const palm: Vec3 | undefined =
+    l.palm === "down" ? [0, -1, 0] : l.palm === "up" ? [0, 1, 0] : l.palm === "forward" ? [0, 0, 1] : l.palm === "in" ? [-sideSign, 0, 0] : l.palm === "out" ? [sideSign, 0, 0] : undefined;
+  return solveArm(pose, l.side, goal, scale, palm, pole).layer;
+}
+
 /** How much the "point" pose aims the arm at t (it blends in and out with the pose, or with a seated point's fade). */
 function pointWeight(scene: CompiledScene, id: string, t: number, core: ReturnType<typeof actorCore>): number {
   for (const l of scene.acts.get(id) ?? []) if (l.kind === "upper" && l.pose === "point" && t >= l.start && t < l.end) return envelope(t - l.start, l.end - l.start, true);
@@ -1182,10 +1335,13 @@ function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnTyp
     for (const b of LEG_BONES) delete upper[b];
     pose = applyLayer(pose, upper, w);
   }
+  const moves = (scene.acts.get(id) ?? []).filter(isChannel).filter((l) => t >= l.start && t < l.end).sort((x, y) => x.start - y.start);
+  for (const l of moves) if (l.kind === "torso") pose = applyLayer(pose, torsoLayer(scene, t, core, pose, l, scale), channelWeight(t, l));
   if (lookTarget) {
     const local = toLocal(lookTarget, core.position, core.rotation);
     pose = applyLayer(pose, lookLayer(local, solveRig(pose, scale)), 1);
   }
+  for (const l of moves) if (l.kind === "head") pose = applyLayer(pose, headLayer(t, pose, l), channelWeight(t, l));
   // the point pose (standing or seated) aims the finger at whoever the actor is looking at
   const pointing = pointWeight(scene, id, t, core);
   if (pointing > 0) pose = applyLayer(pose, pointLayer(scene, id, t, core, pose, "right", undefined, scale), pointing);
@@ -1194,6 +1350,9 @@ function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnTyp
     const held = holdState(scene, prop, t);
     if (held && held.layer.actor === id) pose = applyLayer(pose, handLayer("grip", held.layer.hand), 1);
   }
+  // arms: each side's moves in start order, so the latest one wins (cross-fading over its blend); "rest" returns to here
+  const armBase = clonePose(pose);
+  for (const l of moves) if (l.kind === "arm") pose = applyLayer(pose, armLayer(scene, id, t, core, pose, armBase, l, scale), channelWeight(t, l));
   for (const layer of scene.acts.get(id) ?? []) {
     const u = t - layer.start;
     if (u < 0 || t > layer.end) continue;
@@ -1206,7 +1365,7 @@ function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnTyp
       pose = applyLayer(pose, handShapeLayer(layer.shape, layer.hand), envelope(u, d, true));
     } else if (layer.kind === "hold") {
       pose = applyHold(pose, layer, u, scale, core);
-    } else if (layer.kind === "contact" || layer.kind === "rise" || layer.kind === "upper") {
+    } else if (layer.kind === "contact" || layer.kind === "rise" || layer.kind === "upper" || isChannel(layer)) {
       continue; // contacts after the bone keys, below; the rise and a seated talk / point are part of the base pose
     } else {
       const w = envelope(u, d, true);
