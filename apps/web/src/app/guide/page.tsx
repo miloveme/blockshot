@@ -9,7 +9,7 @@ const N_LOCAL = LOCAL_TOOL_NAMES.length;
 const LOCAL_NAMES = LOCAL_TOOL_NAMES.join(", ");
 
 export const metadata: Metadata = {
-  title: "사용 설명서 — Blockshot",
+  title: "도움말 — Blockshot",
   description: "처음 쓰는 사람을 위한 Blockshot 따라하기: 프로젝트 만들기부터 배치, 동작, 카메라, 컷 편집, 영상 렌더까지 화면과 함께.",
 };
 
@@ -65,7 +65,9 @@ function Step({ n, id, title, goal, children }: { n: number; id: string; title: 
 
 const H3 = ({ children }: { children: ReactNode }) => <h3 className="mt-2 text-base font-semibold text-zinc-100">{children}</h3>;
 const UL = ({ children }: { children: ReactNode }) => <ul className="ml-5 flex list-disc flex-col gap-1.5 marker:text-zinc-600">{children}</ul>;
-const OL = ({ children }: { children: ReactNode }) => <ol className="ml-5 flex list-decimal flex-col gap-1.5 marker:font-semibold marker:text-amber-400">{children}</ol>;
+const OL = ({ children, start }: { children: ReactNode; start?: number }) => <ol start={start} className="ml-5 flex list-decimal flex-col gap-1.5 marker:font-semibold marker:text-amber-400">{children}</ol>;
+/** where the local MCP file is downloaded from (install and update) */
+const MCP_FILE = "https://blockshot-eta.vercel.app/mcp/blockshot-mcp.mjs";
 const K = ({ children }: { children: ReactNode }) => <kbd className="rounded border border-white/20 bg-white/5 px-1.5 py-0.5 font-mono text-xs text-zinc-200">{children}</kbd>;
 const Code = ({ children }: { children: ReactNode }) => <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[13px] text-amber-200">{children}</code>;
 const Pre = ({ children }: { children: ReactNode }) => <pre className="overflow-x-auto rounded-lg border border-white/10 bg-black/40 p-4 font-mono text-[13px] leading-relaxed text-zinc-200">{children}</pre>;
@@ -111,7 +113,7 @@ export default function GuidePage() {
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5">
         <Link href="/" className="text-lg font-semibold tracking-tight">Blockshot</Link>
         <nav className="flex items-center gap-5 text-sm text-zinc-400">
-          <span className="text-white">사용 설명서</span>
+          <span className="text-white">도움말</span>
           <Link href="/studio" className="hover:text-white">스튜디오</Link>
           <Link href="/projects" className="rounded bg-amber-400 px-3.5 py-1.5 font-medium text-black hover:bg-amber-300">내 프로젝트</Link>
         </nav>
@@ -141,7 +143,7 @@ export default function GuidePage() {
         </aside>
 
         <main className="min-w-0">
-          <h1 className="mb-2 text-3xl font-bold tracking-tight md:text-4xl">Blockshot 사용 설명서</h1>
+          <h1 className="mb-2 text-3xl font-bold tracking-tight md:text-4xl">Blockshot 도움말</h1>
           <p className="mb-6 max-w-2xl text-zinc-400">
             처음이라면 위에서부터 순서대로 따라 해 보세요. 10단계를 마치면 거실 장면에서 인물이 걷고, 카메라가 따라가고, 두 컷으로 편집된 MP4 영상을 직접 만들게 됩니다. 그림의 <b className="text-amber-300">노란 번호</b>는 아래 설명의 번호와 같습니다.
           </p>
@@ -444,6 +446,21 @@ claude mcp add blockshot-local -e BLOCKSHOT_URL=https://blockshot-eta.vercel.app
 command = "node"
 args = ["/Users/<이름>/.blockshot/blockshot-mcp.mjs"]
 env = { BLOCKSHOT_URL = "https://blockshot-eta.vercel.app" }`}</Pre>
+            <H3>로컬 MCP 업데이트하기</H3>
+            <p>로컬 MCP는 내려받은 파일 하나(<Code>~/.blockshot/blockshot-mcp.mjs</Code>)라서 <b>저절로 업데이트되지 않습니다</b>. Blockshot에 새 기능(새 액션·제스처·도구)이 나오면 그 파일을 다시 받아야 AI가 새 기능을 쓸 수 있습니다. 옛 파일은 새 액션을 모르는 동작으로 거부합니다. 렌더는 항상 최신 스튜디오 페이지로 하지만, 스크립트 실행·검증·도구 목록은 파일 안에 들어 있습니다.</p>
+            <OL>
+              <li><b>최신인지 확인</b> — 서버의 파일과 내 파일을 비교합니다.</li>
+            </OL>
+            <Pre>{`cmp -s <(curl -fsSL ${MCP_FILE} 2>/dev/null) ~/.blockshot/blockshot-mcp.mjs && echo "최신입니다" || echo "업데이트가 필요합니다"`}</Pre>
+            <OL start={2}>
+              <li><b>새 파일 받기</b> — 같은 자리에 덮어씁니다. 받는 도중 끊겨도 기존 파일이 깨지지 않게 임시 파일로 받은 뒤 바꿉니다. <b>등록은 그대로 두면 됩니다</b>(경로가 같으므로 다시 등록할 필요 없음).</li>
+            </OL>
+            <Pre>{`curl -fsSL ${MCP_FILE} -o ~/.blockshot/blockshot-mcp.mjs.new && mv ~/.blockshot/blockshot-mcp.mjs.new ~/.blockshot/blockshot-mcp.mjs`}</Pre>
+            <OL start={3}>
+              <li><b>MCP 다시 읽기</b> — 실행 중인 서버는 옛 파일을 메모리에 들고 있으므로 다시 시작해야 합니다. Claude Code는 새 세션을 열거나 <Code>/mcp</Code>에서 다시 연결, Codex는 codex를 다시 시작합니다.</li>
+              <li><b>확인</b> — <Code>printf &apos;{`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`}\n&apos; | node ~/.blockshot/blockshot-mcp.mjs</Code> 가 도구 목록 한 줄을 출력하면 정상입니다.</li>
+            </OL>
+            <Note>원격 MCP는 사이트가 배포되는 순간 자동으로 최신이 됩니다. 업데이트가 필요한 것은 로컬 MCP뿐입니다. AI에게 &ldquo;Blockshot 로컬 MCP 업데이트해 줘&rdquo;라고 해도 됩니다(아래 프롬프트 ⑥).</Note>
             <H3>원격에서 로컬로 바꾸기 (토큰 필요 없음)</H3>
             <p>로컬 서버는 내 컴퓨터에서 직접 실행되는 명령이라 <b>토큰이 필요 없습니다</b>(토큰은 원격 주소만 보호합니다). AI에게 이렇게 요청하세요.</p>
             <Pre>{`토큰 없이 로컬 MCP로 다시 등록해 줘. 기존 원격 blockshot 등록은 지우고,
@@ -522,6 +539,17 @@ Blockshot MCP의 local_setup 도구를 조회해서 그 안내를 그대로 따�
             />
 
             <CopyPrompt
+              title="⑥ 로컬 MCP 업데이트하기"
+              text={`Blockshot 로컬 MCP를 최신 버전으로 업데이트해 줘. 실행 전에 무엇을 할지 먼저 알려 주고 내 확인을 받아.
+1. 지금 등록된 로컬 MCP 파일 경로를 찾아(claude mcp list 또는 ~/.codex/config.toml, 보통 ~/.blockshot/blockshot-mcp.mjs).
+2. 최신인지 비교: cmp -s <(curl -fsSL ${MCP_FILE} 2>/dev/null) <그 경로> 가 같으면 "이미 최신"이라고 알려 주고 끝내.
+3. 다르면 임시 파일로 받은 뒤 바꿔: curl -fsSL ${MCP_FILE} -o <그 경로>.new && mv <그 경로>.new <그 경로>
+   등록(claude mcp / config.toml)은 건드리지 마. 경로가 같으니 다시 등록할 필요 없어.
+4. 확인: printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\\n' | node <그 경로> 가 도구 목록 한 줄을 출력하는지 봐.
+5. 새 도구는 MCP를 다시 읽어야 보인다고 알려 줘(Claude Code는 새 세션이나 /mcp, Codex는 재시작).`}
+            />
+
+            <CopyPrompt
               title="⑦ 내가 배치한 장면에 애니메이션 추가하기 (링크로 전달)"
               text={`Blockshot MCP로 내가 스튜디오에서 배치한 장면에 애니메이션을 추가해 줘.
 장면 링크: <여기에 스튜디오 메뉴바의 「링크」 버튼으로 복사한 링크를 붙여넣기>
@@ -532,7 +560,7 @@ Blockshot MCP의 local_setup 도구를 조회해서 그 안내를 그대로 따�
             />
 
             <CopyPrompt
-              title="⑥ 연결 후 첫 작업 시키기"
+              title="⑧ 연결 후 첫 작업 시키기"
               text={`Blockshot MCP의 get_guide 로 사용법을 읽고, 거실에서 두 사람이 마주 보고 이야기하다가 한 명이 일어나 창가로 걸어가는 6초 장면을 만들어 줘.
 preview 로 카메라 시점과 탑뷰를 각각 확인하고 어색한 건 고친 다음, open_link 로 열어볼 링크를 줘. (로컬 MCP가 연결돼 있으면 끝에 render_video 로 MP4도 만들어 줘.)`}
             />

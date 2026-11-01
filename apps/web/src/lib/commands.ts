@@ -355,7 +355,7 @@ const COMMANDS: Command[] = [
 
   // ---- help
   { id: "help.shortcuts", title: "단축키 보기", category: "help", keys: ["Shift+Slash"], run: () => ui().set({ shortcutsOpen: true }) },
-  { id: "help.guide", title: "사용 설명서", category: "help", run: () => void window.open("/guide", "_blank") },
+  { id: "help.guide", title: "도움말", category: "help", run: () => void window.open("/guide", "_blank") },
   { id: "help.api", title: "에디터 API (스크립트·AI 자동화)", category: "help", run: () => void window.open("/guide#api", "_blank") },
 ];
 

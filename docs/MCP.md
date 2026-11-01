@@ -61,7 +61,20 @@ claude mcp add blockshot-local -e BLOCKSHOT_URL=https://blockshot-eta.vercel.app
 - 기존 원격 등록을 로컬로 **전환**하는 절차(원격 항목 찾기 → 제거(저장된 토큰도 함께 사라짐) → 로컬 등록, 같은 이름 재사용 가능)
 - **검증**: `printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n' | node ~/.blockshot/blockshot-mcp.mjs` → 도구 목록 한 줄. 새 세션에서 로컬 서버는 정확히 14개 도구(`get_guide, run_script, validate_spec, apply_addon, animate_prompt, evaluate, analyze_motion, solve_motion, inspect_rig, preview, load_link, open_link, render_video, render_still`; 개수와 목록은 `local_setup`이 코드에서 직접 계산)이고 `local_setup`이 없으며, 원격은 15개(`local_setup` + 렌더 안내용 스텁 포함). 이어서 `run_script` → `render_still` PNG까지 확인
 
-**프롬프트로 맡기기**: `/guide`의 "AI에게 MCP 연결 맡기기"에 복사용 프롬프트가 있다(로컬 설치·원격 연결·원격→로컬 전환·Codex·연결 점검·첫 작업). 같은 안내 전체는 공개 문서 `/docs/mcp-setup.md`(`pnpm --filter @blockshot/mcp build`가 `localSetupText`로 생성)에도 있어 웹을 읽는 AI는 주소만 알려 줘도 된다.
+### 로컬 MCP 업데이트
+
+로컬 파일은 저절로 바뀌지 않는다. 사이트에 새 기능(액션·제스처·도구)이 배포되면 다시 받아야 한다 — 옛 파일은 새 액션을 스키마 오류로 거부한다(렌더만 최신 스튜디오 페이지를 쓴다). 원격 MCP는 배포 즉시 최신이다.
+
+```
+# 최신인지 확인
+cmp -s <(curl -fsSL https://blockshot-eta.vercel.app/mcp/blockshot-mcp.mjs 2>/dev/null) ~/.blockshot/blockshot-mcp.mjs && echo 최신 || echo 업데이트 필요
+# 받기 (임시 파일로 받은 뒤 교체 — 끊겨도 기존 파일 보존). 등록은 그대로 둔다
+curl -fsSL https://blockshot-eta.vercel.app/mcp/blockshot-mcp.mjs -o ~/.blockshot/blockshot-mcp.mjs.new && mv ~/.blockshot/blockshot-mcp.mjs.new ~/.blockshot/blockshot-mcp.mjs
+```
+
+그다음 MCP를 다시 읽는다(Claude Code는 새 세션/`/mcp`, Codex는 재시작). 같은 절차가 `local_setup`(§6)과 `/guide` 프롬프트 ⑥에 있다.
+
+**프롬프트로 맡기기**: `/guide`의 "AI에게 MCP 연결 맡기기"에 복사용 프롬프트가 있다(로컬 설치·원격 연결·원격→로컬 전환·Codex·연결 점검·로컬 업데이트·링크 장면에 애니메이션·첫 작업). 같은 안내 전체는 공개 문서 `/docs/mcp-setup.md`(`pnpm --filter @blockshot/mcp build`가 `localSetupText`로 생성)에도 있어 웹을 읽는 AI는 주소만 알려 줘도 된다.
 
 **설치가 안 되는 환경**(claude.ai 채팅, 모바일, iPad): 원격 MCP(토큰 방식)만 쓴다. 스크립트·프리뷰·링크는 그대로 되고, MP4는 `open_link`로 받은 링크를 열어 스튜디오의 "영상 렌더"로 브라우저에서 내보낸다.
 

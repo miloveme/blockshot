@@ -30,7 +30,7 @@ export default function Home() {
         <nav className="flex items-center gap-5 text-sm text-zinc-400">
           <a href="#features" className="hover:text-white">기능</a>
           <a href="#how" className="hover:text-white">사용 방법</a>
-          <Link href="/guide" className="hover:text-white">사용 설명서</Link>
+          <Link href="/guide" className="hover:text-white">도움말</Link>
           <Link href="/projects" className="rounded bg-amber-400 px-3.5 py-1.5 font-medium text-black hover:bg-amber-300">
             내 프로젝트
           </Link>
@@ -54,7 +54,7 @@ export default function Home() {
                 지금 시작하기 →
               </Link>
               <Link href="/guide" className="rounded border border-white/15 px-6 py-3 text-sm text-zinc-200 hover:bg-white/5">
-                사용 설명서 보기
+                도움말 보기
               </Link>
             </div>
           </div>
@@ -98,7 +98,7 @@ export default function Home() {
                 내 프로젝트 →
               </Link>
               <Link href="/guide" className="rounded border border-white/15 px-6 py-3 text-sm text-zinc-200 hover:bg-white/5">
-                사용 설명서
+                도움말
               </Link>
             </div>
           </div>
@@ -106,7 +106,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-white/10 px-6 py-6 text-center text-xs text-zinc-500">
-        Blockshot — 브라우저에서 동작하는 프리비즈 툴 · <Link href="/guide" className="hover:text-white">사용 설명서</Link>
+        Blockshot — 브라우저에서 동작하는 프리비즈 툴 · <Link href="/guide" className="hover:text-white">도움말</Link>
       </footer>
     </div>
   );

@@ -402,7 +402,7 @@ export function localSetupText(origin: string): string {
 
 WHAT IT IS: the same Blockshot tools running on the user's own machine over stdio (one self-contained file, ~5 MB, nothing else to install), plus two local-only tools: render_video (real MP4/WebM file) and render_still (real 3D PNG). It needs NO token: MCP_TOKEN only protects the hosted endpoint ${origin}/api/mcp (POST). The local stdio server has no network endpoint to protect, and the file itself is a public static download. The only network use is rendering: headless Chrome loads the studio page from BLOCKSHOT_URL (default ${origin}); scripts, validation and previews run fully offline.
 
-WHEN TO USE THIS: the user asks for an MP4/video export or a real 3D render, or says things like "register the local MCP", "re-register locally / without the token", "switch to local", "install blockshot locally". You must be able to run shell commands on the user's computer (Claude Code, Codex CLI, …). If you cannot (claude.ai chat, phone, iPad), do NOT try: keep using this hosted server; scripts, preview and links work everywhere, and the user can export the MP4 from the link via the studio's "영상 렌더" button.
+WHEN TO USE THIS: the user asks for an MP4/video export or a real 3D render, or says things like "register the local MCP", "re-register locally / without the token", "switch to local", "install blockshot locally", "update the local MCP" (see §6). You must be able to run shell commands on the user's computer (Claude Code, Codex CLI, …). If you cannot (claude.ai chat, phone, iPad), do NOT try: keep using this hosted server; scripts, preview and links work everywhere, and the user can export the MP4 from the link via the studio's "영상 렌더" button.
 
 ASK FIRST. Tell the user in one sentence what you will do: download one file from ${origin} into ~/.blockshot, register it as an MCP server, and (for a switch) remove the old hosted registration. Never print, log or paste the user's token anywhere; you do not need it.
 
@@ -445,7 +445,15 @@ c) In the NEW session the local server must expose exactly these ${LOCAL_TOOL_NA
    ${LOCAL_TOOL_NAMES.join(", ")}
    How to tell local from hosted: the local server has NO local_setup tool, and its render_video description starts with "LOCAL ONLY". The hosted server has ${HOSTED_TOOL_COUNT} tools (the shared ones + local_setup + render_video + render_still stubs that only explain how to install).
 d) Functional test: call run_script with a tiny scene, then render_still (t=0); a PNG must come back. render_video writes a file under ~/Blockshot/renders/ (or the "output" path) and returns its path. If render_* fails with "Google Chrome was not found" → install Chrome or set BLOCKSHOT_CHROME; if it says the studio did not become ready → check the machine can reach BLOCKSHOT_URL.
-Only after (a) and (b) succeed, report success; mention if you could not run (c)/(d) in the current session.`;
+Only after (a) and (b) succeed, report success; mention if you could not run (c)/(d) in the current session.
+
+## 6. Updating the local server (when the user asks to update it, or the hosted docs mention an action / tool the local one rejects)
+The local file never updates itself; the hosted server is always current. An outdated local file rejects new actions as schema errors (rendering still uses the live studio page). Keep the registration as it is — only the file changes.
+1. Find the registered file path (claude mcp list, or the args in ~/.codex/config.toml; usually ~/.blockshot/blockshot-mcp.mjs).
+2. Already current? cmp -s <(curl -fsSL ${url} 2>/dev/null) <PATH> && echo up-to-date   → if it is, say so and stop.
+3. Replace it safely (a download cut off midway must not break the working file):
+   curl -fsSL ${url} -o <PATH>.new && mv <PATH>.new <PATH>
+4. Verify with 5(a), then tell the user the new version loads after the client reloads its MCP servers (Claude Code → new session or /mcp; Codex → restart). The running server keeps the old code until then.`;
 }
 
 const NEEDS_LOCAL = (origin: string) =>
@@ -456,7 +464,7 @@ export const REMOTE_EXTRA_TOOLS: Tool[] = [
   {
     name: "local_setup",
     description:
-      "Complete instructions to install, register (Claude Code, Codex, generic JSON), switch from this hosted server to, and verify the LOCAL Blockshot MCP: exact commands, Node/Chrome requirements, environment variables, and the expected tool list. The local server needs NO token (MCP_TOKEN only protects this hosted endpoint) and adds render_video (MP4) and render_still (real 3D PNG). Call it when the user wants an MP4/video export or a high-fidelity render, or asks to install / register / switch to the local MCP, or to re-register it locally or without a token — then carry out the steps (install, register, verify) yourself if you can run shell commands, after asking the user.",
+      "Complete instructions to install, register (Claude Code, Codex, generic JSON), switch from this hosted server to, and verify the LOCAL Blockshot MCP: exact commands, Node/Chrome requirements, environment variables, and the expected tool list. The local server needs NO token (MCP_TOKEN only protects this hosted endpoint) and adds render_video (MP4) and render_still (real 3D PNG). Call it when the user wants an MP4/video export or a high-fidelity render, or asks to install / register / switch to / update the local MCP, or to re-register it locally or without a token — then carry out the steps (install, register, verify) yourself if you can run shell commands, after asking the user.",
     inputSchema: { type: "object", properties: {} },
     async run(_a, p) {
       return ok(text(localSetupText(p.origin)));
