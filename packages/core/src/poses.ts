@@ -457,12 +457,13 @@ interface GestureDef {
 const TAU = Math.PI * 2;
 
 export const GESTURE_DEFS: Record<Gesture, GestureDef> = {
-  // raised hand with a swaying forearm
+  // elbow out at shoulder height, forearm standing up from it and swaying side to side (for the right arm a NEGATIVE z keeps
+  // lifting the forearm toward vertical; a positive one would fold it back down and out, hanging the hand off to the side)
   wave: {
     duration: 2.2,
     side: "right",
     hold: true,
-    sample: (u) => ({ rightUpperArm: [0, 0, -2.25], rightLowerArm: [0, 0, 0.45 + Math.sin(u * 10) * 0.45], head: [0, 0.12, -0.08], ...handLayer("open", "right") }),
+    sample: (u) => ({ rightUpperArm: [0, 0, -2.0], rightLowerArm: [0, 0, -0.7 - Math.sin(u * 10) * 0.35], head: [0, 0.12, -0.08], ...handLayer("open", "right") }),
   },
   // yes
   nod: {
