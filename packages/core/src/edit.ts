@@ -143,7 +143,7 @@ export function removeEntity(spec: BlockshotSpec, id: string): BlockshotSpec {
       if ("actor" in a && a.actor === id) return false;
       if ("camera" in a && a.camera === id) return false;
       if (a.type === "sitDown" && a.on === id) return false;
-      if ("target" in a && refersTo(a.target, id)) return false;
+      if ("target" in a && a.target !== undefined && refersTo(a.target, id)) return false;
       if (a.type === "orbit" && refersTo(a.around, id)) return false;
       return true;
     }),

@@ -58,8 +58,8 @@ export interface ActorHandle {
   sitDown(seat: { id: string } | string, opts: { start: number; duration?: number; offset?: number }): ActorHandle;
   /** Rise from the seat and step forward (or to `to`). */
   standUp(opts: { start: number; duration?: number; to?: Vec3 }): ActorHandle;
-  /** A piece of body language (wave, nod, shrug, clap …) layered over the current pose. */
-  gesture(name: Gesture, opts: { start: number; duration?: number; side?: "left" | "right"; intensity?: number }): ActorHandle;
+  /** A piece of body language (wave, point, nod, shrug, clap …) layered over the current pose. "point" aims at `target` (default: who they look at). */
+  gesture(name: Gesture, opts: { start: number; duration?: number; side?: "left" | "right"; intensity?: number; target?: Target }): ActorHandle;
   /** Shape the fingers (fist, point, pinch, grip, open, relaxed) of one or both hands for `duration`. */
   handShape(shape: HandShape, opts: { start: number; hand?: "left" | "right" | "both"; duration?: number }): ActorHandle;
   /** Pick up a prop and use it: `at` "ear" (phone call), "mouth" (drinking), "chest" (reading / texting) or "carry"; `then` keeps it in hand or puts it back. */

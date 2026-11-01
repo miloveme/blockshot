@@ -12,10 +12,11 @@
 
 1. 기본 포즈(`basePose`: stand/idle/walk/run/sit/point/talk) + 편한 손(`RELAXED_HANDS`). 걷기/달리기는 발목이 발바닥을 수평에 가깝게 유지하고 뒤쪽 발은 발끝으로 구른다
 2. 이전 포즈에서 0.35 s 스무스스텝 블렌드
-3. 시선(`lookLayer`): neck 35% / head 65%, 좌우 75°·상하 ±0.6 rad 제한 (몸 부위 타깃 계산에는 제외 → 서로 쳐다보는 재귀 방지)
-4. 제스처(`sampleGesture`): 0.25 s 페이드 인/아웃 엔벨로프, 한 손 제스처는 `mirrorLayer`로 좌우 반전
-5. `handShape`: 손가락 모양(`handLayer`) — 굽힘은 손바닥 쪽(왼손 -X, 오른손 +X)
-6. `reach`: 2본 IK(`solveArm`, 코사인 법칙 + 팔꿈치 폴 힌트). 타깃은 정적 배치로 풀어 재귀를 피한다
+3. 앉은 채 `talk`·`point`(`upper` 레이어): 포즈는 `sit` 그대로, 그 포즈의 팔·머리 본만 페이드 인/아웃으로 얹는다
+4. 시선(`lookLayer`): neck 35% / head 65%, 좌우 75°·상하 ±0.6 rad 제한 (몸 부위 타깃 계산에는 제외 → 서로 쳐다보는 재귀 방지). 이어서 `point` 포즈의 겨누기(`pointLayer`)
+5. 제스처(`sampleGesture`): 0.25 s 페이드 인/아웃 엔벨로프, 한 손 제스처는 `mirrorLayer`로 좌우 반전. `point` 제스처는 손 모양·몸 기울임 위에 `pointLayer`(어깨 → 대상 방향으로 팔 길이 95% 지점을 `solveArm`으로 IK, 대상은 정적 배치로 풀어 재귀 방지)
+6. `handShape`: 손가락 모양(`handLayer`) — 굽힘은 손바닥 쪽(왼손 -X, 오른손 +X)
+7. `reach`: 2본 IK(`solveArm`, 코사인 법칙 + 팔꿈치 폴 힌트). 타깃은 정적 배치로 풀어 재귀를 피한다
 
 모두 순수·결정론 — 같은 (spec, t)는 항상 같은 `rig`.
 

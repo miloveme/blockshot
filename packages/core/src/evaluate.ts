@@ -7,7 +7,7 @@ import { mirrorPlane, parseRef, reflectPoint } from "./mirror";
 import { seatPose, standOutPoint } from "./catalog";
 import { planAroundMovers, timeRouteOnGrid, type Mover } from "./nav-time";
 import { bakeNav, crouchSpans, surfaceSpans, navRadiusOf, routeLegs, staticActors, type Circle, type NavGrid } from "./nav";
-import { BONES, REST_HEIGHT, applyLayer, restPose, blendPoses, clonePose, smoothstep, solveRig, toLocal, toWorld, type BoneName, type Layer, type RigPose, type Skeleton } from "./rig";
+import { ARM, BONES, REST_HEIGHT, applyLayer, restPose, blendPoses, clonePose, smoothstep, solveRig, toLocal, toWorld, type BoneName, type Layer, type RigPose, type Skeleton } from "./rig";
 import { Q } from "./quat";
 import { driveKeys, KEY_STEP, motionAt, motionFromKeys, smoothPath, type Motion } from "./vehicle";
 import { PROP_CATALOG, propSize } from "./catalog";
@@ -15,7 +15,7 @@ import { CONTACT_PATCHES, surfaceInActor } from "./inspect";
 import { actionLabels } from "./actions";
 import { BODY_SURFACES } from "./schema";
 import { creatureDef, creatureGait, creaturePart, creaturePose, gaitSample, moveSpeed, restCreaturePose, type CreatureDef, type CreatureGait, type CreaturePose } from "./creature";
-import { basePose, envelope, gaitPose, solveLegIK, turnStepPose, TURN_STEP_ANGLE, type GaitTrack, type TurnTrack, GESTURE_DEFS, handLayer, handShapeLayer, lookLayer, RELAXED_HANDS, sampleGesture, solveArm, strideFor } from "./poses";
+import { basePose, envelope, FADE, gaitPose, solveLegIK, turnStepPose, TURN_STEP_ANGLE, type GaitTrack, type TurnTrack, GESTURE_DEFS, handLayer, handShapeLayer, lookLayer, RELAXED_HANDS, sampleGesture, solveArm, strideFor } from "./poses";
 
 const BODY_SURFACE_SET = new Set<string>(BODY_SURFACES);
 /** how far in front of the pelvis the feet rest while seated (rest metres) — where the pelvis goes when rising */
@@ -93,7 +93,9 @@ export interface CompiledScene {
 
 /** A timed body layer on top of the actor's base pose. */
 export type ActLayer =
-  | { kind: "gesture"; gesture: Gesture; start: number; end: number; side: "left" | "right"; intensity: number }
+  | { kind: "gesture"; gesture: Gesture; start: number; end: number; side: "left" | "right"; intensity: number; target?: Target }
+  /** talking / pointing from a seat: the arms and head take that pose, the body stays seated */
+  | { kind: "upper"; pose: "talk" | "point"; start: number; end: number }
   | { kind: "reach"; target: Target; hand: "left" | "right"; start: number; end: number }
   | { kind: "hand"; shape: HandShape; hand: "left" | "right" | "both"; start: number; end: number }
   | ContactLayer
@@ -278,6 +280,7 @@ function compileUncached(spec: BlockshotSpec): CompiledScene {
     tracks.set(k, keys.filter((x) => x.manual || x.t < m0 - 1e-6 || x.t > m1 + 1e-6));
   }
 
+  for (const a of spec.actors) endUpperLayers(scene.acts.get(a.id), tracks.get(trackKey(a.id, "pose"))!);
   for (const a of spec.actors) stepOutOfSeats(spec, tracks.get(trackKey(a.id, "pose"))!, tracks.get(trackKey(a.id, "position"))!);
 
   // wheels need to know how fast and how far each driven prop went, and how its front wheels were steered
@@ -289,6 +292,19 @@ function compileUncached(spec: BlockshotSpec): CompiledScene {
     scene.motion.set(id, motionFromKeys(samples));
   }
   return scene;
+}
+
+/**
+ * A seated talk / point lasts until the pose next changes (sitting back, standUp, a walk …) or the next seated talk / point
+ * takes over — that one overlaps it by a fade so the arms cross from one to the other instead of dropping in between.
+ */
+function endUpperLayers(acts: ActLayer[] | undefined, pose: CKey[]) {
+  const upper = (acts ?? []).filter((l): l is Extract<ActLayer, { kind: "upper" }> => l.kind === "upper").sort((x, y) => x.start - y.start);
+  upper.forEach((l, i) => {
+    const change = pose.find((k) => k.t > l.start + 1e-6)?.t ?? Infinity;
+    const next = upper[i + 1] ? upper[i + 1]!.start + FADE : Infinity;
+    l.end = Math.min(change, next);
+  });
 }
 
 /**
@@ -415,7 +431,7 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
       for (const k of wPos) insertKey(pos, { ...k, t: warp.inv(k.t) });
       // dense keys through the speed ramps (a ramp inside one long straight leg would otherwise interpolate linearly)
       for (const [r0, r1] of warp.ramps) for (let u = r0; u < r1; u += RAMP_KEY_STEP) insertKey(pos, { t: u, value: sampleKeys(wPos, warp.fwd(u)), ease: "linear", detail: true });
-      insertKey(pose, { t: endT, value: prevPose === "walk" || prevPose === "run" || prevPose === "crouch" || prevPose === "climb" ? "stand" : prevPose, ease: "step" });
+      insertKey(pose, { t: endT, value: prevPose === "walk" || prevPose === "run" || prevPose === "crouch" || prevPose === "climb" || prevPose === "sit" ? "stand" : prevPose, ease: "step" });
       break;
     }
     case "turnTo": {
@@ -434,7 +450,16 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
     }
     case "pose": {
       const actor = spec.actors.find((x) => x.id === a.actor)!;
-      insertKey(track(a.actor, "pose", actor.pose), { t: a.start, value: a.pose, ease: "step" });
+      const pose = track(a.actor, "pose", actor.pose);
+      // talking or pointing from a seat keeps the person seated: only the arms and head take the pose (standUp or a walk
+      // gets them up). Its end is the next pose change — see endUpperLayers
+      if ((a.pose === "talk" || a.pose === "point") && !creatureDef(actor.species) && sampleKeys(pose, a.start) === "sit") {
+        const list = scene.acts.get(a.actor) ?? [];
+        list.push({ kind: "upper", pose: a.pose, start: a.start, end: Infinity });
+        scene.acts.set(a.actor, list);
+        break;
+      }
+      insertKey(pose, { t: a.start, value: a.pose, ease: "step" });
       break;
     }
     case "sitDown": {
@@ -529,7 +554,7 @@ function compileAction(scene: CompiledScene, a: Action, track: (id: string, prop
     case "gesture": {
       const def = GESTURE_DEFS[a.gesture];
       const list = scene.acts.get(a.actor) ?? [];
-      list.push({ kind: "gesture", gesture: a.gesture, start: a.start, end: a.start + (a.duration ?? def.duration), side: a.side ?? "right", intensity: a.intensity });
+      list.push({ kind: "gesture", gesture: a.gesture, start: a.start, end: a.start + (a.duration ?? def.duration), side: a.side ?? "right", intensity: a.intensity, ...(a.target !== undefined ? { target: a.target } : {}) });
       scene.acts.set(a.actor, list);
       break;
     }
@@ -1087,6 +1112,31 @@ function rigPart(sk: Skeleton, part: BodyPart, scale: number, position: Vec3, ro
   return toWorld(local, position, rotation);
 }
 
+/** How much the "point" pose aims the arm at t (it blends in and out with the pose, or with a seated point's fade). */
+function pointWeight(scene: CompiledScene, id: string, t: number, core: ReturnType<typeof actorCore>): number {
+  for (const l of scene.acts.get(id) ?? []) if (l.kind === "upper" && l.pose === "point" && t >= l.start && t < l.end) return envelope(t - l.start, l.end - l.start, true);
+  const k = core.blend < 1 && core.prevPose !== core.pose ? smoothstep(core.blend) : 1;
+  return core.pose === "point" ? k : core.prevPose === "point" ? 1 - k : 0;
+}
+
+/**
+ * The arm of `side` stretched out toward `target` (default: what the actor is looking at; nothing → straight ahead), finger
+ * out. The target is read without the rig (as reach does), so two people pointing at each other cannot recurse.
+ */
+function pointLayer(scene: CompiledScene, id: string, t: number, core: ReturnType<typeof actorCore>, pose: RigPose, side: "left" | "right", target: Target | undefined, scale: number): Layer {
+  const ref = target ?? activeSegment(scene.looks.get(id), t)?.target;
+  const shoulder = solveRig(pose, scale)[side === "right" ? "rightUpperArm" : "leftUpperArm"].pos;
+  let dir: Vec3 = [0, -0.1, 1];
+  if (ref != null) {
+    const at = toLocal(resolveImpl(scene, ref, t, false), core.position, core.rotation);
+    dir = [at[0] - shoulder[0], at[1] - shoulder[1], at[2] - shoulder[2]];
+  }
+  const len = Math.hypot(...dir) || 1;
+  const reach = (ARM.upper + ARM.lower) * scale * 0.95;
+  const goal: Vec3 = [shoulder[0] + (dir[0] / len) * reach, shoulder[1] + (dir[1] / len) * reach, shoulder[2] + (dir[2] / len) * reach];
+  return { ...solveArm(pose, side, goal, scale).layer, ...handLayer("point", side) };
+}
+
 /**
  * The actor's final pose at time t: base pose (blended from the previous one) → head look-at → gestures → reach IK.
  * `lookTarget` is a world point or null (null also keeps body-part lookups from recursing through look-at).
@@ -1124,10 +1174,21 @@ function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnTyp
     pose = { hips: lerp3(pose.hips, legs.hips, w), rot: { ...pose.rot } };
     for (const b of LEG_BONES) pose.rot[b] = lerp3(pose.rot[b] ?? [0, 0, 0], legs.rot[b]!, w);
   }
+  // seated talk / point: arms and head only
+  for (const l of scene.acts.get(id) ?? []) {
+    if (l.kind !== "upper" || t < l.start || t >= l.end) continue;
+    const w = envelope(t - l.start, l.end - l.start, true);
+    const upper = basePose(l.pose, t - l.start).rot;
+    for (const b of LEG_BONES) delete upper[b];
+    pose = applyLayer(pose, upper, w);
+  }
   if (lookTarget) {
     const local = toLocal(lookTarget, core.position, core.rotation);
     pose = applyLayer(pose, lookLayer(local, solveRig(pose, scale)), 1);
   }
+  // the point pose (standing or seated) aims the finger at whoever the actor is looking at
+  const pointing = pointWeight(scene, id, t, core);
+  if (pointing > 0) pose = applyLayer(pose, pointLayer(scene, id, t, core, pose, "right", undefined, scale), pointing);
   // fingers close around whatever the actor is holding right now
   for (const prop of scene.holds.keys()) {
     const held = holdState(scene, prop, t);
@@ -1140,12 +1201,13 @@ function computeRig(scene: CompiledScene, id: string, t: number, core: ReturnTyp
     if (layer.kind === "gesture") {
       const g = sampleGesture(layer.gesture, u, d, layer.side, layer.intensity);
       pose = applyLayer(pose, g.layer, g.weight);
+      if (layer.gesture === "point") pose = applyLayer(pose, pointLayer(scene, id, t, core, pose, layer.side, layer.target, scale), Math.min(1, g.weight / Math.max(1e-3, layer.intensity)));
     } else if (layer.kind === "hand") {
       pose = applyLayer(pose, handShapeLayer(layer.shape, layer.hand), envelope(u, d, true));
     } else if (layer.kind === "hold") {
       pose = applyHold(pose, layer, u, scale, core);
-    } else if (layer.kind === "contact" || layer.kind === "rise") {
-      continue; // contacts after the bone keys, below; the rise is part of the base pose
+    } else if (layer.kind === "contact" || layer.kind === "rise" || layer.kind === "upper") {
+      continue; // contacts after the bone keys, below; the rise and a seated talk / point are part of the base pose
     } else {
       const w = envelope(u, d, true);
       if (w <= 0) continue;

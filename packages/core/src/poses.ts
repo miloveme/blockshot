@@ -465,6 +465,13 @@ export const GESTURE_DEFS: Record<Gesture, GestureDef> = {
     hold: true,
     sample: (u) => ({ rightUpperArm: [0, 0, -2.0], rightLowerArm: [0, 0, -0.7 - Math.sin(u * 10) * 0.35], head: [0, 0.12, -0.08], ...handLayer("open", "right") }),
   },
+  // an accusing finger: the hand shape and a lean in; the arm itself is aimed at the target by the evaluator (see pointLayer)
+  point: {
+    duration: 1.2,
+    side: "right",
+    hold: true,
+    sample: (u) => ({ spine: [0.06, 0, 0], chest: [0.04 + Math.max(0, Math.sin(u * 7)) * 0.03, 0, 0], ...handLayer("point", "right") }),
+  },
   // yes
   nod: {
     duration: 1.1,

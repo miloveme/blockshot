@@ -130,7 +130,7 @@ export function validateSpec(input: unknown): ValidationResult {
       if (who && who.species !== "human") warnings.push({ path: p, message: `"${a.actor}" is a ${who.species}: ${a.type === "gesture" ? `the "${a.gesture}" gesture` : `"${a.type}"`} only works on people (animals take nod, shakeHead, lookAround, bow)` });
     }
     if ("camera" in a) checkCamera(a.camera, `${p}.camera`);
-    if ("target" in a && a.target !== null) checkTarget(a.target, `${p}.target`);
+    if ("target" in a && a.target != null) checkTarget(a.target, `${p}.target`);
     if (a.type === "orbit") checkTarget(a.around, `${p}.around`);
   });
   spec.tracks.forEach((t, i) => {

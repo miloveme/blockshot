@@ -374,7 +374,7 @@ function SitControls({ actorId }: { actorId: string }) {
 }
 
 const GESTURE_LABEL: Record<Gesture, string> = {
-  wave: "손 흔들기", nod: "끄덕임", shakeHead: "고개 젓기", shrug: "어깨 으쓱", clap: "박수", crossArms: "팔짱",
+  wave: "손 흔들기", point: "가리키기", nod: "끄덕임", shakeHead: "고개 젓기", shrug: "어깨 으쓱", clap: "박수", crossArms: "팔짱",
   handsOnHips: "허리에 손", think: "생각", bow: "인사(숙임)", lookAround: "두리번", cheer: "환호",
 };
 

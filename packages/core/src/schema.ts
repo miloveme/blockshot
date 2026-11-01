@@ -34,7 +34,7 @@ export const Pose = z.enum(POSES);
 export type Pose = z.infer<typeof Pose>;
 
 /** Acting gestures an actor can perform (see core/poses). */
-export const GESTURES = ["wave", "nod", "shakeHead", "shrug", "clap", "crossArms", "handsOnHips", "think", "bow", "lookAround", "cheer"] as const;
+export const GESTURES = ["wave", "point", "nod", "shakeHead", "shrug", "clap", "crossArms", "handsOnHips", "think", "bow", "lookAround", "cheer"] as const;
 export const GestureName = z.enum(GESTURES);
 export type Gesture = z.infer<typeof GestureName>;
 
@@ -234,8 +234,11 @@ export const Action = z.discriminatedUnion("type", [
   z.object({ type: z.literal("runTo"), actor: Id, to: z.union([Vec3, z.array(Vec3).min(1)]), duration: z.number().positive().optional(), speed: z.number().positive().optional(), direct: z.boolean().optional(), ...timed }),
   z.object({ type: z.literal("turnTo"), actor: Id, target: z.union([Target, z.number()]), duration: z.number().positive().default(0.6), ...timed }),
   z.object({ type: z.literal("pose"), actor: Id, pose: Pose, ...timed }),
-  /** a piece of body language: wave, nod, shrug … `side` picks the hand of one-handed ones; `intensity` scales it */
-  z.object({ type: z.literal("gesture"), actor: Id, gesture: GestureName, side: z.enum(["left", "right"]).optional(), duration: z.number().positive().optional(), intensity: z.number().min(0).max(1).default(1), ...timed }),
+  /**
+   * a piece of body language: wave, point, nod, shrug … `side` picks the hand of one-handed ones; `intensity` scales it.
+   * `point` aims the arm at `target` — by default at whatever the actor is looking at (straight ahead when nothing)
+   */
+  z.object({ type: z.literal("gesture"), actor: Id, gesture: GestureName, side: z.enum(["left", "right"]).optional(), duration: z.number().positive().optional(), intensity: z.number().min(0).max(1).default(1), target: Target.optional(), ...timed }),
   /** hold a hand shape (fist, point, pinch, grip, open) with one or both hands for `duration` */
   z.object({ type: z.literal("handShape"), actor: Id, shape: HandShapeName, hand: z.enum(["left", "right", "both"]).default("both"), duration: z.number().positive().default(2), ...timed }),
   /** a vehicle (or any prop) drives along a path — corners rounded by a turning radius, body leaning in turns — or trails another prop / actor `gap` metres behind it along its route */
