@@ -40,9 +40,10 @@ packages/mcp    도구 정의 공용 (원격·stdio·데스크톱)
 ```
 
 ```
-AI 클라이언트 ──HTTP──▶ main: MCP 서버 127.0.0.1:<port>/mcp ──IPC──▶ 스튜디오 창(renderer)
-   │                         │                                     zustand store · IndexedDB
-   └ stdio만 되는 클라이언트 ─▶ 중계기(blockshot-desktop-mcp)          뷰포트 · render.ts
+AI 클라이언트 ─stdio─▶ 중계기 blockshot-desktop-mcp ─로컬 소켓─▶ main: MCP 서버 ──IPC──▶ 스튜디오 창(renderer)
+                       (클라이언트가 실행)          (파이프, 포트 없음)  handleRpc            zustand store · IndexedDB
+                                                                                       뷰포트 · render.ts
+(선택) URL만 받는 클라이언트 ──HTTP 127.0.0.1──▶ main  ← 설정에서 켤 때만
 ```
 
 ### 3.1 왜 Electron인가
@@ -63,16 +64,24 @@ AI 클라이언트 ──HTTP──▶ main: MCP 서버 127.0.0.1:<port>/mcp ─
 
 ## 5. 데스크톱 MCP 서버
 
-### 5.1 전송
+### 5.1 전송 — 기본은 stdio, 토큰 없음
 
-- main 프로세스가 `127.0.0.1`에 Streamable HTTP(stateless JSON)로 MCP를 연다. 처리 함수는 원격과 같은 `handleRpc`다.
-- 포트는 고정 기본값(예: 51730)을 먼저 시도하고, 쓰이고 있으면 빈 포트를 쓴다. 실제 포트와 토큰은 `~/.blockshot/desktop.json`에 쓴다.
-- **stdio 중계기** `blockshot-desktop-mcp`를 앱과 함께 설치한다.
-  - Claude Desktop처럼 `command`만 받는 클라이언트용이다.
-  - stdin의 JSON-RPC를 `desktop.json`의 주소로 넘기고 응답을 stdout으로 돌려준다.
-  - 앱이 꺼져 있으면 창 없이 앱을 실행하고 서버가 뜰 때까지 기다린다.
+사용자가 관리할 것은 없다. 등록 명령 한 줄만 복사하면 된다.
+
+- **기본 경로: stdio 중계기** `blockshot-desktop-mcp`를 앱과 함께 설치한다.
+  - Claude Code·Codex·Claude Desktop 모두 stdio(`command`) 등록을 지원한다. 클라이언트가 중계기를 실행한다.
+  - 중계기는 stdin의 JSON-RPC를 **로컬 소켓**으로 main에 넘기고 응답을 stdout으로 돌려준다.
+    - mac·Linux: Unix 도메인 소켓 (`~/.blockshot/mcp.sock`, 권한 600)
+    - Windows: 이름 있는 파이프 (`\\.\pipe\blockshot-mcp-<사용자>`)
+  - 포트를 열지 않으므로 포트 충돌·포트 바뀜이 없고, 브라우저 페이지는 이 소켓에 닿을 수 없다. 그래서 토큰이 필요 없다.
+  - 앱이 꺼져 있으면 창 없이 앱을 실행하고 소켓이 생길 때까지 기다린다.
   - 실행 파일은 Electron 자체를 `ELECTRON_RUN_AS_NODE=1`로 돌리는 작은 스크립트로 둔다. 사용자 컴퓨터에 Node가 없어도 된다.
-- 앱 설정 화면에 "MCP 연결" 패널을 둔다. 켜기·끄기, 주소·토큰 복사, Claude Code·Codex·Claude Desktop 등록 명령 복사를 넣는다.
+- 처리 함수는 원격과 같은 `handleRpc`다.
+- **선택 경로: localhost HTTP** — 설정에서 켤 때만 연다(기본 꺼짐). URL로만 등록할 수 있는 클라이언트용이다. 이때도 토큰은 없고 §5.4의 브라우저 차단 규칙으로 막는다.
+- 앱 설정 화면에 "MCP 연결" 패널을 둔다.
+  - Claude Code·Codex·Claude Desktop 등록 명령 복사 (예: `claude mcp add blockshot -- <중계기 경로>`)
+  - 지금 연결된 클라이언트 표시, MCP 끄기
+  - HTTP 경로 켜기와 그 주소
 
 ### 5.2 도구
 
@@ -113,16 +122,18 @@ AI 클라이언트 ──HTTP──▶ main: MCP 서버 127.0.0.1:<port>/mcp ─
 - IndexedDB는 같은 origin(`app://blockshot`)이라 두 창이 공유한다. 한 창에서 저장하면 다른 창은 `BroadcastChannel`로 목록을 다시 읽는다.
 - 사용자 창이 닫혀 있을 때 연동 도구가 오면, 사용자 창을 띄우고 실행한다 (§10-3).
 
-### 5.4 보안
+### 5.4 보안 — 무엇을 막고 무엇은 막지 않는가
 
-같은 컴퓨터의 다른 프로세스와 브라우저 페이지도 `127.0.0.1`에 요청을 보낼 수 있다. 그래서 다음을 모두 건다.
-
-- `127.0.0.1`에만 바인딩 (`0.0.0.0` 금지)
-- **bearer 토큰 필수.** 첫 실행 때 랜덤으로 만들어 `desktop.json`(권한 600)에 저장하고, 설정에서 다시 만들 수 있게 한다. 원격과 달리 토큰 없이 열리는 모드는 두지 않는다.
-- `Host` 헤더가 `127.0.0.1:<port>` 또는 `localhost:<port>`가 아니면 거부한다 (DNS rebinding 방지).
-- `Origin` 헤더가 있으면 거부한다. 브라우저 페이지에서 오는 요청을 막기 위해서다. MCP 클라이언트는 Origin을 보내지 않는다.
-- CORS 헤더를 주지 않는다.
-- 사용자가 만든 것을 덮어쓰는 도구는 처음 한 번 앱 안에서 확인을 받는다. 대상은 `apply_to_editor`, 기존 id에 대한 `save_project`이고, "이 클라이언트는 이번 세션 동안 허용"을 둔다. 읽기 도구는 묻지 않는다.
+- **막을 대상은 브라우저에서 열린 웹페이지다.** 아무 사이트나 `127.0.0.1`로 요청을 보내 사용자 프로젝트를 읽거나 덮어쓰려 할 수 있다(CSRF, DNS rebinding).
+  - 기본 경로(로컬 소켓)는 브라우저가 열 수 없으므로 이 공격이 닿지 않는다.
+  - HTTP 경로를 켰을 때는 다음으로 막는다.
+    - `127.0.0.1`에만 바인딩 (`0.0.0.0` 금지)
+    - `Host` 헤더가 `127.0.0.1:<port>` 또는 `localhost:<port>`가 아니면 거부 (DNS rebinding)
+    - `Origin` 헤더가 있으면 거부 — MCP 클라이언트는 Origin을 보내지 않고, 브라우저는 교차 출처 요청에 늘 붙인다
+    - `Content-Type: application/json`이 아니면 거부 — 브라우저가 preflight 없이 보낼 수 있는 단순 요청을 막는다
+    - CORS 헤더를 주지 않는다
+- **같은 사용자의 다른 프로그램은 막지 않는다.** 그 프로그램은 이미 앱 데이터 폴더(IndexedDB 파일)를 직접 읽고 쓸 수 있다. 토큰을 둬도 같은 폴더에 저장되니 지켜 주는 것이 없고, 사용자만 번거롭다. 소켓 권한 600은 다른 OS 사용자만 막는다.
+- **덮어쓰기는 앱 안에서 확인받는다.** `apply_to_editor`와 기존 id에 대한 `save_project`는 처음 한 번 확인 창을 띄우고, "이 클라이언트는 이번 세션 동안 허용"을 둔다. 읽기 도구는 묻지 않는다. 모든 변경은 undo로 되돌릴 수 있다.
 
 ## 6. 파일과 저장
 
@@ -162,8 +173,8 @@ AI 클라이언트 ──HTTP──▶ main: MCP 서버 127.0.0.1:<port>/mcp ─
    - 웹과 같은 편집·렌더가 오프라인에서 되는지 확인
    - mac 빌드만, 서명 없이
 2. **MCP 서버**
-   - HTTP 서버와 보안(§5.4), 공용 도구, 내장 Chromium 렌더
-   - stdio 중계기, 설정 패널
+   - 로컬 소켓 서버와 stdio 중계기, 공용 도구, 내장 Chromium 렌더
+   - 설정 패널, 선택 HTTP 경로와 브라우저 차단(§5.4)
 3. **열린 앱 연동 도구** (§5.2 마지막 묶음과 확인 UI)
 4. **배포**
    - Windows·Linux 빌드, GitHub Actions, 자동 업데이트, 서명
@@ -173,7 +184,7 @@ AI 클라이언트 ──HTTP──▶ main: MCP 서버 127.0.0.1:<port>/mcp ─
 
 - 2단계: 중계기를 통해 `tools/list`와 `render_still`이 성공한다.
 - 3단계: `apply_to_editor`가 undo 한 번으로 되돌아간다.
-- §5.4의 거부 규칙 (토큰 없음, 잘못된 Host, Origin 있음)마다 테스트를 둔다.
+- §5.4의 HTTP 거부 규칙 (잘못된 Host, Origin 있음, JSON이 아닌 Content-Type)마다 테스트를 둔다.
 
 ## 10. 정할 것
 
@@ -181,7 +192,7 @@ AI 클라이언트 ──HTTP──▶ main: MCP 서버 127.0.0.1:<port>/mcp ─
    - (a) `pageExtensions`를 빌드 대상에 따라 바꾼다. 라우트 파일을 `route.server.ts`로 바꾸고 웹 빌드에서만 그 확장자를 인식한다.
    - (b) 데스크톱 빌드 스크립트가 `api/` 폴더를 임시로 빼고 빌드한다.
    - 둘 다 Next 16 문서와 실제 빌드로 확인한 뒤 고른다. `cacheComponents: true`가 `output: "export"`와 함께 되는지도 같이 확인한다.
-2. **고정 포트 기본값과 충돌 처리.** 기본안: 51730, 쓰이고 있으면 빈 포트를 쓰고 `desktop.json`을 갱신한다. HTTP로 직접 등록한 클라이언트는 포트가 바뀌면 다시 등록해야 하므로, 이 경우 설정 패널에 경고를 띄운다.
+2. **선택 HTTP 경로의 포트.** 기본 경로는 소켓이라 포트가 없다. HTTP를 켰을 때만 기본안 51730을 쓰고, 쓰이고 있으면 설정 패널에 알려 다른 포트를 고르게 한다.
 3. **창이 닫혀 있을 때 연동 도구.** 기본안: 사용자 창을 띄운다. 숨은 창에서 몰래 고치지 않는다 — 사용자가 보는 앞에서 바뀌어야 한다.
 4. **`open_link`가 줄 주소.** 기본안: 웹 공유 링크(`https://…/studio#s=`)와 앱 딥링크(`blockshot://open#s=`)를 둘 다 준다. 딥링크는 OS에 프로토콜 핸들러로 등록한다.
 5. **서명 비용을 쓸지.** 1단계는 서명 없이 시작한다.
