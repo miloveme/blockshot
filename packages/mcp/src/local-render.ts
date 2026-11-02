@@ -48,7 +48,7 @@ export function localRenderTools(studioUrl: string): Tool[] {
     {
       name: "render_video",
       description:
-        "LOCAL ONLY. Renders the scene to a real MP4 (WebM if H.264 is unavailable) with the studio's own 3D renderer, in a headless Chromium on this machine (downloaded once on first use, ~100 MB), and saves it to disk. Returns the file path. range: a shot id or \"all\" (the whole edit); from / to: render only that part, in seconds — EDIT time (the cut timeline, across shots) when following the shot order, SCENE time with a fixed camera; camera: render one fixed camera instead of the shot order; scale: resolution multiplier (default 1); pass: \"beauty\" or \"depth\". Takes seconds to minutes (software WebGL).",
+        "LOCAL ONLY. Renders the scene to a real MP4 (WebM if H.264 is unavailable) with the studio's own 3D renderer, in a headless browser on this machine (the installed Chrome / Edge / Chromium; without one, a renderer downloaded once, ~100 MB), and saves it to disk. Returns the file path. range: a shot id or \"all\" (the whole edit); from / to: render only that part, in seconds — EDIT time (the cut timeline, across shots) when following the shot order, SCENE time with a fixed camera; camera: render one fixed camera instead of the shot order; scale: resolution multiplier (default 1); pass: \"beauty\" or \"depth\". Takes seconds to minutes (software WebGL).",
       inputSchema: { type: "object", properties: { spec: SPEC_PROP, range: { type: "string" }, from: { type: "number", description: "start (s) of a custom range" }, to: { type: "number", description: "end (s) of a custom range" }, camera: { type: "string" }, scale: { type: "number" }, pass: { type: "string", enum: ["beauty", "depth"] }, output: { type: "string", description: "output file path (default ~/Blockshot/renders/<title>.mp4)" } }, required: ["spec"] },
       async run(a) {
         const spec = specOf(a.spec);
@@ -69,7 +69,7 @@ export function localRenderTools(studioUrl: string): Tool[] {
     },
     {
       name: "render_still",
-      description: "LOCAL ONLY. A real 3D PNG of the scene at time t through a camera (the studio's renderer in a headless Chromium on this machine, downloaded once on first use) — much more faithful than preview, slower (a few seconds).",
+      description: "LOCAL ONLY. A real 3D PNG of the scene at time t through a camera (the studio's renderer in a headless browser on this machine: the installed Chrome / Edge / Chromium, or a downloaded one) — much more faithful than preview, slower (a few seconds).",
       inputSchema: { type: "object", properties: { spec: SPEC_PROP, t: { type: "number" }, camera: { type: "string" }, width: { type: "number" }, pass: { type: "string", enum: ["beauty", "depth"] } }, required: ["spec", "t"] },
       async run(a) {
         const spec = specOf(a.spec);

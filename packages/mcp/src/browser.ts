@@ -6,9 +6,9 @@ import { inflateRawSync } from "node:zlib";
 import { HEADLESS_SHELL } from "./headless-shell.generated";
 
 /**
- * The browser the local renders run in. By default a pinned Chrome for Testing `chrome-headless-shell` that the server
- * downloads once into ~/.blockshot/browsers (size + SHA-256 checked) — the same renderer on every machine, whatever
- * browser the user has. Falls back to an installed Chromium-based browser when the download is impossible (offline).
+ * The browser the local renders run in: an installed Chromium-based browser (Chrome, Edge, Chromium, Brave) when there is
+ * one — nothing to download — otherwise a pinned Chrome for Testing `chrome-headless-shell` that the server downloads
+ * once into ~/.blockshot/browsers (size + SHA-256 checked).
  */
 
 export const SHELL_PLATFORMS = ["mac-arm64", "mac-x64", "linux64", "linux-arm64", "win64", "win32"] as const;
@@ -131,7 +131,7 @@ export function unzip(zip: Buffer, into: string) {
   }
 }
 
-/** Installed Chromium-based browsers, as a fallback when the shell cannot be downloaded. */
+/** Installed Chromium-based browsers, tried before downloading the shell. */
 const SYSTEM: Record<string, string[]> = {
   darwin: ["Google Chrome.app/Contents/MacOS/Google Chrome", "Chromium.app/Contents/MacOS/Chromium", "Microsoft Edge.app/Contents/MacOS/Microsoft Edge", "Brave Browser.app/Contents/MacOS/Brave Browser", "Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"].flatMap(
     (app) => [join("/Applications", app), join(homedir(), "Applications", app)],
@@ -147,8 +147,8 @@ export function findSystemBrowser(): string | null {
 }
 
 /**
- * The browser to render with: BLOCKSHOT_CHROME if set, else the pinned shell (downloaded now if missing), else an installed
- * Chromium-based browser. `note` says what happened when it is worth telling the user (a download, or a fallback).
+ * The browser to render with: BLOCKSHOT_CHROME if set, else an installed Chromium-based browser, else the pinned shell
+ * (downloaded now if missing). `note` says what happened when it is worth telling the user (a download).
  */
 export async function resolveBrowser(log?: (msg: string) => void): Promise<{ exe: string; note?: string }> {
   const env = process.env.BLOCKSHOT_CHROME;
@@ -156,14 +156,14 @@ export async function resolveBrowser(log?: (msg: string) => void): Promise<{ exe
     if (!existsSync(env)) throw new Error(`BLOCKSHOT_CHROME points to a missing file: ${env}`);
     return { exe: env };
   }
+  const sys = findSystemBrowser();
+  if (sys) return { exe: sys };
   const have = installedShell();
   if (have) return { exe: have };
   try {
     const exe = await installShell(log);
-    return { exe, note: `Downloaded the renderer once (chrome-headless-shell ${HEADLESS_SHELL.version}) into ${browsersDir()}.` };
+    return { exe, note: `No Chrome / Edge / Chromium was installed, so the renderer (chrome-headless-shell ${HEADLESS_SHELL.version}) was downloaded once into ${browsersDir()}.` };
   } catch (e) {
-    const sys = findSystemBrowser();
-    if (sys) return { exe: sys, note: `Could not download the renderer (${(e as Error).message}); rendered with ${sys} instead.` };
-    throw new Error(`Could not download the renderer (${(e as Error).message}) and no Chrome / Edge / Chromium is installed. Check the network and run: node <path>/blockshot-mcp.mjs install-browser`);
+    throw new Error(`No Chrome / Edge / Chromium is installed and the renderer could not be downloaded (${(e as Error).message}). Check the network and run: node <path>/blockshot-mcp.mjs install-browser`);
   }
 }

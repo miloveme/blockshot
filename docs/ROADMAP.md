@@ -171,7 +171,7 @@
 - [ ] GLB: Draco/Meshopt 압축·애니메이션·.gltf 분리 파일, 에셋 포함 내보내기(zip), 리깅된 마네킹 옵션
 - [ ] 클라우드 저장 + 로그인 (Supabase 또는 Vercel Blob)
 - [x] 로컬 MCP `blockshot-mcp`(stdio, packages/mcp): 같은 도구 + 로컬 Chrome 헤드리스로 `render_still`/`render_video`(MP4) — 서버 비용 0
-- [x] 로컬 MCP 렌더러를 브라우저와 무관하게: 고정 버전 `chrome-headless-shell`(크기·SHA-256 확인)을 `install-browser`/첫 렌더 때 `~/.blockshot/browsers`에 설치, 받을 수 없으면 설치된 Chromium 계열로 대체
+- [x] Chrome 없이도 로컬 MCP 렌더: 설치된 Chrome·Edge·Chromium·Brave를 먼저 쓰고, 없으면 고정 버전 `chrome-headless-shell`(크기·SHA-256 확인)을 `install-browser`/첫 렌더 때 `~/.blockshot/browsers`에 설치
 - [x] stateless HTTP MCP 엔드포인트 `/api/mcp` (docs/MCP.md): run_script(QuickJS 샌드박스)·validate·apply_addon·evaluate·preview(SVG→PNG)·open_link(URL 조각 공유 링크)
 - [ ] Z-up(Blender) 입출력 변환, FBX/USD 카메라 익스포트
 - [ ] 설치형 앱(Electron, mac·Windows·Linux) + 앱 내장 MCP 서버(stdio 중계기 → 로컬 소켓, 토큰 없음·열린 편집기 연동 도구) — 설계 [DESKTOP.md](DESKTOP.md). Vercel 배포는 그대로, 설치 파일은 GitHub Releases
