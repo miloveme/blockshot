@@ -1,33 +1,24 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { resolveBrowser } from "./browser";
 
 /**
- * Minimal Chrome DevTools Protocol driver (no Playwright): launches the user's Chrome headless, opens one page and evaluates
- * expressions in it. Uses Node's built-in WebSocket, so the whole local server stays one dependency-free file.
+ * Minimal Chrome DevTools Protocol driver (no Playwright): launches the renderer headless (see browser.ts — the pinned
+ * chrome-headless-shell by default), opens one page and evaluates expressions in it. Uses Node's built-in WebSocket, so
+ * the whole local server stays one dependency-free file.
  */
-
-const CANDIDATES: Record<string, string[]> = {
-  darwin: ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Chromium.app/Contents/MacOS/Chromium", "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"],
-  win32: ["C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe", "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"],
-  linux: ["/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium", "/usr/bin/chromium-browser", "/snap/bin/chromium", "/opt/pw-browsers/chromium"],
-};
-
-export function findChrome(): string | null {
-  const env = process.env.BLOCKSHOT_CHROME;
-  if (env) return existsSync(env) ? env : null;
-  return (CANDIDATES[process.platform] ?? CANDIDATES.linux!).find((p) => existsSync(p)) ?? null;
-}
 
 export interface ChromePage {
   evaluate<T>(expression: string, timeoutMs?: number): Promise<T>;
   close(): Promise<void>;
+  /** set when the browser was downloaded just now, or a fallback was used */
+  note?: string;
 }
 
 export async function openPage(url: string): Promise<ChromePage> {
-  const exe = findChrome();
-  if (!exe) throw new Error("Google Chrome was not found. Install Chrome, or set BLOCKSHOT_CHROME to a Chrome/Chromium/Edge executable.");
+  const { exe, note } = await resolveBrowser();
   const profile = mkdtempSync(join(tmpdir(), "blockshot-chrome-"));
   const child: ChildProcess = spawn(
     exe,
@@ -45,7 +36,7 @@ export async function openPage(url: string): Promise<ChromePage> {
   try {
     const wsUrl = await new Promise<string>((resolve, reject) => {
       let buf = "";
-      const timer = setTimeout(() => reject(new Error("Chrome did not start in time")), 20_000);
+      const timer = setTimeout(() => reject(new Error(`the renderer (${exe}) did not start in time`)), 20_000);
       child.stderr!.on("data", (d) => {
         buf += d;
         const m = /DevTools listening on (ws:\/\/\S+)/.exec(buf);
@@ -54,7 +45,7 @@ export async function openPage(url: string): Promise<ChromePage> {
           resolve(m[1]!);
         }
       });
-      child.on("exit", (code) => reject(new Error(`Chrome exited (${code}) before it was ready`)));
+      child.on("exit", (code) => reject(new Error(`the renderer exited (${code}) before it was ready${process.platform === "linux" ? " — on Linux it needs the usual Chrome libraries (e.g. libnss3, libgbm1)" : ""}`)));
       child.on("error", reject);
     });
 
@@ -97,6 +88,7 @@ export async function openPage(url: string): Promise<ChromePage> {
     };
     return {
       evaluate,
+      note,
       async close() {
         try {
           await send("Browser.close");

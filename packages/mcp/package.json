@@ -13,7 +13,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && tsx scripts/build-cli.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "pin:browser": "tsx scripts/pin-headless-shell.ts"
   },
   "dependencies": {
     "@blockshot/core": "workspace:*"

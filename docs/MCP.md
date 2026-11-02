@@ -36,9 +36,17 @@ Vercel 프로젝트 환경변수 `mcp_token`(또는 `MCP_TOKEN`)을 설정하면
 | 도구 | 설명 |
 |---|---|
 | `render_still` | 스튜디오와 같은 **진짜 3D 렌더** PNG (`preview` 도식보다 훨씬 정확, 몇 초) |
-| `render_video` | 장면을 **MP4(Chrome이 H.264를 지원하지 않으면 WebM)로 렌더**해 파일로 저장하고 경로를 돌려준다. `range`(샷 id/`all`)·`from`/`to`(원하는 구간, 초 — 샷 순서면 편집본 시간, `camera` 고정이면 장면 시간)·`camera`·`scale`·`pass` 선택 |
+| `render_video` | 장면을 **MP4로 렌더**(H.264를 못 쓰는 브라우저로 대체 렌더할 때만 WebM)해 파일로 저장하고 경로를 돌려준다. `range`(샷 id/`all`)·`from`/`to`(원하는 구간, 초 — 샷 순서면 편집본 시간, `camera` 고정이면 장면 시간)·`camera`·`scale`·`pass` 선택 |
 
-렌더는 **내 컴퓨터의 Chrome(헤드리스)** 이 스튜디오 페이지를 열어(`BLOCKSHOT_URL`) 브라우저 렌더러+WebCodecs로 인코딩한다 — 렌더 서버 없음. Chrome은 DevTools 프로토콜로 직접 제어한다(`src/chrome.ts`, Playwright 불필요). 소프트웨어 WebGL이라 몇 초 영상도 수십 초~수 분 걸릴 수 있다.
+렌더는 **내 컴퓨터의 헤드리스 Chromium**이 스튜디오 페이지를 열어(`BLOCKSHOT_URL`) 브라우저 렌더러+WebCodecs로 인코딩한다 — 렌더 서버 없음. DevTools 프로토콜로 직접 제어한다(`src/chrome.ts`, Playwright 불필요). 소프트웨어 WebGL(SwiftShader)이라 몇 초 영상도 수십 초~수 분 걸릴 수 있다.
+
+**렌더러 (`src/browser.ts`)**: 사용자 브라우저와 상관없이 Chrome for Testing의 `chrome-headless-shell`을 쓴다.
+- 버전과 플랫폼별 zip의 크기·SHA-256을 `src/headless-shell.generated.ts`에 고정한다. 받은 파일이 다르면 설치하지 않는다.
+- `node blockshot-mcp.mjs install-browser`가 `~/.blockshot/browsers/chrome-headless-shell-<버전>/`에 받는다(약 100–120 MB, 풀면 약 200 MB). 설치 절차에 포함돼 있고, 건너뛰면 첫 렌더가 받는다. 새 버전을 받으면 옛 버전 폴더는 지운다.
+- 찾는 순서: `BLOCKSHOT_CHROME` → 고정 shell(없으면 지금 받음) → 받을 수 없을 때만 설치된 Chrome·Edge·Chromium·Brave.
+- `BLOCKSHOT_HOME`으로 `~/.blockshot` 대신 다른 폴더를 쓸 수 있다.
+- 더 새 Chromium으로 올리기: `pnpm --filter @blockshot/mcp pin:browser`(Stable 버전을 찾아 6개 플랫폼 zip을 받아 해시, 약 700 MB) → `pnpm --filter @blockshot/mcp build`.
+- macOS arm64에서 확인: WebGL2(SwiftShader)·H.264/VP9/AV1 인코딩 지원, `render_still`·`render_video`(MP4) 정상. Linux 서버는 Chrome 라이브러리(libnss3, libgbm1 등)가 필요할 수 있다.
 
 ### AI가 알아서 설치하게 하기 (권장)
 
@@ -46,18 +54,19 @@ Vercel 프로젝트 환경변수 `mcp_token`(또는 `MCP_TOKEN`)을 설정하면
 
 ```
 mkdir -p ~/.blockshot && curl -fsSL https://blockshot-eta.vercel.app/mcp/blockshot-mcp.mjs -o ~/.blockshot/blockshot-mcp.mjs
+node ~/.blockshot/blockshot-mcp.mjs install-browser
 claude mcp add blockshot-local -e BLOCKSHOT_URL=https://blockshot-eta.vercel.app -- node ~/.blockshot/blockshot-mcp.mjs
 ```
 
-필요한 것: Node 22+, Google Chrome(또는 Edge/Chromium; 표준 위치가 아니면 `BLOCKSHOT_CHROME`). 번들 하나(약 5 MB)에 전부 들어 있어 npm 설치가 없다. 도구는 MCP 클라이언트가 서버 목록을 다시 읽은 뒤(Claude Code는 새 세션/`/mcp`) 나타난다.
+필요한 것: Node 22+. 브라우저는 필요 없다(렌더러는 `install-browser`가 받는다). 번들 하나(약 5 MB)에 전부 들어 있어 npm 설치가 없다. 도구는 MCP 클라이언트가 서버 목록을 다시 읽은 뒤(Claude Code는 새 세션/`/mcp`) 나타난다.
 
 ### 로컬 전환·등록 안내 (AI용)
 
 `local_setup` 도구(와 서버 `instructions`)가 프로젝트 코드를 보지 않고도 다음을 전부 알려 준다 — AI가 "토큰 없이 로컬로 다시 등록해줘" 같은 요청을 받으면 이 도구를 조회해 설치·등록·검증까지 진행한다.
 
 - 정확한 다운로드·등록 명령(macOS/Linux/Windows), **Claude Code · Codex(`~/.codex/config.toml`) · 일반 JSON** 설정 예시
-- 요구사항: Node 22+, Chrome(Edge/Chromium) — 렌더 도구에만 필요, 환경변수 `BLOCKSHOT_URL`·`BLOCKSHOT_CHROME`
-- **로컬 stdio는 `MCP_TOKEN` 없이 동작**: 토큰은 원격 `/api/mcp`(POST)만 보호한다. 로컬 서버는 네트워크 엔드포인트가 없고 파일은 공개 정적 다운로드다(렌더 때만 Chrome이 스튜디오 페이지를 받아 온다)
+- 요구사항: Node 22+, 렌더러 설치(`install-browser`, 브라우저 불필요), 환경변수 `BLOCKSHOT_URL`·`BLOCKSHOT_CHROME`·`BLOCKSHOT_HOME`
+- **로컬 stdio는 `MCP_TOKEN` 없이 동작**: 토큰은 원격 `/api/mcp`(POST)만 보호한다. 로컬 서버는 네트워크 엔드포인트가 없고 파일은 공개 정적 다운로드다(네트워크는 렌더러를 처음 받을 때와, 렌더 때 스튜디오 페이지를 받아 올 때만 쓴다)
 - 기존 원격 등록을 로컬로 **전환**하는 절차(원격 항목 찾기 → 제거(저장된 토큰도 함께 사라짐) → 로컬 등록, 같은 이름 재사용 가능)
 - **검증**: `printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n' | node ~/.blockshot/blockshot-mcp.mjs` → 도구 목록 한 줄. 새 세션에서 로컬 서버는 정확히 14개 도구(`get_guide, run_script, validate_spec, apply_addon, animate_prompt, evaluate, analyze_motion, solve_motion, inspect_rig, preview, load_link, open_link, render_video, render_still`; 개수와 목록은 `local_setup`이 코드에서 직접 계산)이고 `local_setup`이 없으며, 원격은 15개(`local_setup` + 렌더 안내용 스텁 포함). 이어서 `run_script` → `render_still` PNG까지 확인
 
@@ -72,7 +81,7 @@ cmp -s <(curl -fsSL https://blockshot-eta.vercel.app/mcp/blockshot-mcp.mjs 2>/de
 curl -fsSL https://blockshot-eta.vercel.app/mcp/blockshot-mcp.mjs -o ~/.blockshot/blockshot-mcp.mjs.new && mv ~/.blockshot/blockshot-mcp.mjs.new ~/.blockshot/blockshot-mcp.mjs
 ```
 
-그다음 MCP를 다시 읽는다(Claude Code는 새 세션/`/mcp`, Codex는 재시작). 같은 절차가 `local_setup`(§6)과 `/guide` 프롬프트 ⑥에 있다.
+새 파일이 더 새 렌더러를 고정했으면 `install-browser`(또는 다음 렌더)가 받고 옛 버전을 지운다. 그다음 MCP를 다시 읽는다(Claude Code는 새 세션/`/mcp`, Codex는 재시작). 같은 절차가 `local_setup`(§6)과 `/guide` 프롬프트 ⑥에 있다.
 
 **프롬프트로 맡기기**: `/guide`의 "AI에게 MCP 연결 맡기기"에 복사용 프롬프트가 있다(로컬 설치·원격 연결·원격→로컬 전환·Codex·연결 점검·로컬 업데이트·링크 장면에 애니메이션·첫 작업). 같은 안내 전체는 공개 문서 `/docs/mcp-setup.md`(`pnpm --filter @blockshot/mcp build`가 `localSetupText`로 생성)에도 있어 웹을 읽는 AI는 주소만 알려 줘도 된다.
 

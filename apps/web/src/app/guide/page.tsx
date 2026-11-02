@@ -428,17 +428,20 @@ claude mcp add --transport http blockshot https://blockshot-eta.vercel.app/api/m
               <li>토큰은 서비스 운영자가 정한 값입니다. 서버에는 아무것도 저장되지 않습니다.</li>
             </UL>
             <H3>로컬 MCP (내 컴퓨터에서 실행 · MP4 렌더 가능)</H3>
-            <p>같은 도구를 내 컴퓨터에서 돌리고, 추가로 <Code>render_still</Code>(진짜 3D 이미지)과 <Code>render_video</Code>(MP4 파일 저장)를 씁니다. 내 컴퓨터의 Chrome이 렌더하므로 서버 비용이 없습니다. <b>Node 22+와 Chrome</b>이 필요합니다.</p>
+            <p>같은 도구를 내 컴퓨터에서 돌리고, 추가로 <Code>render_still</Code>(진짜 3D 이미지)과 <Code>render_video</Code>(MP4 파일 저장)를 씁니다. 내 컴퓨터에서 렌더하므로 서버 비용이 없습니다. <b>Node 22+</b>만 있으면 되고, 브라우저는 필요 없습니다. 렌더 전용 Chromium(약 100MB)을 설치할 때 한 번 내려받습니다.</p>
             <OL>
               <li><b>AI가 알아서 설치</b>(권장) — 원격 MCP만 연결해 두고 &ldquo;MP4로 내보내 줘&rdquo;라고 하면, 셸을 쓸 수 있는 AI(Claude Code 등)가 설치 방법을 안내받아 <b>동의를 구한 뒤</b> 파일 하나를 내려받아 등록합니다.</li>
               <li><b>직접 설치</b></li>
             </OL>
             <Pre>{`mkdir -p ~/.blockshot && curl -fsSL https://blockshot-eta.vercel.app/mcp/blockshot-mcp.mjs -o ~/.blockshot/blockshot-mcp.mjs
+node ~/.blockshot/blockshot-mcp.mjs install-browser
 claude mcp add blockshot-local -e BLOCKSHOT_URL=https://blockshot-eta.vercel.app -- node ~/.blockshot/blockshot-mcp.mjs`}</Pre>
             <UL>
               <li>등록 후 MCP를 다시 읽어야(Claude Code는 새 세션이나 <Code>/mcp</Code>) 도구가 나타납니다.</li>
-              <li>Chrome이 표준 위치에 없으면 환경변수 <Code>BLOCKSHOT_CHROME</Code>에 실행 파일 경로를 지정하세요. 소프트웨어 렌더링이라 짧은 영상도 수십 초~수 분 걸릴 수 있습니다.</li>
-              <li>결과는 <Code>~/Blockshot/renders/</Code>에 저장되고(경로 지정 가능), H.264를 지원하지 않는 Chrome에서는 WebM이 됩니다.</li>
+              <li><Code>install-browser</Code>는 렌더 전용 Chromium(Chrome for Testing의 <Code>chrome-headless-shell</Code>)을 <Code>~/.blockshot/browsers</Code>에 받습니다. 버전이 고정돼 있고 크기와 SHA-256을 확인하므로 어느 컴퓨터에서나 같은 결과가 나옵니다. 설치된 Chrome이나 그 설정은 건드리지 않습니다.</li>
+              <li>이 단계를 건너뛰면 첫 렌더 때 자동으로 받습니다(그 렌더만 1분쯤 더 걸립니다). 받을 수 없는 환경이면 설치된 Chrome·Edge·Chromium·Brave로 렌더합니다. 특정 브라우저를 쓰려면 환경변수 <Code>BLOCKSHOT_CHROME</Code>에 실행 파일 경로를 지정하세요.</li>
+              <li>Linux 서버처럼 데스크톱이 없는 환경에서는 Chrome 라이브러리가 필요할 수 있습니다(Ubuntu: <Code>sudo apt-get install -y libnss3 libgbm1 libasound2</Code>).</li>
+              <li>소프트웨어 렌더링이라 짧은 영상도 수십 초~수 분 걸릴 수 있습니다. 결과는 <Code>~/Blockshot/renders/</Code>에 MP4로 저장됩니다(경로 지정 가능).</li>
             </UL>
             <H3>Codex에서 등록하기</H3>
             <Pre>{`# ~/.codex/config.toml   (경로는 절대경로로)
@@ -460,12 +463,12 @@ env = { BLOCKSHOT_URL = "https://blockshot-eta.vercel.app" }`}</Pre>
               <li><b>MCP 다시 읽기</b> — 실행 중인 서버는 옛 파일을 메모리에 들고 있으므로 다시 시작해야 합니다. Claude Code는 새 세션을 열거나 <Code>/mcp</Code>에서 다시 연결, Codex는 codex를 다시 시작합니다.</li>
               <li><b>확인</b> — <Code>printf &apos;{`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`}\n&apos; | node ~/.blockshot/blockshot-mcp.mjs</Code> 가 도구 목록 한 줄을 출력하면 정상입니다.</li>
             </OL>
-            <Note>원격 MCP는 사이트가 배포되는 순간 자동으로 최신이 됩니다. 업데이트가 필요한 것은 로컬 MCP뿐입니다. AI에게 &ldquo;Blockshot 로컬 MCP 업데이트해 줘&rdquo;라고 해도 됩니다(아래 프롬프트 ⑥).</Note>
+            <Note>새 파일이 더 새로운 렌더러 버전을 쓰면, 다음 렌더 때(또는 <Code>install-browser</Code>를 다시 실행하면) 새 버전을 받고 옛 버전은 지웁니다. 원격 MCP는 사이트가 배포되는 순간 자동으로 최신이 됩니다. 업데이트가 필요한 것은 로컬 MCP뿐입니다. AI에게 &ldquo;Blockshot 로컬 MCP 업데이트해 줘&rdquo;라고 해도 됩니다(아래 프롬프트 ⑥).</Note>
             <H3>원격에서 로컬로 바꾸기 (토큰 필요 없음)</H3>
             <p>로컬 서버는 내 컴퓨터에서 직접 실행되는 명령이라 <b>토큰이 필요 없습니다</b>(토큰은 원격 주소만 보호합니다). AI에게 이렇게 요청하세요.</p>
             <Pre>{`토큰 없이 로컬 MCP로 다시 등록해 줘. 기존 원격 blockshot 등록은 지우고,
 설치한 뒤 새 세션에서 도구 ${N_LOCAL}개(render_video, render_still 포함)가 보이는지까지 확인해 줘.`}</Pre>
-            <p>AI가 원격 MCP의 <Code>local_setup</Code>에서 정확한 명령·요구사항(Node 22+, Chrome)·전환 절차·확인 방법을 읽어 진행합니다. 직접 확인하려면 <Code>printf &apos;{`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`}\n&apos; | node ~/.blockshot/blockshot-mcp.mjs</Code> 가 도구 목록 한 줄을 출력하는지 보세요.</p>
+            <p>AI가 원격 MCP의 <Code>local_setup</Code>에서 정확한 명령·요구사항(Node 22+)·렌더러 설치·전환 절차·확인 방법을 읽어 진행합니다. 직접 확인하려면 <Code>printf &apos;{`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`}\n&apos; | node ~/.blockshot/blockshot-mcp.mjs</Code> 가 도구 목록 한 줄을 출력하는지 보세요.</p>
             <Note>설치할 수 없는 환경(모바일, iPad, 웹 채팅)에서는 원격 MCP만 쓰고, 링크를 연 뒤 스튜디오의 <b>영상 렌더</b>로 MP4를 내보내면 됩니다.</Note>
             <H3>이렇게 요청해 보세요</H3>
             <UL>
@@ -484,9 +487,10 @@ env = { BLOCKSHOT_URL = "https://blockshot-eta.vercel.app" }`}</Pre>
               title="① 로컬 MCP 설치하고 등록하기 (토큰 필요 없음 · MP4 렌더 가능) — 권장"
               text={`Blockshot 로컬 MCP를 이 컴퓨터에 설치하고 등록해 줘. 실행 전에 무엇을 할지 먼저 알려 주고 내 확인을 받아.
 
-1. 먼저 확인: node -v 가 v22 이상인지, Chrome(또는 Edge/Chromium)이 설치돼 있는지.
-2. 파일 하나를 내려받아:
+1. 먼저 확인: node -v 가 v22 이상인지. (브라우저는 필요 없어.)
+2. 파일 하나를 내려받고, 렌더 전용 Chromium(약 100MB)을 설치해:
    mkdir -p ~/.blockshot && curl -fsSL https://blockshot-eta.vercel.app/mcp/blockshot-mcp.mjs -o ~/.blockshot/blockshot-mcp.mjs
+   node ~/.blockshot/blockshot-mcp.mjs install-browser   ("renderer ready" 가 나오면 성공)
 3. 절대경로로 등록해 (토큰은 필요 없어):
    claude mcp add blockshot-local -e BLOCKSHOT_URL=https://blockshot-eta.vercel.app -- node $HOME/.blockshot/blockshot-mcp.mjs
    (Codex를 쓰는 중이면 ~/.codex/config.toml 에 [mcp_servers.blockshot-local] command="node", args=["<절대경로>/.blockshot/blockshot-mcp.mjs"], env={BLOCKSHOT_URL="https://blockshot-eta.vercel.app"} 를 추가)
@@ -519,12 +523,13 @@ Blockshot MCP의 local_setup 도구를 조회해서 그 안내를 그대로 따�
 
 [로컬 방식 — 토큰 필요 없음]
 1) mkdir -p ~/.blockshot && curl -fsSL https://blockshot-eta.vercel.app/mcp/blockshot-mcp.mjs -o ~/.blockshot/blockshot-mcp.mjs
+   node ~/.blockshot/blockshot-mcp.mjs install-browser   (렌더 전용 Chromium 약 100MB, 한 번만)
 2) ~/.codex/config.toml 에 추가 (경로는 절대경로로):
    [mcp_servers.blockshot-local]
    command = "node"
    args = ["/Users/<내 이름>/.blockshot/blockshot-mcp.mjs"]
    env = { BLOCKSHOT_URL = "https://blockshot-eta.vercel.app" }
-3) codex를 다시 시작한 뒤 codex mcp list 로 blockshot-local 이 보이는지 확인하고, 도구 ${N_LOCAL}개가 보이면 성공이야. Node 22 이상과 Chrome이 필요해.
+3) codex를 다시 시작한 뒤 codex mcp list 로 blockshot-local 이 보이는지 확인하고, 도구 ${N_LOCAL}개가 보이면 성공이야. Node 22 이상이 필요하고 브라우저는 필요 없어.
 
 (원격 방식을 원하면 url = "https://blockshot-eta.vercel.app/api/mcp" 와 환경변수 BLOCKSHOT_TOKEN 을 쓰는 설정을 Codex 문서에 맞춰 만들어 줘. 토큰 값은 파일이나 대화에 적지 마.)`}
             />
@@ -545,8 +550,9 @@ Blockshot MCP의 local_setup 도구를 조회해서 그 안내를 그대로 따�
 2. 최신인지 비교: cmp -s <(curl -fsSL ${MCP_FILE} 2>/dev/null) <그 경로> 가 같으면 "이미 최신"이라고 알려 주고 끝내.
 3. 다르면 임시 파일로 받은 뒤 바꿔: curl -fsSL ${MCP_FILE} -o <그 경로>.new && mv <그 경로>.new <그 경로>
    등록(claude mcp / config.toml)은 건드리지 마. 경로가 같으니 다시 등록할 필요 없어.
-4. 확인: printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\\n' | node <그 경로> 가 도구 목록 한 줄을 출력하는지 봐.
-5. 새 도구는 MCP를 다시 읽어야 보인다고 알려 줘(Claude Code는 새 세션이나 /mcp, Codex는 재시작).`}
+4. node <그 경로> install-browser 를 실행해. 새 파일이 새 렌더러 버전을 쓰면 받고 옛 버전은 지워, 아니면 "renderer ready"만 출력해.
+5. 확인: printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\\n' | node <그 경로> 가 도구 목록 한 줄을 출력하는지 봐.
+6. 새 도구는 MCP를 다시 읽어야 보인다고 알려 줘(Claude Code는 새 세션이나 /mcp, Codex는 재시작).`}
             />
 
             <CopyPrompt

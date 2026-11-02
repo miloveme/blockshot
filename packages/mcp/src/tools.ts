@@ -400,7 +400,7 @@ export function localSetupText(origin: string): string {
   const url = `${origin}/mcp/blockshot-mcp.mjs`;
   return `# Blockshot LOCAL MCP — install, register, switch from the hosted server, verify
 
-WHAT IT IS: the same Blockshot tools running on the user's own machine over stdio (one self-contained file, ~5 MB, nothing else to install), plus two local-only tools: render_video (real MP4/WebM file) and render_still (real 3D PNG). It needs NO token: MCP_TOKEN only protects the hosted endpoint ${origin}/api/mcp (POST). The local stdio server has no network endpoint to protect, and the file itself is a public static download. The only network use is rendering: headless Chrome loads the studio page from BLOCKSHOT_URL (default ${origin}); scripts, validation and previews run fully offline.
+WHAT IT IS: the same Blockshot tools running on the user's own machine over stdio (one self-contained file, ~5 MB; the renderer — a pinned headless Chromium, ~100 MB — is downloaded once by step 2), plus two local-only tools: render_video (real MP4/WebM file) and render_still (real 3D PNG). It needs NO token: MCP_TOKEN only protects the hosted endpoint ${origin}/api/mcp (POST). The local stdio server has no network endpoint to protect, and the file itself is a public static download. Network use: the one-time renderer download (storage.googleapis.com, Chrome for Testing), and at render time the headless renderer loads the studio page from BLOCKSHOT_URL (default ${origin}); scripts, validation and previews run fully offline.
 
 WHEN TO USE THIS: the user asks for an MP4/video export or a real 3D render, or says things like "register the local MCP", "re-register locally / without the token", "switch to local", "install blockshot locally", "update the local MCP" (see §6). You must be able to run shell commands on the user's computer (Claude Code, Codex CLI, …). If you cannot (claude.ai chat, phone, iPad), do NOT try: keep using this hosted server; scripts, preview and links work everywhere, and the user can export the MP4 from the link via the studio's "영상 렌더" button.
 
@@ -408,14 +408,17 @@ ASK FIRST. Tell the user in one sentence what you will do: download one file fro
 
 ## 1. Requirements (check before installing)
 - Node.js 22 or newer (uses built-in WebSocket). Check: node -v   → must print v22.x or higher.
-- A Chromium-based browser installed: Google Chrome (recent, 112+ recommended), or Microsoft Edge / Chromium. Only render_video / render_still need it; everything else works without. Standard locations are auto-detected (macOS /Applications/Google Chrome.app, Windows Program Files, Linux /usr/bin/google-chrome|chromium). Otherwise set BLOCKSHOT_CHROME to the executable path.
-- Environment variables (all optional): BLOCKSHOT_URL = studio used for links and rendering (default ${origin}; use http://localhost:3000 for a local dev server), BLOCKSHOT_CHROME = browser executable.
+- NO browser needed: step 2 downloads the renderer (Chrome for Testing chrome-headless-shell, pinned version, size + SHA-256 checked) into ~/.blockshot/browsers — the same on every machine. It does not touch any browser the user has. If that download is impossible, renders fall back to an installed Chrome / Edge / Chromium / Brave. Linux only: the renderer needs the usual Chrome libraries (Debian/Ubuntu: sudo apt-get install -y libnss3 libgbm1 libasound2; on a desktop they are already there).
+- Environment variables (all optional): BLOCKSHOT_URL = studio used for links and rendering (default ${origin}; use http://localhost:3000 for a local dev server), BLOCKSHOT_CHROME = render with this browser executable instead, BLOCKSHOT_HOME = use this folder instead of ~/.blockshot for the renderer.
 
 ## 2. Download (exact commands)
 macOS / Linux:
   mkdir -p ~/.blockshot && curl -fsSL ${url} -o ~/.blockshot/blockshot-mcp.mjs
 Windows (PowerShell):
   New-Item -ItemType Directory -Force $HOME\\.blockshot | Out-Null; Invoke-WebRequest ${url} -OutFile $HOME\\.blockshot\\blockshot-mcp.mjs
+Then install the renderer (once; ~100 MB, prints progress, ends with "renderer ready: <path>"):
+  node ~/.blockshot/blockshot-mcp.mjs install-browser          (Windows: node $HOME\\.blockshot\\blockshot-mcp.mjs install-browser)
+If you skip it, the first render_still / render_video downloads it instead (that call then takes a minute longer).
 Updating later = run the same download again. Use an ABSOLUTE path when registering (some clients do not expand ~): on macOS/Linux resolve it with: echo $HOME/.blockshot/blockshot-mcp.mjs
 
 ## 3. Register
@@ -444,7 +447,7 @@ b) Client sees it: claude mcp list (shows "blockshot-local … Connected"), or /
 c) In the NEW session the local server must expose exactly these ${LOCAL_TOOL_NAMES.length} tools:
    ${LOCAL_TOOL_NAMES.join(", ")}
    How to tell local from hosted: the local server has NO local_setup tool, and its render_video description starts with "LOCAL ONLY". The hosted server has ${HOSTED_TOOL_COUNT} tools (the shared ones + local_setup + render_video + render_still stubs that only explain how to install).
-d) Functional test: call run_script with a tiny scene, then render_still (t=0); a PNG must come back. render_video writes a file under ~/Blockshot/renders/ (or the "output" path) and returns its path. If render_* fails with "Google Chrome was not found" → install Chrome or set BLOCKSHOT_CHROME; if it says the studio did not become ready → check the machine can reach BLOCKSHOT_URL.
+d) Functional test: call run_script with a tiny scene, then render_still (t=0); a PNG must come back. render_video writes a file under ~/Blockshot/renders/ (or the "output" path) and returns its path. If render_* fails with "Could not download the renderer" → check the network and run install-browser (step 2) to see the error; "the renderer exited … before it was ready" on Linux → install the libraries from step 1; "the studio did not become ready" → check the machine can reach BLOCKSHOT_URL.
 Only after (a) and (b) succeed, report success; mention if you could not run (c)/(d) in the current session.
 
 ## 6. Updating the local server (when the user asks to update it, or the hosted docs mention an action / tool the local one rejects)
@@ -453,7 +456,8 @@ The local file never updates itself; the hosted server is always current. An out
 2. Already current? cmp -s <(curl -fsSL ${url} 2>/dev/null) <PATH> && echo up-to-date   → if it is, say so and stop.
 3. Replace it safely (a download cut off midway must not break the working file):
    curl -fsSL ${url} -o <PATH>.new && mv <PATH>.new <PATH>
-4. Verify with 5(a), then tell the user the new version loads after the client reloads its MCP servers (Claude Code → new session or /mcp; Codex → restart). The running server keeps the old code until then.`;
+4. Run install-browser (step 2) again: when the new file pins a newer renderer it downloads it and removes the old one; otherwise it just prints "renderer ready". (Skipping it is fine — the first render does it.)
+5. Verify with 5(a), then tell the user the new version loads after the client reloads its MCP servers (Claude Code → new session or /mcp; Codex → restart). The running server keeps the old code until then.`;
 }
 
 const NEEDS_LOCAL = (origin: string) =>
@@ -464,7 +468,7 @@ export const REMOTE_EXTRA_TOOLS: Tool[] = [
   {
     name: "local_setup",
     description:
-      "Complete instructions to install, register (Claude Code, Codex, generic JSON), switch from this hosted server to, and verify the LOCAL Blockshot MCP: exact commands, Node/Chrome requirements, environment variables, and the expected tool list. The local server needs NO token (MCP_TOKEN only protects this hosted endpoint) and adds render_video (MP4) and render_still (real 3D PNG). Call it when the user wants an MP4/video export or a high-fidelity render, or asks to install / register / switch to / update the local MCP, or to re-register it locally or without a token — then carry out the steps (install, register, verify) yourself if you can run shell commands, after asking the user.",
+      "Complete instructions to install, register (Claude Code, Codex, generic JSON), switch from this hosted server to, and verify the LOCAL Blockshot MCP: exact commands, the Node requirement and the one-time renderer download (no browser needed), environment variables, and the expected tool list. The local server needs NO token (MCP_TOKEN only protects this hosted endpoint) and adds render_video (MP4) and render_still (real 3D PNG). Call it when the user wants an MP4/video export or a high-fidelity render, or asks to install / register / switch to / update the local MCP, or to re-register it locally or without a token — then carry out the steps (install, register, verify) yourself if you can run shell commands, after asking the user.",
     inputSchema: { type: "object", properties: {} },
     async run(_a, p) {
       return ok(text(localSetupText(p.origin)));
@@ -509,7 +513,7 @@ export async function handleRpc(msg: RpcRequest, platform: Platform, tools: Tool
         protocolVersion: PROTOCOLS.includes(asked) ? asked : PROTOCOLS[0],
         capabilities: { tools: {} },
         serverInfo: { name: "blockshot", version: "0.1.0" },
-        instructions: "Blockshot: author previz scenes with code. Call get_guide first, then run_script, preview, evaluate, open_link. MP4 export / real 3D renders need the LOCAL server (no token needed; one downloaded file, Node 22+ and Chrome). For install / register / switch-to-local / verify steps (Claude Code and Codex) call local_setup, then do them yourself if you can run shell commands (ask the user first). \"Re-register locally without the token\" = local_setup + remove the hosted entry + register the local one + verify.",
+        instructions: "Blockshot: author previz scenes with code. Call get_guide first, then run_script, preview, evaluate, open_link. MP4 export / real 3D renders need the LOCAL server (no token needed; one downloaded file + a one-time renderer download, Node 22+, no browser needed). For install / register / switch-to-local / verify steps (Claude Code and Codex) call local_setup, then do them yourself if you can run shell commands (ask the user first). \"Re-register locally without the token\" = local_setup + remove the hosted entry + register the local one + verify.",
       });
     }
     case "ping":
