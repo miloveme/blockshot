@@ -162,6 +162,7 @@ for (let f = first; f < last; f++) {
 - 페이지는 정적 프리렌더(`○ /`). 서버 의존 없음
 - (M5) `app/api/generate/route.ts` — BYOK 스트리밍 프록시. 키는 요청 헤더로만 받고 저장하지 않음
 - (검토) stateless Streamable HTTP MCP 엔드포인트 — `validate_spec`, `get_schema` 같은 순수 도구만
+- 설치형 앱은 이 배포와 별개다(GitHub Releases). 설계: [DESKTOP.md](DESKTOP.md)
 
 ## 6. 확장 지점
 

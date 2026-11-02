@@ -173,3 +173,4 @@
 - [x] 로컬 MCP `blockshot-mcp`(stdio, packages/mcp): 같은 도구 + 로컬 Chrome 헤드리스로 `render_still`/`render_video`(MP4) — 서버 비용 0
 - [x] stateless HTTP MCP 엔드포인트 `/api/mcp` (docs/MCP.md): run_script(QuickJS 샌드박스)·validate·apply_addon·evaluate·preview(SVG→PNG)·open_link(URL 조각 공유 링크)
 - [ ] Z-up(Blender) 입출력 변환, FBX/USD 카메라 익스포트
+- [ ] 설치형 앱(Electron, mac·Windows·Linux) + 앱 내장 MCP 서버(localhost HTTP·stdio 중계기·열린 편집기 연동 도구) — 설계 [DESKTOP.md](DESKTOP.md). Vercel 배포는 그대로, 설치 파일은 GitHub Releases
