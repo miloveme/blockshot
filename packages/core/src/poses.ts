@@ -677,8 +677,9 @@ export const ikChain = (end: IkEffector): [BoneName, BoneName, BoneName] => {
 /**
  * Moving an IK handle: rotations of the limb's two segments and its end (`end` = the wrist / ankle bone) that put the
  * wrist / ankle at `target` (actor space, metres at `scale`), or as near as the limb reaches. The elbow / knee keeps bending
- * the way it bends now, and the hand / foot keeps its orientation in actor space (lifting a foot keeps the sole as it was)
- * — like an IK handle in a 3D package. Only those three bones change; the result is meant to be keyed.
+ * the way it bends now. The hand keeps its wrist angle (it turns with the forearm, so a raised arm does not end in a
+ * broken wrist); the foot keeps its orientation in actor space (lifting a foot keeps the sole as it was). Only those three
+ * bones change; the result is meant to be keyed.
  */
 export function solveLimbIK(base: RigPose, end: IkEffector, target: Vec3, scale: number): Layer {
   const [upper, lower] = ikChain(end);
@@ -706,7 +707,11 @@ export function solveLimbIK(base: RigPose, end: IkEffector, target: Vec3, scale:
     const leg = solveLeg3(rel, yaw, 0, 0);
     layer = { [upper]: leg.thigh, [lower]: leg.shin };
   }
-  // the hand / foot keeps the orientation it had
+  if (end.endsWith("Hand")) {
+    layer[end] = [...(base.rot[end] ?? [0, 0, 0])];
+    return layer;
+  }
+  // the foot keeps the orientation it had
   const moved = solveRig(applyLayer(base, layer, 1), scale);
   layer[end] = Q.toEuler(Q.mul(Q.inv(moved[lower].rot), sk[end].rot));
   return layer;

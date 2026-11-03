@@ -330,8 +330,15 @@ function SelectionGizmo() {
       if (tc.object) tc.detach();
       return;
     }
-    // a picked IK handle takes the gizmo: move it in world axes, the limb follows
+    // a picked IK handle takes the gizmo: move it in world axes, the limb follows; the rotate tool turns the hand / foot
     const ikObj = ikHandle && sceneState.actors[want] ? scene.getObjectByName(`ik:${ikHandle}`) : undefined;
+    const ikBone = ikObj?.visible && mode === "rotate" ? scene.getObjectByName(`obj:${want}`)?.getObjectByName(`bone:${ikHandle}`) : undefined;
+    if (ikBone) {
+      if (tc.object !== ikBone) tc.attach(ikBone);
+      tc.setMode("rotate");
+      tc.setSpace("local");
+      return;
+    }
     if (ikObj?.visible) {
       if (tc.object !== ikObj) tc.attach(ikObj);
       tc.setMode("translate");

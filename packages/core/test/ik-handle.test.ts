@@ -26,14 +26,18 @@ describe("IK handles", () => {
     expect(dist(out.rightFoot.pos, sk.rightFoot.pos)).toBeLessThan(1e-9);
   });
 
-  it("moving a hand puts the wrist on the handle with the elbow bending the way it did", () => {
+  it("moving a hand puts the wrist on the handle, the elbow bending the way it did and the wrist angle unchanged", () => {
     const base = rig(spec());
     const sk = solveRig(base, 1);
     const target: Vec3 = [sk.rightHand.pos[0] - 0.1, sk.rightHand.pos[1] + 0.35, sk.rightHand.pos[2] + 0.3];
-    const out = solveRig(applyLayer(base, solveLimbIK(base, "rightHand", target, 1), 1), 1);
+    const layer = solveLimbIK(base, "rightHand", target, 1);
+    const out = solveRig(applyLayer(base, layer, 1), 1);
     expect(dist(out.rightHand.pos, target)).toBeLessThan(0.002);
     expect(out.rightLowerArm.pos[2]).toBeLessThan((out.rightUpperArm.pos[2] + out.rightHand.pos[2]) / 2); // elbow behind
-    expect(angle(out.rightHand.rot, sk.rightHand.rot)).toBeLessThan(1e-3);
+    // the hand turns with the forearm: same wrist angle as before
+    expect(layer.rightHand).toEqual(base.rot.rightHand ?? [0, 0, 0]);
+    const wrist = (sk2: typeof sk) => angle(sk2.rightLowerArm.rot, sk2.rightHand.rot);
+    expect(Math.abs(wrist(out) - wrist(sk))).toBeLessThan(1e-6);
   });
 
   it("a handle out of reach stretches the limb toward it", () => {
