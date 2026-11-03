@@ -1,5 +1,6 @@
 import type { BlockshotSpec, Key, Track, TrackProperty, Vec3 } from "./schema";
 import { BONES, mirrorLayer, type BoneName } from "./rig";
+import { solveLimbIK, type IkEffector } from "./poses";
 import { compile, evaluate } from "./evaluate";
 import { upsertKey } from "./edit";
 import { simplifySamples, type Sample } from "./record";
@@ -46,6 +47,20 @@ export const setBoneRotation = (spec: BlockshotSpec, id: string, bone: BoneName,
 
 /** Keys the whole body pose the actor has right now, so it can be edited from there. */
 export const keyCurrentPose = (spec: BlockshotSpec, id: string, t: number): BlockshotSpec => keyBones(spec, id, t, snapshotPose(spec, id, t));
+
+/**
+ * IK handle drop: keys the arm / leg of `end` at time t so its wrist / ankle sits at `target` (actor space, rest metres —
+ * the actor's own frame before its height scale), elbow / knee bending as before and the hand / foot keeping its
+ * orientation (`solveLimbIK`). Only the limb's three bones are keyed.
+ */
+export function keyLimbTo(spec: BlockshotSpec, id: string, t: number, end: IkEffector, target: Vec3): BlockshotSpec {
+  const actor = evaluate(compile(spec), t).actors[id];
+  if (!actor) return spec;
+  const layer = solveLimbIK(actor.rig, end, target, 1);
+  const pose: BonePose = {};
+  for (const b of Object.keys(layer) as BoneName[]) pose[b] = deg3(layer[b]!);
+  return keyBones(spec, id, t, pose);
+}
 
 /** Mirrors a pose across the actor's sagittal plane (left ↔ right). */
 export function mirrorBonePose(pose: BonePose): BonePose {

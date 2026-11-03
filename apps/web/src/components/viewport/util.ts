@@ -9,6 +9,12 @@ import { useStudio } from "@/lib/store";
  */
 export const EDITOR_LAYER = 1;
 
+/**
+ * True from a press on the move / rotate gizmo until just after its release: the click that ends a gizmo drag must not
+ * select whatever happens to be under the pointer then (an IK handle can end far from the limb, over a sofa or the floor).
+ */
+export const gizmoGesture = { on: false };
+
 export function markEditor(obj: THREE.Object3D) {
   obj.traverse((o) => o.layers.set(EDITOR_LAYER));
 }

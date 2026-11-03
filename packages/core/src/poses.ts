@@ -1,6 +1,6 @@
 import type { Gesture, HandShape, Pose, Vec3 } from "./schema";
 import { Q } from "./quat";
-import { ARM, FINGERS, FINGER_SEGMENTS, RIG, mirrorLayer, restPose, smoothstep, solveRig, type BoneName, type Finger, type Layer, type RigPose, type Skeleton } from "./rig";
+import { ARM, FINGERS, applyLayer, FINGER_SEGMENTS, RIG, mirrorLayer, restPose, smoothstep, solveRig, type BoneName, type Finger, type Layer, type RigPose, type Skeleton } from "./rig";
 
 /**
  * Pose library, acting gestures, arm IK and head look-at — everything that turns "what the actor is doing" into bone
@@ -662,3 +662,52 @@ const norm = (v: Vec3): Vec3 => {
   return [v[0] / l, v[1] / l, v[2] / l];
 };
 
+
+// ---- IK handles (editor) -----------------------------------------------------------------------------
+
+/** The bones an IK handle drives: a hand moves the arm, a foot the leg. */
+export const IK_EFFECTORS = ["leftHand", "rightHand", "leftFoot", "rightFoot"] as const;
+export type IkEffector = (typeof IK_EFFECTORS)[number];
+
+export const ikChain = (end: IkEffector): [BoneName, BoneName, BoneName] => {
+  const side = end.startsWith("left") ? "left" : "right";
+  return end.endsWith("Hand") ? [`${side}UpperArm`, `${side}LowerArm`, end] : [`${side}UpperLeg`, `${side}LowerLeg`, end];
+};
+
+/**
+ * Moving an IK handle: rotations of the limb's two segments and its end (`end` = the wrist / ankle bone) that put the
+ * wrist / ankle at `target` (actor space, metres at `scale`), or as near as the limb reaches. The elbow / knee keeps bending
+ * the way it bends now, and the hand / foot keeps its orientation in actor space (lifting a foot keeps the sole as it was)
+ * — like an IK handle in a 3D package. Only those three bones change; the result is meant to be keyed.
+ */
+export function solveLimbIK(base: RigPose, end: IkEffector, target: Vec3, scale: number): Layer {
+  const [upper, lower] = ikChain(end);
+  const side = end.startsWith("left") ? "left" : "right";
+  const sk = solveRig(base, scale);
+  const root = sk[upper].pos;
+  const joint = sk[lower].pos;
+  const tip = sk[end].pos;
+  // the current bend: elbow / knee off the root→tip line (a straight limb uses its forward axis)
+  const line = norm([tip[0] - root[0], tip[1] - root[1], tip[2] - root[2]]);
+  const off: Vec3 = [joint[0] - root[0], joint[1] - root[1], joint[2] - root[2]];
+  const d = off[0] * line[0] + off[1] * line[1] + off[2] * line[2];
+  let bend: Vec3 = [off[0] - line[0] * d, off[1] - line[1] * d, off[2] - line[2] * d];
+  const straight = Math.hypot(...bend) < 0.01 * scale;
+  let layer: Layer;
+  if (end.endsWith("Hand")) {
+    if (straight) bend = Q.rotate(sk[upper].rot, [0, 0, -1]); // a straight arm folds its elbow back
+    layer = solveArm(base, side, target, scale, undefined, norm(bend)).layer;
+  } else {
+    if (straight) bend = Q.rotate(sk[upper].rot, [0, 0, 1]); // a straight leg bends its knee forward
+    const qh = sk.hips.rot;
+    const rel = Q.rotate(Q.inv(qh), [(target[0] - root[0]) / scale, (target[1] - root[1]) / scale, (target[2] - root[2]) / scale]);
+    const pole = Q.rotate(Q.inv(qh), bend);
+    const yaw = Math.hypot(pole[0], pole[2]) < 1e-6 ? 0 : Math.atan2(pole[0], pole[2]);
+    const leg = solveLeg3(rel, yaw, 0, 0);
+    layer = { [upper]: leg.thigh, [lower]: leg.shin };
+  }
+  // the hand / foot keeps the orientation it had
+  const moved = solveRig(applyLayer(base, layer, 1), scale);
+  layer[end] = Q.toEuler(Q.mul(Q.inv(moved[lower].rot), sk[end].rot));
+  return layer;
+}

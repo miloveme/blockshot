@@ -8,6 +8,7 @@ import { BONES, DEG, RIG, fingerSegmentLength, type ActorState, type BoneName } 
 import { openObjectMenu } from "../editor/ContextMenu";
 import { useStudio } from "@/lib/store";
 import { EditorOnly } from "./EditorOnly";
+import { ikPreview } from "@/lib/ik";
 
 /**
  * Mannequin driven by the core rig: a hierarchy of THREE.Group bones built from `RIG` (same offsets as the headless
@@ -151,6 +152,8 @@ export function Mannequin({ id }: { id: string }) {
       bones.current = found;
     }
     applyRig(bones.current, a, useStudio.getState().selection === id ? useStudio.getState().draggingBone : null);
+    // an IK handle being dragged: its limb shows the live solve over the evaluated pose
+    if (ikPreview.id === id && ikPreview.layer) for (const [b, r] of Object.entries(ikPreview.layer)) bones.current[b as BoneName]?.rotation.set(r![0], r![1], r![2], "XYZ");
     const picked = useStudio.getState().selection === id ? useStudio.getState().selectedBone : null;
     if (markerRef.current !== picked) {
       const old = markerRef.current ? g.getObjectByName(`marker:${markerRef.current}`) : null;
@@ -169,6 +172,8 @@ export function Mannequin({ id }: { id: string }) {
       name={`obj:${id}`}
       onClick={(e) => {
         if (useStudio.getState().tool) return;
+        // an IK handle under the pointer (drawn on top, inside the limb) gets the click
+        if (e.intersections.some((i) => i.object.parent?.name.startsWith("ik:") && i.object.parent.visible)) return;
         e.stopPropagation();
         const st = useStudio.getState();
         // clicking a limb of the already-selected actor picks that bone for pose editing

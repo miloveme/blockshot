@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { compile, type TakeMode, editDuration, editTimeOf, evaluate, locateEdit, validateSpec, type BlockshotSpec, type BoneName, type CompiledScene, type ClipData, type PropType, type SceneState, type Species, type Vec3 } from "@blockshot/core";
+import { compile, type TakeMode, editDuration, editTimeOf, evaluate, locateEdit, validateSpec, type BlockshotSpec, type BoneName, type IkEffector, type CompiledScene, type ClipData, type PropType, type SceneState, type Species, type Vec3 } from "@blockshot/core";
 import example from "@blockshot/core/examples/living-room.json";
 
 export type ViewMode = { kind: "free" } | { kind: "shot" } | { kind: "camera"; id: string };
@@ -54,6 +54,8 @@ interface StudioState {
   selectedBone: BoneName | null;
   /** bone currently being rotated with the gizmo — the mannequin stops driving it from the rig meanwhile */
   draggingBone: BoneName | null;
+  /** IK handle (hand / foot) picked on the selected actor: the move gizmo drags it and the limb follows */
+  ikHandle: IkEffector | null;
   gizmoMode: GizmoMode;
   /** snap translate to 0.1 m and rotate to 15° */
   snapEnabled: boolean;
@@ -107,6 +109,7 @@ interface StudioState {
   setView(v: ViewMode): void;
   select(id: string | null): void;
   selectBone(bone: BoneName | null): void;
+  selectIkHandle(end: IkEffector | null): void;
   /** the move gizmo grabs the selected object's target point instead of the object */
   aimEdit: boolean;
   setAimEdit(on: boolean): void;
@@ -177,6 +180,7 @@ export const useStudio = create<StudioState>((set, get) => {
     selection: null,
     selectedBone: null,
     draggingBone: null,
+    ikHandle: null,
     gizmoMode: "translate",
     snapEnabled: true,
     autoKey: false,
@@ -304,14 +308,17 @@ export const useStudio = create<StudioState>((set, get) => {
       set({ gestureBase: null });
     },
     select(selection) {
-      set({ selection, selectedBone: null, aimEdit: false });
+      set({ selection, selectedBone: null, ikHandle: null, aimEdit: false });
     },
     aimEdit: false,
     setAimEdit(aimEdit) {
-      set({ aimEdit });
+      set(aimEdit ? { aimEdit, ikHandle: null } : { aimEdit });
     },
     selectBone(selectedBone) {
-      set({ selectedBone });
+      set({ selectedBone, ikHandle: null });
+    },
+    selectIkHandle(ikHandle) {
+      set({ ikHandle, selectedBone: null, aimEdit: false });
     },
     setDraggingBone(draggingBone) {
       set({ draggingBone });

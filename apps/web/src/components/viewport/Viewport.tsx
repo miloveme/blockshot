@@ -1,11 +1,11 @@
 "use client";
 
 import { Suspense, useEffect, useRef, type ComponentRef } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas, events as pointerEvents, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, PerspectiveCamera, Text } from "@react-three/drei";
 import * as THREE from "three";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
-import { DEG, editDuration, resolveTarget, type BoneName, type Vec3 } from "@blockshot/core";
+import { DEG, editDuration, keyLimbTo, resolveTarget, type BoneName, type IkEffector, type Vec3 } from "@blockshot/core";
 import { openObjectMenu } from "../editor/ContextMenu";
 import { useStudio } from "@/lib/store";
 import { useUi } from "@/lib/ui";
@@ -13,13 +13,15 @@ import { commitAim, commitBoneRotation, commitCamera, commitCameraRotation, comm
 import { registerBridge } from "@/lib/render";
 import { framedPose } from "@/lib/frame";
 import { Mannequin } from "./Mannequin";
+import { IkHandles } from "./IkHandles";
+import { clearIkPreview, handleTarget, previewIk } from "@/lib/ik";
 import { Creature } from "./Creature";
 import { PropObject } from "./Props";
 import { SpaceObject } from "./Space";
 import { Recorder } from "./Recorder";
 import { PathOverlay, PlacementController } from "./Placement";
 import { toolUsedJustNow } from "@/lib/placement";
-import { EDITOR_LAYER, PIP_MARGIN, PIP_SCALE, aimCamera, markEditor, pipCameraId, viewedCameraId } from "./util";
+import { EDITOR_LAYER, PIP_MARGIN, PIP_SCALE, aimCamera, gizmoGesture, markEditor, pipCameraId, viewedCameraId } from "./util";
 
 const RAD = 1 / DEG;
 
@@ -241,6 +243,21 @@ function SelectionGizmo() {
         store.setDragging(null);
         return;
       }
+      if (obj?.name.startsWith("ik:")) {
+        // an IK handle of the selected actor: the limb follows while dragging, keyed at the current time on release
+        const end = obj.name.slice(3) as IkEffector;
+        const id = store.selection;
+        if (e.value) {
+          store.setDragging(obj.name);
+          if (id) previewIk(scene, id, end, obj.position);
+          return;
+        }
+        const target = id ? handleTarget(scene, id, obj.position) : null;
+        if (id && target) store.edit((s) => keyLimbTo(s, id, store.time, end, target));
+        clearIkPreview();
+        store.setDragging(null);
+        return;
+      }
       if (obj?.name.startsWith("bone:")) {
         // a bone of the selected actor: rotation is keyed at the current time on release
         const bone = obj.name.slice(5) as BoneName;
@@ -269,9 +286,22 @@ function SelectionGizmo() {
       }
       store.setDragging(null);
     };
+    const onChange = () => {
+      const obj = tc.object;
+      const id = useStudio.getState().selection;
+      if (obj?.name.startsWith("ik:") && id && tc.dragging) previewIk(scene, id, obj.name.slice(3) as IkEffector, obj.position);
+    };
+    const onDown = () => (gizmoGesture.on = true);
+    const onUp = () => setTimeout(() => (gizmoGesture.on = false), 0);
     tc.addEventListener("dragging-changed", onDrag as never);
+    tc.addEventListener("objectChange", onChange);
+    tc.addEventListener("mouseDown", onDown);
+    tc.addEventListener("mouseUp", onUp);
     return () => {
       tc.removeEventListener("dragging-changed", onDrag as never);
+      tc.removeEventListener("objectChange", onChange);
+      tc.removeEventListener("mouseDown", onDown);
+      tc.removeEventListener("mouseUp", onUp);
       scene.remove(helper);
       tc.detach();
       tc.dispose();
@@ -291,11 +321,19 @@ function SelectionGizmo() {
   useFrame(() => {
     const tc = tcRef.current;
     if (!tc) return;
-    const { selection, recording, rendering, sceneState, tool, selectedBone } = useStudio.getState();
+    const { selection, recording, rendering, sceneState, tool, selectedBone, ikHandle } = useStudio.getState();
     const want = view.kind === "free" && !recording && !rendering && !tool ? selection : null;
     const cur = tc.object && tc.object.parent ? tc.object.name : null;
     if (want === null) {
       if (tc.object) tc.detach();
+      return;
+    }
+    // a picked IK handle takes the gizmo: move it in world axes, the limb follows
+    const ikObj = ikHandle && sceneState.actors[want] ? scene.getObjectByName(`ik:${ikHandle}`) : undefined;
+    if (ikObj?.visible) {
+      if (tc.object !== ikObj) tc.attach(ikObj);
+      tc.setMode("translate");
+      tc.setSpace("world");
       return;
     }
     // a picked bone of an actor takes the gizmo: rotate it in its own axes
@@ -479,6 +517,7 @@ function Scene() {
       {view.kind === "camera" && pilot ? <CameraPilot /> : null}
       <SelectionRing />
       <AimMarker />
+      <IkHandles />
       <SelectionGizmo />
       <PlacementController />
       <PathOverlay />
@@ -495,9 +534,11 @@ export default function Viewport() {
       dpr={[1, 2]}
       gl={{ preserveDrawingBuffer: true, antialias: true }}
       onCreated={({ raycaster }) => raycaster.layers.enableAll()}
+      // the click that ends a gizmo drag reaches nothing (see gizmoGesture)
+      events={(store) => ({ ...pointerEvents(store), filter: (hits) => (gizmoGesture.on ? [] : hits) })}
       onPointerMissed={() => {
         // clicks on the floor belong to an armed tool (placing / drawing a path), not to deselecting
-        if (!useStudio.getState().tool && !toolUsedJustNow()) useStudio.getState().select(null);
+        if (!useStudio.getState().tool && !toolUsedJustNow() && !gizmoGesture.on) useStudio.getState().select(null);
       }}
     >
       <Scene key={revision} />

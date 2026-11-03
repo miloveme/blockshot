@@ -544,7 +544,7 @@ function PoseEditor({ actorId }: { actorId: string }) {
   return (
     <div className="mt-1 flex flex-col gap-1.5 border-t border-line pt-2">
       <span className="text-[11px] font-medium text-ink-2">포즈 편집 (뼈 키프레임)</span>
-      <p className="text-[10px] text-ink-3">자유 시점에서 선택된 인물의 팔·다리를 클릭하거나 아래에서 뼈를 고르면 회전 기즈모가 붙고, 놓으면 현재 시간에 키가 찍힙니다. 인물을 다시 옮기려면 “뼈 선택…”으로 해제하세요.</p>
+      <p className="text-[10px] text-ink-3">자유 시점에서 선택된 인물의 팔·다리를 클릭하거나 아래에서 뼈를 고르면 회전 기즈모가 붙고, 놓으면 현재 시간에 키가 찍힙니다. 손목·발목의 하늘색 점(IK 핸들)을 클릭해 끌면 팔꿈치·무릎이 따라오고, 놓으면 그 팔·다리가 키로 찍힙니다. 인물을 다시 옮기려면 “뼈 선택…”으로 해제하세요.</p>
       <SelectField value={(bone ?? "") as BoneName | ""} options={[{ value: "" as const, label: "뼈 선택…" }, ...BODY_BONES.map((b) => ({ value: b, label: b }))]} onCommit={(v) => selectBone(v === "" ? null : v)} />
       {bone && cur ? (
         <Row label="회전°">

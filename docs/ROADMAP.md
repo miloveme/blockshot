@@ -132,6 +132,8 @@
 - [x] 연기 API 1단계([ACTING_API.md](ACTING_API.md)): 몸 채널 액션 `arm`(aim·place·rest, elbow·palm)·`torso`(lean·bend·turn)·`head`(nod·tilt·turn), 몸 기준 위치 BodyPoint, 반복 움직임 Beat(jab·sway·bob·shake), 빌더 `arm()`·`hand()`·`torso()`·`headMove()`, 프롬프트 키트 "조합하기" 지침
 - [ ] 연기 API 2단계: 내장 제스처·상체 포즈를 조합 데이터(라이브러리)로, Spec `gestures` 커스텀 정의 / 3단계: 편집기 채널 타임라인 / 4단계: 프롬프트 조합 예제
 - [x] 뼈 키프레임: `bone:<이름>`/`hips` 트랙(오일러 도, 키 구간 오버라이드), 포즈 키·복사·좌우 반전, 자동 모션 → 키 굳히기(bake, RDP)·해제, 뷰포트 뼈 선택 + 회전 입력, AI addon `tracks`·`actor.bone()`
+- [x] 에디터 IK 핸들 1단계: 손목·발목 핸들을 끌면 팔꿈치·무릎이 따라오고 놓으면 세 뼈가 키로 찍힘(`solveLimbIK`·`keyLimbTo`, 굽힘 방향·손발 방향 유지), 기즈모 놓는 클릭이 선택을 바꾸지 않음 ([docs/RIG.md](RIG.md))
+- [ ] 에디터 IK 2단계: 무릎·팔꿈치 방향 핸들 · 3단계: 골반을 움직여도 발 고정(핀)
 - [x] 코드 API(Remotion 스타일): `interpolate`/`spring`/`noise`, `scene.sequence`(시간 오프셋), `scene.animate`/`actor.boneFn`(시간 함수 → 키 샘플링)
 - [x] `drive.drift`(0–1): 코너 슬립각 드리프트(체이싱), 붙여넣기 프롬프트에 차량·코드 API·액션 연출 팁 포함(MCP 지침과 동일 수준)
 - [x] 내가 배치한 장면에 MCP로 애니메이션 추가: 툴바 🔗 링크 복사 + MCP `load_link`(링크 속 장면 읽기), /guide 프롬프트 ⑦
