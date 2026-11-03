@@ -15,6 +15,9 @@ export const EDITOR_LAYER = 1;
  */
 export const gizmoGesture = { on: false };
 
+/** The move / rotate gizmo, so other editor handles can tell when the pointer is on one of its axes. */
+export const gizmo: { axis: () => string | null } = { axis: () => null };
+
 export function markEditor(obj: THREE.Object3D) {
   obj.traverse((o) => o.layers.set(EDITOR_LAYER));
 }

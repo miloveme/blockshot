@@ -21,7 +21,7 @@ import { SpaceObject } from "./Space";
 import { Recorder } from "./Recorder";
 import { PathOverlay, PlacementController } from "./Placement";
 import { toolUsedJustNow } from "@/lib/placement";
-import { EDITOR_LAYER, PIP_MARGIN, PIP_SCALE, aimCamera, gizmoGesture, markEditor, pipCameraId, viewedCameraId } from "./util";
+import { EDITOR_LAYER, PIP_MARGIN, PIP_SCALE, aimCamera, gizmo, gizmoGesture, markEditor, pipCameraId, viewedCameraId } from "./util";
 
 const RAD = 1 / DEG;
 
@@ -291,6 +291,7 @@ function SelectionGizmo() {
       const id = useStudio.getState().selection;
       if (obj?.name.startsWith("ik:") && id && tc.dragging) previewIk(scene, id, obj.name.slice(3) as IkEffector, obj.position);
     };
+    gizmo.axis = () => (tc.object ? tc.axis : null);
     const onDown = () => (gizmoGesture.on = true);
     const onUp = () => setTimeout(() => (gizmoGesture.on = false), 0);
     tc.addEventListener("dragging-changed", onDrag as never);
@@ -302,6 +303,7 @@ function SelectionGizmo() {
       tc.removeEventListener("objectChange", onChange);
       tc.removeEventListener("mouseDown", onDown);
       tc.removeEventListener("mouseUp", onUp);
+      gizmo.axis = () => null;
       scene.remove(helper);
       tc.detach();
       tc.dispose();
