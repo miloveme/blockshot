@@ -5,7 +5,7 @@ import { describeAction, editDuration, keyTimes, subjectKeys, type Action } from
 import { Camera, Circle, Clapperboard, Crosshair, Diamond, Film, Pause, Play, SkipBack, SkipForward, StepBack, StepForward, User, Box, PanelBottomClose } from "lucide-react";
 import { useStudio } from "@/lib/store";
 import { useUi } from "@/lib/ui";
-import { openLaneMenu, openTimelineKeyMenu } from "@/lib/keys";
+import { dropKeys, openLaneMenu, openTimelineKeyMenu } from "@/lib/keys";
 import { runCommand } from "@/lib/commands";
 import { openTake } from "@/lib/recorder";
 import { CommandButton, cx, IconButton, Segmented, Tally, useOnAirCamera } from "../ui";
@@ -127,7 +127,8 @@ function DopeSheet() {
   const selection = useStudio((s) => s.selection);
   const onAir = useOnAirCamera();
   const lanes = useRef<HTMLDivElement>(null);
-  const { duration } = spec.settings;
+  const [drag, setDrag] = useState<{ id: string; from: number; to: number; copy: boolean } | null>(null);
+  const { duration, fps } = spec.settings;
   const pct = (t: number) => `${(Math.max(0, Math.min(duration, t)) / duration) * 100}%`;
 
   const rows: Row[] = [
@@ -152,6 +153,51 @@ function DopeSheet() {
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+  };
+
+  /**
+   * Press a key diamond: a click (no movement) goes to it; a drag slides it along its row, snapped to frames, and drops it
+   * there on release — Alt held at release copies instead of moving. Escape while dragging cancels.
+   */
+  const grabKey = (e: React.PointerEvent, id: string, t: number) => {
+    e.stopPropagation();
+    if (e.button !== 0) return;
+    const x0 = e.clientX;
+    let moved = false;
+    let cur = { id, from: t, to: t, copy: e.altKey };
+    const snap = (v: number) => Math.round(v * fps) / fps;
+    const end = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("keydown", key);
+      setDrag(null);
+    };
+    const move = (ev: PointerEvent) => {
+      if (!moved && Math.abs(ev.clientX - x0) < 3) return;
+      moved = true;
+      cur = { id, from: t, to: snap(timeAt(ev.clientX)), copy: ev.altKey };
+      setDrag(cur);
+    };
+    const up = (ev: PointerEvent) => {
+      end();
+      const s = useStudio.getState();
+      if (!moved) {
+        s.select(id);
+        s.setTime(t);
+        return;
+      }
+      s.select(id);
+      dropKeys(id, t, cur.to, ev.altKey);
+    };
+    const key = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") {
+        moved = false;
+        end();
+      }
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("keydown", key);
   };
 
   const step = duration > 40 ? 5 : duration > 16 ? 2 : 1;
@@ -264,21 +310,30 @@ function DopeSheet() {
                     <button
                       key={t}
                       type="button"
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={() => {
-                        useStudio.getState().select(r.id);
-                        useStudio.getState().setTime(t);
-                      }}
+                      onPointerDown={(e) => grabKey(e, r.id, t)}
                       onContextMenu={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         openTimelineKeyMenu(e, r.id, t);
                       }}
-                      title={`${t.toFixed(2)}s · ${manual ? "직접 찍은 키" : "동작이 만든 키"} — 클릭: 이동 · 우클릭: 복사·복제·옮기기·삭제`}
-                      className={cx("absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-[2px] ring-1 ring-black/40 transition-transform hover:scale-125", manual ? "bg-accent" : "bg-ink-3/80")}
+                      title={`${t.toFixed(2)}s · ${manual ? "직접 찍은 키" : "동작이 만든 키"} — 클릭: 재생 헤드 이동 · 드래그: 키 옮기기 (Alt: 복제) · 우클릭: 메뉴`}
+                      className={cx(
+                        "absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 cursor-grab rounded-[2px] ring-1 ring-black/40 transition-transform hover:scale-125",
+                        manual ? "bg-accent" : "bg-ink-3/80",
+                        drag?.id === r.id && drag.from === t && !drag.copy && "opacity-30",
+                      )}
                       style={{ left: pct(t) }}
                     />
                   ))}
+                  {drag?.id === r.id ? (
+                    <div className="pointer-events-none absolute top-1/2 z-10" style={{ left: pct(drag.to) }}>
+                      <div className="absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-[2px] bg-accent ring-2 ring-white/80" />
+                      <span className="absolute bottom-2 -translate-x-1/2 whitespace-nowrap rounded bg-black/80 px-1 font-mono text-[9px] text-white">
+                        {drag.copy ? "+ " : ""}
+                        {drag.to.toFixed(2)}s
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}

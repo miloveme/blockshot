@@ -59,4 +59,24 @@ describe("timeline key menu", () => {
   it("delete still removes them (unchanged)", () => {
     expect(keyTimes(removeKeysAt(upsertKey(spec(), "a", "position", 4, [1, 0, 0]), "a", 4), "a").map((k) => k.t)).toEqual([0, 2]);
   });
+
+  it("a key you set moves alone: a walk's sample on the same frame stays with the walk", () => {
+    const r = validateSpec({
+      specVersion: "0.1",
+      settings: { duration: 6 },
+      actors: [{ id: "w", position: [0, 0, 0] }],
+      actions: [{ type: "walkTo", actor: "w", start: 0.5, to: [0, 0, 4] }],
+      tracks: [{ target: "w", property: "bone:leftUpperArm", keys: [{ t: 1, value: [0, 0, -40] }] }],
+    });
+    if (!r.ok) throw new Error(JSON.stringify(r.errors));
+    const s = r.spec;
+    expect(keysAt(s, "w", 1).map((k) => k.property)).toEqual(["bone:leftUpperArm"]);
+    const moved = moveKeysAt(s, "w", 1, 2.5);
+    expect(moved.tracks.map((t) => t.property)).toEqual(["bone:leftUpperArm"]);
+    expect(moved.tracks[0]!.keys.map((k) => k.t)).toEqual([2.5]);
+    for (const t of [1, 1.7, 2.5]) expect(pos(moved, "w", t)).toEqual(pos(s, "w", t));
+    // deleting the diamond's keys (the menu's delete) leaves the walk alone too
+    const gone = removeKeysAt(s, "w", 1, 0.02, keysAt(s, "w", 1).map((k) => k.property));
+    expect(gone.tracks).toEqual([]);
+  });
 });

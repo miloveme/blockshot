@@ -400,6 +400,12 @@ export const Track = z.object({
   keys: z.array(Key).min(1),
   /** written by "bake": keys sampled from actions / procedural motion (can be cleared again) */
   baked: z.boolean().optional(),
+  /**
+   * bone / hips tracks only: true keeps the first key's value before it and the last key's value after it (as keyframe
+   * tools do — keys set in the editor make such tracks). Unset, the bone fades back to the automatic motion over 0.25 s
+   * outside its keys.
+   */
+  hold: z.boolean().optional(),
 });
 export type Track = z.infer<typeof Track>;
 

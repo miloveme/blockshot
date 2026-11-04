@@ -90,6 +90,8 @@ export interface CompiledScene {
   compiled: Set<Action>;
   /** baked navigation grids by body radius */
   navCache: Map<string, NavGrid>;
+  /** bone / hips tracks (`${targetId}/${property}`) that keep their first / last key's value outside their keys ("hold") */
+  held: Set<string>;
 }
 
 /** A timed body layer on top of the actor's base pose. */
@@ -239,7 +241,7 @@ function compileUncached(spec: BlockshotSpec): CompiledScene {
   const looks = new Map<string, Segment[]>();
   const aims = new Map<string, Segment[]>();
   const acts = new Map<string, ActLayer[]>();
-  const scene: CompiledScene = { spec, tracks, looks, aims, acts, routes: new Map(), unreachable: new Set(), holds: new Map(), driven: new Map(), motion: new Map(), compiled: new Set(), navCache: new Map() };
+  const scene: CompiledScene = { spec, tracks, looks, aims, acts, routes: new Map(), unreachable: new Set(), holds: new Map(), driven: new Map(), motion: new Map(), compiled: new Set(), navCache: new Map(), held: new Set() };
 
   const track = (id: string, prop: TrackProperty, initial: KeyValue): CKey[] => {
     const k = trackKey(id, prop);
@@ -259,6 +261,7 @@ function compileUncached(spec: BlockshotSpec): CompiledScene {
     const keys = [...t.keys].sort((a, b) => a.t - b.t).map((k) => ({ ...k, manual: true }));
     tracks.set(trackKey(t.target, t.property), keys);
     manualSpan.set(trackKey(t.target, t.property), [keys[0]!.t, keys[keys.length - 1]!.t]);
+    if (t.hold) scene.held.add(trackKey(t.target, t.property));
   }
 
   for (const a of spec.actors) {
@@ -1815,11 +1818,14 @@ const BONE_FADE = 0.25;
 
 /**
  * Hand-keyed bones ("bone:<name>" tracks, degrees) override whatever the procedural pose did with them between their first and last
- * key, fading in and out over BONE_FADE seconds outside that range. "hips" keys offset the pelvis (rest metres).
+ * key, fading in and out over BONE_FADE seconds outside that range — or, on a "hold" track (what keying in the editor
+ * makes), keeping the first key's value before it and the last key's value after it, as keyframe tools do. "hips" keys
+ * offset the pelvis (rest metres).
  */
 function applyBoneKeys(scene: CompiledScene, id: string, t: number, pose: RigPose): RigPose {
   let out: RigPose | null = null;
-  const weight = (keys: CKey[]) => {
+  const weight = (property: TrackProperty, keys: CKey[]) => {
+    if (scene.held.has(trackKey(id, property))) return 1;
     const first = keys[0]!.t;
     const last = keys[keys.length - 1]!.t;
     if (t < first) return smoothstep(1 - (first - t) / BONE_FADE);
@@ -1829,7 +1835,7 @@ function applyBoneKeys(scene: CompiledScene, id: string, t: number, pose: RigPos
   for (const name of BONES) {
     const keys = scene.tracks.get(trackKey(id, `bone:${name}`));
     if (!keys) continue;
-    const w = weight(keys);
+    const w = weight(`bone:${name}`, keys);
     if (w <= 0) continue;
     const v = sampleKeys(keys, t) as Vec3;
     const target: Vec3 = [v[0] * DEG, v[1] * DEG, v[2] * DEG];
@@ -1838,7 +1844,7 @@ function applyBoneKeys(scene: CompiledScene, id: string, t: number, pose: RigPos
   }
   const hips = scene.tracks.get(trackKey(id, "hips"));
   if (hips) {
-    const w = weight(hips);
+    const w = weight("hips", hips);
     if (w > 0) {
       out ??= clonePose(pose);
       out.hips = lerp3(out.hips, sampleKeys(hips, t) as Vec3, w);

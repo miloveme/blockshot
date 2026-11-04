@@ -1,4 +1,4 @@
-import { keysAt, moveKeysAt, pasteKeys, setKeyEaseAt, type Key, type KeyClip } from "@blockshot/core";
+import { holdAt, keysAt, moveKeysAt, pasteKeys, setHoldAt, setKeyEaseAt, type Key, type KeyClip } from "@blockshot/core";
 import { useStudio } from "./store";
 import { useUi, type MenuItemSpec } from "./ui";
 import { removeKeysAtTime } from "./actions";
@@ -51,6 +51,14 @@ export function openTimelineKeyMenu(e: { clientX: number; clientY: number }, id:
       { label: `현재 시간으로 옮기기 · ${sec(now)}`, run: () => edit((sp) => moveKeysAt(sp, id, t, now)) },
     );
   }
+  const hold = holdAt(s.spec, id, t);
+  if (hold !== null) {
+    items.push(
+      { label: "키 앞뒤에서 (관절)", header: true },
+      { label: `${hold ? "✓ " : ""}자세 유지`, run: () => edit((sp) => setHoldAt(sp, id, t, true)) },
+      { label: `${hold ? "" : "✓ "}자동 동작으로 돌아가기`, run: () => edit((sp) => setHoldAt(sp, id, t, false)) },
+    );
+  }
   items.push(
     { label: "이 키로 오는 움직임", header: true },
     ...EASES.map((o) => ({ label: `${ease === o.ease ? "✓ " : ""}${o.label}`, run: () => edit((sp) => setKeyEaseAt(sp, id, t, o.ease)) })),
@@ -85,4 +93,15 @@ export function openLaneMenu(e: { clientX: number; clientY: number }, rowId: str
   }
   if (!items.length) return s.notify("카메라가 없습니다 — 먼저 카메라를 추가하세요");
   useUi.getState().set({ contextMenu: { x: e.clientX, y: e.clientY, items } });
+}
+
+/** A key diamond dragged along its row and dropped at `to`: move the keys there, or copy them with Alt held. */
+export function dropKeys(id: string, from: number, to: number, copy: boolean) {
+  const s = useStudio.getState();
+  if (Math.abs(to - from) < 0.005) return;
+  const clip = keysAt(s.spec, id, from);
+  if (!clip.length) return;
+  s.edit((sp) => (copy ? pasteKeys(sp, id, to, clip) : moveKeysAt(sp, id, from, to)));
+  s.setTime(to);
+  s.notify(`키 ${copy ? "복제" : "이동"} · ${sec(from)} → ${sec(to)}`);
 }

@@ -21,6 +21,10 @@
 
 모두 순수·결정론 — 같은 (spec, t)는 항상 같은 `rig`.
 
+## 키 밖의 뼈: 페이드 또는 유지
+
+`bone:*`·`hips` 트랙은 기본으로 첫 키 ~ 마지막 키 사이만 자동 모션을 덮고 밖에서는 0.25초 동안 자동 모션으로 돌아온다(`evaluate.ts`의 `applyBoneKeys`, `BONE_FADE`) — 걷는 중 몇 초만 팔을 드는 식의 AI 장면용. 트랙에 `hold: true`가 있으면 키 밖에서도 첫/마지막 키 값을 유지한다(`CompiledScene.held`). 편집기에서 찍는 키(`upsertKey`)는 새 뼈 트랙을 `hold: true`로 만든다 — 키 하나만 찍어도 그 자세가 이어진다. 타임라인 키 메뉴의 "키 앞뒤에서"가 `setHoldAt`으로 이를 바꾼다.
+
 ## 에디터 IK 핸들
 
 자유 시점에서 사람 인물을 선택하면 손목·발목에 IK 핸들(하늘색 점, 에디터 레이어)이 붙는다. 점을 바로 잡아 끌면 카메라를 향한 평면에서 움직이고(`IkHandles.tsx`), 점을 클릭하면 이동 기즈모가 붙어 한 축으로도 끌 수 있다. 끄는 동안 `solveLimbIK`가 그 팔·다리를 풀어 마네킹에 바로 보여 준다(`lib/ik.ts`의 `ikPreview`, React state 아님). 놓으면 `keyLimbTo`가 현재 시간에 세 뼈(UpperArm·LowerArm·Hand 또는 UpperLeg·LowerLeg·Foot)를 뼈 키로 찍는다 — 결과는 보통 FK 키라 회전 기즈모로 그대로 다듬을 수 있다.

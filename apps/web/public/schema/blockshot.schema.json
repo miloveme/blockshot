@@ -2596,6 +2596,9 @@
           },
           "baked": {
             "type": "boolean"
+          },
+          "hold": {
+            "type": "boolean"
           }
         },
         "required": [

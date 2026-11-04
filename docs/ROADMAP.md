@@ -135,6 +135,8 @@
 - [x] 에디터 IK 핸들 1단계: 손목·발목 핸들을 끌면 팔꿈치·무릎이 따라오고 놓으면 세 뼈가 키로 찍힘(`solveLimbIK`·`keyLimbTo`, 굽힘 방향·손발 방향 유지), 기즈모 놓는 클릭이 선택을 바꾸지 않음 ([docs/RIG.md](RIG.md))
 - [ ] 에디터 IK 2단계: 무릎·팔꿈치 방향 핸들 · 3단계: 골반을 움직여도 발 고정(핀)
 - [x] 타임라인 키(◆) 우클릭 메뉴: 재생 헤드 이동, 복사·붙여넣기(줄 빈 곳 우클릭 → 그 프레임, 다른 오브젝트에도, 맞는 속성만), 현재 시간으로 복제·옮기기, 들어오는 움직임(ease), 삭제 (core `keysAt`·`pasteKeys`·`moveKeysAt`·`setKeyEaseAt`)
+- [x] 타임라인 키(◆) 드래그로 옮기기(프레임 단위, Alt = 복제, Esc 취소). 직접 찍은 키가 있는 ◆는 그 키만 옮기고·지움 — 같은 프레임의 걷기 샘플은 그대로(`keysAt`이 수동 키 우선, `removeKeysAt(…, only)`)
+- [x] 뼈 키 `hold`: 편집기에서 찍은 뼈·hips 트랙은 키 밖에서 첫/마지막 값을 유지(일반 키프레임 툴처럼), 키 메뉴에서 "자동 동작으로 돌아가기"로 전환 (`Track.hold`, `setHoldAt`)
 - [x] 코드 API(Remotion 스타일): `interpolate`/`spring`/`noise`, `scene.sequence`(시간 오프셋), `scene.animate`/`actor.boneFn`(시간 함수 → 키 샘플링)
 - [x] `drive.drift`(0–1): 코너 슬립각 드리프트(체이싱), 붙여넣기 프롬프트에 차량·코드 API·액션 연출 팁 포함(MCP 지침과 동일 수준)
 - [x] 내가 배치한 장면에 MCP로 애니메이션 추가: 툴바 🔗 링크 복사 + MCP `load_link`(링크 속 장면 읽기), /guide 프롬프트 ⑦

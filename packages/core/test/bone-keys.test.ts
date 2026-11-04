@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { REST_HEIGHT, compile, evaluate, keyTimes, solveRig, validateSpec, type BlockshotSpec } from "../src";
+import { REST_HEIGHT, compile, evaluate, holdAt, keyTimes, setBoneRotation, setHoldAt, solveRig, validateSpec, type BlockshotSpec } from "../src";
 
 function spec(tracks: unknown[]): BlockshotSpec {
   const r = validateSpec({ specVersion: "0.1", settings: { duration: 4 }, actors: [{ id: "a", position: [0, 0, 0] }], tracks });
@@ -23,6 +23,26 @@ describe("bone keyframes", () => {
     expect(rot(2)[2]).toBeCloseTo((-30 * Math.PI) / 180, 5);
     // long after the last key the procedural pose is back
     expect(rot(3.5)?.[2] ?? 0).toBeCloseTo(0, 5);
+  });
+
+  it("a hold track keeps its first / last key's pose outside its keys, as keyframe tools do", () => {
+    const c = compile(spec([{ ...tr, hold: true }]));
+    const rot = (t: number) => evaluate(c, t).actors.a!.rig.rot.rightUpperArm!;
+    expect(rot(0)[2]).toBeCloseTo((-90 * Math.PI) / 180, 5);
+    expect(rot(3.5)[2]).toBeCloseTo((-30 * Math.PI) / 180, 5);
+  });
+
+  it("a key set in the editor makes a hold track: one key holds for the rest of the scene", () => {
+    const s = setBoneRotation(spec([]), "a", "rightUpperArm", 1, [0, 0, -90]);
+    expect(s.tracks[0]!.hold).toBe(true);
+    const c = compile(s);
+    expect(evaluate(c, 3.5).actors.a!.rig.rot.rightUpperArm![2]).toBeCloseTo((-90 * Math.PI) / 180, 5);
+    // keying again keeps the setting; turning it off brings the fade back
+    const s2 = setBoneRotation(setHoldAt(s, "a", 1, false), "a", "rightUpperArm", 2, [0, 0, -30]);
+    expect(s2.tracks[0]!.hold).toBeUndefined();
+    expect(holdAt(s2, "a", 2)).toBe(false);
+    expect(evaluate(compile(s2), 3.5).actors.a!.rig.rot.rightUpperArm?.[2] ?? 0).toBeCloseTo(0, 5);
+    expect(holdAt(setHoldAt(s2, "a", 2, true), "a", 1)).toBe(true);
   });
 
   it("keyTimes lists bone keys", () => {
