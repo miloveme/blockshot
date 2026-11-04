@@ -26,8 +26,15 @@ export function ImportPanel({ onClose }: { onClose: () => void }) {
   const [lastFormat, setLastFormat] = useState<"json" | "script">("json");
 
   const copy = async (text: string, label: string) => {
-    await navigator.clipboard.writeText(text);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      useStudio.getState().notify(`${label}를 복사하지 못했습니다 — 브라우저가 클립보드 쓰기를 막았습니다`, "error");
+      return;
+    }
     setStatus(`${label} 복사됨`);
+    // the status line sits at the bottom of a long panel, out of sight — a toast shows the copy happened
+    useStudio.getState().notify(`${label} 복사됨 — LLM에 붙여넣으세요`);
   };
 
   const apply = async () => {
