@@ -5,7 +5,7 @@ import { describeAction, editDuration, keyTimes, subjectKeys, type Action } from
 import { Camera, Circle, Clapperboard, Crosshair, Diamond, Film, Pause, Play, SkipBack, SkipForward, StepBack, StepForward, User, Box, PanelBottomClose } from "lucide-react";
 import { useStudio } from "@/lib/store";
 import { useUi } from "@/lib/ui";
-import { removeKeysAtTime } from "@/lib/actions";
+import { openTimelineKeyMenu } from "@/lib/keys";
 import { runCommand } from "@/lib/commands";
 import { openTake } from "@/lib/recorder";
 import { CommandButton, cx, IconButton, Segmented, Tally, useOnAirCamera } from "../ui";
@@ -271,9 +271,10 @@ function DopeSheet() {
                       }}
                       onContextMenu={(e) => {
                         e.preventDefault();
-                        removeKeysAtTime(r.id, t);
+                        e.stopPropagation();
+                        openTimelineKeyMenu(e, r.id, t);
                       }}
-                      title={`${t.toFixed(2)}s · ${manual ? "직접 찍은 키" : "동작이 만든 키"} — 클릭: 이동 · 우클릭: 삭제`}
+                      title={`${t.toFixed(2)}s · ${manual ? "직접 찍은 키" : "동작이 만든 키"} — 클릭: 이동 · 우클릭: 복사·복제·옮기기·삭제`}
                       className={cx("absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-[2px] ring-1 ring-black/40 transition-transform hover:scale-125", manual ? "bg-accent" : "bg-ink-3/80")}
                       style={{ left: pct(t) }}
                     />
