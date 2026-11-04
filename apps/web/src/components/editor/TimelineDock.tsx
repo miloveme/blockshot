@@ -5,7 +5,7 @@ import { describeAction, editDuration, keyTimes, subjectKeys, type Action } from
 import { Camera, Circle, Clapperboard, Crosshair, Diamond, Film, Pause, Play, SkipBack, SkipForward, StepBack, StepForward, User, Box, PanelBottomClose } from "lucide-react";
 import { useStudio } from "@/lib/store";
 import { useUi } from "@/lib/ui";
-import { openTimelineKeyMenu } from "@/lib/keys";
+import { openLaneMenu, openTimelineKeyMenu } from "@/lib/keys";
 import { runCommand } from "@/lib/commands";
 import { openTake } from "@/lib/recorder";
 import { CommandButton, cx, IconButton, Segmented, Tally, useOnAirCamera } from "../ui";
@@ -242,7 +242,7 @@ function DopeSheet() {
                     const t = timeAt(e.clientX);
                     const camera = r.kind === "camera" ? r.id : activeCamera(t);
                     if (camera) useStudio.getState().select(camera);
-                    openAddSubjectMenu(e, camera, t);
+                    openLaneMenu(e, r.id, camera, t);
                   }}
                 >
                   {r.kind === "camera" ? <SubjectLane cameraId={r.id} pct={pct} /> : null}

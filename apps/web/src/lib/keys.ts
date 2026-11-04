@@ -2,6 +2,7 @@ import { keysAt, moveKeysAt, pasteKeys, setKeyEaseAt, type Key, type KeyClip } f
 import { useStudio } from "./store";
 import { useUi, type MenuItemSpec } from "./ui";
 import { removeKeysAtTime } from "./actions";
+import { addSubjectItems } from "./subject";
 
 /** Keys copied from the timeline (one object at one time), pasted at the playhead onto any object. */
 let clipboard: { from: string; t: number; clip: KeyClip } | null = null;
@@ -33,7 +34,7 @@ export function openTimelineKeyMenu(e: { clientX: number; clientY: number }, id:
       label: "키 복사",
       run: () => {
         clipboard = { from: id, t, clip };
-        notify(`키 복사 · ${name} ${sec(t)} (${clip.length}개 속성)`);
+        notify(`키 복사 · ${name} ${sec(t)} — 타임라인 빈 곳을 우클릭해 붙여넣으세요`);
       },
     },
   ];
@@ -57,4 +58,31 @@ export function openTimelineKeyMenu(e: { clientX: number; clientY: number }, id:
     { label: "키 삭제", danger: true, run: () => removeKeysAtTime(id, t) },
   );
   useUi.getState().set({ contextMenu: { x: e.clientX, y: e.clientY, title: `키 · ${name} ${sec(t)}`, items } });
+}
+
+/**
+ * Right-click on an empty spot of a timeline row: paste the copied keys there (at that frame, on that row's object), then
+ * the camera's subject keys as before.
+ */
+export function openLaneMenu(e: { clientX: number; clientY: number }, rowId: string, cameraId: string | null, t: number) {
+  const s = useStudio.getState();
+  const items: MenuItemSpec[] = [];
+  if (clipboard) {
+    const c = clipboard;
+    const name = s.spec.actors.find((a) => a.id === rowId)?.name ?? s.spec.cameras.find((cam) => cam.id === rowId)?.name ?? rowId;
+    items.push({
+      label: `여기에 키 붙여넣기 · ${name} ${sec(t)}${c.from !== rowId ? ` (${c.from}의 키)` : ""}`,
+      run: () => {
+        s.select(rowId);
+        s.edit((sp) => pasteKeys(sp, rowId, t, c.clip));
+        useStudio.getState().setTime(t);
+      },
+    });
+  }
+  if (cameraId) {
+    if (items.length) items.push({ label: "", separator: true });
+    items.push(...addSubjectItems(cameraId, t));
+  }
+  if (!items.length) return s.notify("카메라가 없습니다 — 먼저 카메라를 추가하세요");
+  useUi.getState().set({ contextMenu: { x: e.clientX, y: e.clientY, items } });
 }
